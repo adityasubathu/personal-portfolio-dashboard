@@ -1,0 +1,24 @@
+{% if result.error %}
+<p style="color:red">
+  {{ result.error }}
+  {% if result.symbol %}<br><small>Resolved to {{ result.symbol }}.</small>{% endif %}
+</p>
+{% elif result.no_data %}
+<p style="color:#b85c00">
+  Kite returned zero candles for <strong>{{ result.symbol }}</strong>
+  between {{ result.requested_start }} and {{ result.requested_end }}.
+  <br><small>Common for delisted, pre-listing, or illiquid instruments. Try manual CSV upload.</small>
+</p>
+{% else %}
+<p>
+  Fetched <strong>{{ result.rows_in_response }}</strong> candle(s) for
+  <strong>{{ result.symbol }}</strong>{% if result.isin %} (<small>{{ result.isin }}</small>){% endif %};
+  <strong>{{ result.rows_added }}</strong> new row(s) saved
+  (duplicates are silently ignored).
+</p>
+<p><small>
+  Requested: <strong>{{ result.requested_start }}</strong> &rarr; <strong>{{ result.requested_end }}</strong>.
+  Kite returned data from <strong>{{ result.actual_start }}</strong> &rarr;
+  <strong>{{ result.actual_end }}</strong>.
+</small></p>
+{% endif %}

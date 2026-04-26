@@ -1,0 +1,182 @@
+import json
+from datetime import date
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, StreamingResponse
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.models.import_log import CSVImportLog
+from app.models.instrument import Instrument
+from app.models.trade import Trade
+from app.services.csv_importer import import_csv
+from app.services.holdings_engine import recompute_holdings
+from app.templating import templates
+from app.time_util import now_ist
+router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
+
+TEMPLATE_CSV = """date,type,symbol,isin,exchange,segment,quantity,price,brokerage,notes
+2024-01-15,BUY,RELIANCE,INE002A01018,NSE,EQ,10,2450.00,20.00,Initial buy
+2024-03-10,BUY,NIFTYBEES,INF204KB14I2,NSE,EQ,50,230.50,0.00,
+2024-06-01,SELL,RELIANCE,INE002A01018,NSE,EQ,5,2800.00,20.00,Partial exit
+2024-08-20,BUY,PPFCF,INF879O01019,BSE,MF,100.000,65.23,0.00,MF at NAV
+"""
+
+
+@router.get("/template")
+async def download_template():
+    return StreamingResponse(
+        iter([TEMPLATE_CSV]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=trades_template.csv"},
+    )
+
+
+@router.post("/import", response_class=HTMLResponse)
+async def import_trades(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    results = []
+    for f in files:
+        content = await f.read()
+        r = await import_csv(db, content, f.filename or "upload.csv")
+        r["filename"] = f.filename or "upload.csv"
+        results.append(r)
+
+    # Recompute holdings once, after all files have been imported
+    recompute = await recompute_holdings(db)
+    await db.commit()
+
+    return templates.TemplateResponse(
+        "partials/import_result.html",
+        {
+            "request": request,
+            "results": results,
+            "holdings_count": recompute["count"],
+            "violations": recompute["violations"],
+            "today": now_ist().date().isoformat(),
+        },
+    )
+
+
+@router.post("/split-credit", response_class=HTMLResponse)
+async def add_split_credit(
+    request: Request,
+    instrument_id: int = Form(...),
+    trade_date: date = Form(...),
+    quantity: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record a split/bonus/consolidation credit as a synthetic BUY trade at price=0."""
+    if quantity <= 0:
+        raise HTTPException(400, "quantity must be > 0")
+
+    instrument = (await db.execute(
+        select(Instrument).where(Instrument.id == instrument_id)
+    )).scalar_one_or_none()
+    if not instrument:
+        raise HTTPException(404, f"instrument {instrument_id} not found")
+
+    trade = Trade(
+        instrument_id=instrument_id,
+        trade_date=trade_date,
+        trade_type="BUY",
+        quantity=quantity,
+        price=0,
+        amount=0,
+        brokerage=0,
+        source="SPLIT_CREDIT",
+        notes="Stock split / bonus / consolidation credit",
+    )
+    db.add(trade)
+    await db.flush()
+
+    recompute = await recompute_holdings(db)
+    await db.commit()
+
+    return templates.TemplateResponse(
+        "partials/violations_list.html",
+        {
+            "request": request,
+            "violations": recompute["violations"],
+            "today": now_ist().date().isoformat(),
+        },
+    )
+
+
+@router.get("/imports", response_class=HTMLResponse)
+async def list_imports(request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(CSVImportLog).order_by(CSVImportLog.imported_at.desc()).limit(20)
+    )
+    logs = result.scalars().all()
+    return templates.TemplateResponse(
+        "partials/import_history.html",
+        {"request": request, "logs": logs},
+    )
+
+
+@router.delete("/import/{batch_id}", response_class=HTMLResponse)
+async def rollback_import(
+    request: Request,
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    # Delete trades from this batch
+    await db.execute(delete(Trade).where(Trade.import_batch_id == batch_id))
+    # Delete import log
+    await db.execute(delete(CSVImportLog).where(CSVImportLog.batch_id == batch_id))
+    # Recompute holdings
+    await recompute_holdings(db)
+    await db.commit()
+    return HTMLResponse("<p>Import batch deleted and holdings recomputed.</p>")
+
+
+@router.get("", response_class=HTMLResponse)
+async def list_trades(
+    request: Request,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    q: str = Query("", max_length=50),
+    db: AsyncSession = Depends(get_db),
+):
+    offset = (page - 1) * per_page
+    q_stripped = (q or "").strip()
+
+    base = select(Trade, Instrument).join(Instrument, Trade.instrument_id == Instrument.id)
+    if q_stripped:
+        like = f"%{q_stripped}%"
+        base = base.where(or_(Instrument.tradingsymbol.ilike(like), Instrument.isin.ilike(like)))
+
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(Trade)
+            .join(Instrument, Trade.instrument_id == Instrument.id)
+            .where(*([or_(Instrument.tradingsymbol.ilike(f"%{q_stripped}%"),
+                          Instrument.isin.ilike(f"%{q_stripped}%"))] if q_stripped else []))
+        )
+    ).scalar_one()
+
+    result = await db.execute(
+        base.order_by(Trade.trade_date.desc(), Trade.id.desc())
+            .offset(offset)
+            .limit(per_page)
+    )
+    rows = result.all()
+
+    return templates.TemplateResponse(
+        "partials/trades_table.html",
+        {
+            "request": request,
+            "rows": rows,
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page,
+            "q": q_stripped,
+        },
+    )

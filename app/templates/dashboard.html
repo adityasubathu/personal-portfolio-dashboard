@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Portfolio Manager{% endblock %}
+
+{% block content %}
+<h2>Portfolio Overview</h2>
+
+<div id="summary-cards"
+     hx-get="/api/v1/portfolio/summary-cards"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <p aria-busy="true">Loading summary…</p>
+</div>
+
+<h3>Holdings</h3>
+
+<div style="margin-bottom: 0.75rem">
+  <button hx-post="/api/v1/mf/sync-nav-history"
+          hx-target="#mf-sync-result"
+          hx-swap="innerHTML"
+          hx-on::after-request="refreshHoldings()">
+    Sync NAV History (mfapi.in)
+  </button>
+  <button class="secondary"
+          hx-post="/api/v1/mf/sync-nav"
+          hx-target="#mf-sync-result"
+          hx-swap="innerHTML"
+          hx-on::after-request="refreshHoldings()">
+    Latest-only fallback (AMFI)
+  </button>
+  <script>
+    function refreshHoldings() {
+      const state = document.getElementById('holdings-table-state');
+      const qs = state
+        ? `?sort=${state.dataset.sort}&dir=${state.dataset.dir}&sections=${state.dataset.sections}`
+        : '';
+      htmx.ajax('GET', '/api/v1/portfolio/direct' + qs, '#holdings-table');
+      htmx.ajax('GET', '/api/v1/portfolio/summary-cards', '#summary-cards');
+    }
+  </script>
+  <span id="mf-sync-result"></span>
+</div>
+
+<div id="holdings-table"
+     hx-get="/api/v1/portfolio/direct"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <p aria-busy="true">Loading holdings…</p>
+</div>
+
+<h3>Manual Assets</h3>
+
+<div id="manual-assets"
+     hx-get="/api/v1/manual-assets"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <p aria-busy="true">Loading…</p>
+</div>
+
+<details>
+  <summary>Add Fixed Deposit</summary>
+  <form hx-post="/api/v1/manual-assets/fd" hx-target="#manual-assets" hx-swap="innerHTML">
+    <div class="grid">
+      <label>Label <input type="text" name="label" value="FD" required></label>
+      <label>Principal (₹) <input type="number" name="principal" step="0.01" required></label>
+      <label>Interest Rate (%) <input type="number" name="interest_rate" step="0.01" required></label>
+    </div>
+    <div class="grid">
+      <label>Start Date <input type="date" name="start_date" required></label>
+      <label>Maturity Date <input type="date" name="maturity_date" required></label>
+      <label style="display:flex; align-items:center; gap:0.5rem; margin-top:1.5rem;">
+        <input type="checkbox" name="is_emergency_fund" value="true" style="margin:0;">
+        Emergency Fund
+      </label>
+    </div>
+    <button type="submit">Add FD</button>
+  </form>
+</details>
+
+<details>
+  <summary>Add / Update PPF</summary>
+  <form hx-post="/api/v1/manual-assets/ppf" hx-target="#manual-assets" hx-swap="innerHTML">
+    <div class="grid">
+      <label>Label <input type="text" name="label" value="PPF" required></label>
+      <label>Current Value (₹) <input type="number" name="current_value" step="0.01" required></label>
+    </div>
+    <button type="submit">Save PPF</button>
+  </form>
+</details>
+
+<details>
+  <summary>Add / Update NPS</summary>
+  <form hx-post="/api/v1/manual-assets/nps" hx-target="#manual-assets" hx-swap="innerHTML">
+    <div class="grid">
+      <label>Label <input type="text" name="label" value="NPS" required></label>
+      <label>Current Value (₹) <input type="number" name="current_value" step="0.01" required></label>
+    </div>
+    <button type="submit">Save NPS</button>
+  </form>
+</details>
+
+<details>
+  <summary>Add / Update Cash</summary>
+  <form hx-post="/api/v1/manual-assets/cash" hx-target="#manual-assets" hx-swap="innerHTML">
+    <div class="grid">
+      <label>Label <input type="text" name="label" value="Savings / Current" required></label>
+      <label>Current Value (₹) <input type="number" name="current_value" step="0.01" required></label>
+    </div>
+    <button type="submit">Save Cash</button>
+  </form>
+</details>
+{% endblock %}

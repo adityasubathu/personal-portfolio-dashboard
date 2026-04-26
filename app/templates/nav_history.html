@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}NAV History — Portfolio Manager{% endblock %}
+
+{% block content %}
+<h2>NAV History</h2>
+<p><small>Portfolio market value since your first trade, overlaid with cumulative cash invested. The gap is unrealised P&amp;L.</small></p>
+
+<div style="margin-bottom: 0.75rem">
+  <button hx-post="/api/v1/portfolio/sync-price-history"
+          hx-target="#sync-status"
+          hx-swap="innerHTML"
+          hx-on::after-request="loadChart()">
+    Sync price history (Kite)
+  </button>
+  <small>MF NAVs come from the Dashboard's "Sync NAV History (mfapi.in)" button.</small>
+  <span id="sync-status"></span>
+</div>
+
+<div style="position: relative; height: 420px;">
+  <canvas id="nav-chart"></canvas>
+</div>
+
+<p id="nav-empty" style="display:none; color: var(--pico-muted-color);">
+  <small>No data yet — import trades, then sync price history.</small>
+</p>
+
+<details style="margin-top: 1.5rem;">
+  <summary>Fetch OHLC from Kite by ticker</summary>
+  <p><small>
+    Direct Kite historical API fetch for a single ticker. Must match an Instrument
+    you've traded. End date defaults to today. Kite caps results at ~2000 day-candles
+    per request; longer ranges are auto-windowed. For tickers not in Kite's dump
+    (e.g. TATAMOTORS post-split), use the manual upload below instead.
+  </small></p>
+  <form hx-post="/api/v1/portfolio/fetch-ohlc"
+        hx-target="#kite-fetch-status"
+        hx-swap="innerHTML"
+        hx-on::after-request="loadChart()">
+    <div class="grid">
+      <label>
+        Ticker
+        <input type="text" name="ticker" placeholder="e.g. RELIANCE" required
+               autocomplete="off" style="text-transform: uppercase;">
+      </label>
+      <label>
+        Start date
+        <input type="date" name="start_date" required>
+      </label>
+      <label>
+        End date <small>(optional, defaults to today)</small>
+        <input type="date" name="end_date">
+      </label>
+    </div>
+    <button type="submit">Fetch & save</button>
+  </form>
+  <div id="kite-fetch-status"></div>
+</details>
+
+<details style="margin-top: 0.75rem;">
+  <summary>Upload manual OHLC CSV</summary>
+  <p><small>
+    For tickers not in Kite's instruments dump (delisted, merged, pre-split shells).
+    The CSV needs a <code>date</code> column and a <code>close</code> column (headers like
+    <code>trade_date</code>/<code>timestamp</code> and <code>adj close</code>/<code>closing</code> also work).
+    Dates can be <code>YYYY-MM-DD</code>, <code>DD-MMM-YYYY</code>, or <code>DD-MM-YYYY</code>.
+    Only instruments you've traded are selectable; ones with 0 price rows are listed first.
+  </small></p>
+  <form hx-post="/api/v1/portfolio/upload-ohlc"
+        hx-target="#ohlc-upload-status"
+        hx-swap="innerHTML"
+        hx-encoding="multipart/form-data"
+        hx-on::after-request="loadChart()">
+    <div class="grid">
+      <label>
+        Instrument
+        <select name="instrument_id" required>
+          {% for i in instruments %}
+          <option value="{{ i.id }}">
+            {% if i.n_prices == 0 %}⚠ {% endif %}{{ i.symbol }} [{{ i.type }}] — {{ i.isin or "no ISIN" }} ({{ i.n_prices }} row{{ "s" if i.n_prices != 1 else "" }})
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        CSV file
+        <input type="file" name="file" accept=".csv,text/csv" required>
+      </label>
+    </div>
+    <button type="submit">Upload</button>
+  </form>
+  <div id="ohlc-upload-status"></div>
+</details>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let navChart;
+
+  function inrCompact(n) {
+    if (n == null) return '—';
+    const abs = Math.abs(n);
+    if (abs >= 1e7) return '₹' + (n / 1e7).toFixed(2) + ' Cr';
+    if (abs >= 1e5) return '₹' + (n / 1e5).toFixed(2) + ' L';
+    if (abs >= 1e3) return '₹' + (n / 1e3).toFixed(1) + ' K';
+    return '₹' + n.toFixed(0);
+  }
+
+  async function loadChart() {
+    const r = await fetch('/api/v1/portfolio/nav-history');
+    if (!r.ok) { console.error('nav-history fetch failed', r.status); return; }
+    const series = await r.json();
+
+    const emptyEl = document.getElementById('nav-empty');
+    if (!series.length) {
+      emptyEl.style.display = 'block';
+      if (navChart) { navChart.destroy(); navChart = null; }
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    const labels = series.map(p => p.date);
+    const values = series.map(p => p.value);
+    const invested = series.map(p => p.invested);
+
+    const ctx = document.getElementById('nav-chart');
+    if (navChart) navChart.destroy();
+    navChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Portfolio value',
+            data: values,
+            borderColor: 'rgb(34, 139, 34)',
+            backgroundColor: 'rgba(34, 139, 34, 0.15)',
+            fill: true,
+            pointRadius: 0,
+            borderWidth: 1.75,
+            tension: 0.1,
+          },
+          {
+            label: 'Cumulative invested',
+            data: invested,
+            borderColor: '#666',
+            borderDash: [4, 4],
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1.25,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 10, autoSkip: true },
+            grid: { display: false },
+          },
+          y: {
+            ticks: { callback: (v) => inrCompact(v) },
+          },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${inrCompact(ctx.parsed.y)}`,
+            },
+          },
+          legend: { position: 'bottom' },
+        },
+      },
+    });
+  }
+
+  // Chart.js is deferred — wait for DOMContentLoaded to ensure it's ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadChart);
+  } else {
+    loadChart();
+  }
+</script>
+{% endblock %}

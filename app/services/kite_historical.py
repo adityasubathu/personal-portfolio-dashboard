@@ -1,0 +1,382 @@
+"""
+Kite historical-data sync for STOCK / BOND instruments.
+
+Two phases:
+  1. resolve_instrument_tokens — downloads Kite's public instruments CSV
+     once per call and fills Instrument.kite_instrument_token by matching
+     on (tradingsymbol, exchange).
+
+  2. sync_price_history — for each STOCK/BOND holding, pulls day candles
+     from Kite (incremental after first backfill) and writes close prices
+     into price_history. Idempotent via INSERT OR IGNORE.
+
+ETFs are intentionally routed through mfapi.in (via mfapi_nav.py) instead of
+Kite historical: we reuse the daily AMFI NAV for both the ETF-premium display
+on the holdings table and the NAV-chart's daily price. NAV typically tracks
+the exchange close within ~1%, which is accurate enough for the chart and
+avoids a (instrument_id, price_date) unique-constraint collision with the
+NAV rows we already store for the premium.
+"""
+import asyncio
+from datetime import date, timedelta
+
+import httpx
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.instrument import Instrument
+from app.models.kite import KiteConfig
+from app.models.price_history import PriceHistory
+from app.models.trade import Trade
+from app.services import kite_client
+from app.services.kite_sync import _assert_token_valid, _get_config
+
+EQUITY_TYPES = ("STOCK", "BOND")
+KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
+
+
+async def resolve_instrument_tokens(db: AsyncSession) -> dict:
+    """Populate Instrument.kite_instrument_token for every STOCK/BOND instrument
+    the user has ever traded (including sold-out positions) whose
+    (tradingsymbol, exchange) appears in Kite's instruments dump.
+    Returns {resolved, already_had, unresolved: [names]}."""
+    traded_ids = select(Trade.instrument_id).distinct()
+    result = await db.execute(
+        select(Instrument)
+        .where(Instrument.id.in_(traded_ids))
+        .where(Instrument.instrument_type.in_(EQUITY_TYPES))
+    )
+    instruments = list(result.scalars().all())
+    if not instruments:
+        return {"resolved": 0, "already_had": 0, "unresolved": []}
+
+    needed = [i for i in instruments if not i.kite_instrument_token]
+    already_had = len(instruments) - len(needed)
+    if not needed:
+        return {"resolved": 0, "already_had": already_had, "unresolved": []}
+
+    dump = await kite_client.get_instruments_dump()
+    # Index by (tradingsymbol, exchange) for O(1) lookup.
+    by_key: dict[tuple[str, str], int] = {}
+    for row in dump:
+        sym = (row.get("tradingsymbol") or "").strip()
+        exch = (row.get("exchange") or "").strip()
+        tok = row.get("instrument_token")
+        if not (sym and exch and tok):
+            continue
+        try:
+            by_key[(sym, exch)] = int(tok)
+        except ValueError:
+            continue
+
+    resolved = 0
+    unresolved: list[str] = []
+    for instr in needed:
+        sym = (instr.tradingsymbol or "").strip()
+        exch = (instr.exchange or "NSE").strip()
+        tok = by_key.get((sym, exch)) or by_key.get((sym, "BSE"))
+        if tok is None:
+            unresolved.append(f"{sym or '?'} ({exch})")
+            continue
+        instr.kite_instrument_token = tok
+        resolved += 1
+
+    await db.commit()
+    return {"resolved": resolved, "already_had": already_had, "unresolved": unresolved}
+
+
+async def _earliest_trade_date(db: AsyncSession, instrument_id: int) -> date | None:
+    return (
+        await db.execute(
+            select(func.min(Trade.trade_date)).where(Trade.instrument_id == instrument_id)
+        )
+    ).scalar_one_or_none()
+
+
+async def _latest_stored_price_date(db: AsyncSession, instrument_id: int) -> date | None:
+    return (
+        await db.execute(
+            select(func.max(PriceHistory.price_date)).where(
+                PriceHistory.instrument_id == instrument_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _sync_one(
+    db: AsyncSession,
+    config: KiteConfig,
+    instrument: Instrument,
+) -> dict:
+    """Sync history for a single STOCK/ETF/BOND instrument. Returns
+    {rows_added, latest_price_date, error?}."""
+    latest_stored = await _latest_stored_price_date(db, instrument.id)
+    if latest_stored:
+        start = latest_stored + timedelta(days=1)
+    else:
+        earliest_trade = await _earliest_trade_date(db, instrument.id)
+        if earliest_trade is None:
+            return {"rows_added": 0, "latest_price_date": None}
+        # Buffer 10 days so the chart has room to breathe before the first trade.
+        start = earliest_trade - timedelta(days=10)
+
+    today = date.today()
+    if start > today:
+        return {"rows_added": 0, "latest_price_date": latest_stored.isoformat() if latest_stored else None}
+
+    # Window the span by KITE_DAY_CANDLE_CAP to stay under Kite's per-request candle cap.
+    all_candles: list[dict] = []
+    cursor = start
+    while cursor <= today:
+        window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), today)
+        try:
+            chunk = await kite_client.get_historical_candles(
+                config.api_key,
+                config.access_token,
+                instrument.kite_instrument_token,
+                cursor,
+                window_end,
+            )
+        except (httpx.HTTPError, ValueError) as e:
+            return {"rows_added": 0, "latest_price_date": None, "error": f"kite: {e}"}
+        all_candles.extend(chunk)
+        cursor = window_end + timedelta(days=1)
+
+    if not all_candles:
+        # Kite returned zero candles across the requested window. Common for
+        # G-secs and illiquid bonds — surface that explicitly so the caller can
+        # list them separately from outright failures.
+        return {
+            "rows_added": 0,
+            "latest_price_date": latest_stored.isoformat() if latest_stored else None,
+            "no_data": latest_stored is None,
+        }
+
+    stmt = pg_insert(PriceHistory).values(
+        [
+            {"instrument_id": instrument.id, "price_date": c["date"], "close": c["close"]}
+            for c in all_candles
+        ]
+    ).on_conflict_do_nothing(index_elements=["instrument_id", "price_date"])
+    result = await db.execute(stmt)
+    rows_added = result.rowcount or 0
+
+    newest = max(all_candles, key=lambda c: c["date"])
+    return {"rows_added": rows_added, "latest_price_date": newest["date"].isoformat()}
+
+
+async def sync_price_history(db: AsyncSession) -> dict:
+    """Main entry point. Covers every STOCK/BOND the user has ever traded (not
+    just current holdings). Resolves any missing tokens, then fans out
+    per-instrument history fetches with a small concurrency cap
+    (Kite historical = 3 req/s)."""
+    config = await _get_config(db)
+    _assert_token_valid(config)
+
+    resolved = await resolve_instrument_tokens(db)
+
+    traded_ids = select(Trade.instrument_id).distinct()
+    result = await db.execute(
+        select(Instrument)
+        .where(Instrument.id.in_(traded_ids))
+        .where(Instrument.instrument_type.in_(EQUITY_TYPES))
+    )
+    instruments = list(result.scalars().all())
+
+    per_instrument: list[dict] = []
+    failed: list[str] = []
+    no_data: list[str] = []
+    total_rows_added = 0
+    latest_price_date: date | None = None
+
+    sem = asyncio.Semaphore(1)
+
+    async def _run(instr: Instrument) -> None:
+        nonlocal total_rows_added, latest_price_date
+        if not instr.kite_instrument_token:
+            failed.append(f"{instr.tradingsymbol or '?'}: no Kite token (not found in instruments dump)")
+            return
+        async with sem:
+            await asyncio.sleep(0.5)
+            outcome = await _sync_one(db, config, instr)
+        if outcome.get("error"):
+            failed.append(f"{instr.tradingsymbol}: {outcome['error']}")
+            return
+        if outcome.get("no_data"):
+            no_data.append(f"{instr.tradingsymbol} ({instr.instrument_type})")
+            return
+        total_rows_added += outcome["rows_added"]
+        per_instrument.append({
+            "symbol": instr.tradingsymbol,
+            "rows_added": outcome["rows_added"],
+            "latest_price_date": outcome["latest_price_date"],
+        })
+        if outcome["latest_price_date"]:
+            d = date.fromisoformat(outcome["latest_price_date"])
+            if latest_price_date is None or d > latest_price_date:
+                latest_price_date = d
+
+    await asyncio.gather(*[_run(i) for i in instruments])
+    await db.commit()
+
+    return {
+        "instruments_synced": len(per_instrument),
+        "rows_added": total_rows_added,
+        "latest_price_date": latest_price_date.isoformat() if latest_price_date else None,
+        "resolved_tokens": resolved["resolved"],
+        "unresolved": resolved["unresolved"],
+        "failed": failed,
+        "no_data": no_data,
+        "per_instrument": per_instrument,
+    }
+
+
+async def _resolve_ticker_token(
+    instrument: Instrument,
+) -> tuple[int | None, str | None]:
+    """Return (token, error). If the instrument already has a cached token,
+    use it; otherwise fetch Kite's dump and look up by (tradingsymbol, exchange)."""
+    if instrument.kite_instrument_token:
+        return instrument.kite_instrument_token, None
+
+    dump = await kite_client.get_instruments_dump()
+    sym = (instrument.tradingsymbol or "").strip()
+    exch_pref = (instrument.exchange or "NSE").strip()
+    by_key: dict[tuple[str, str], int] = {}
+    for row in dump:
+        tok = row.get("instrument_token")
+        rsym = (row.get("tradingsymbol") or "").strip()
+        rexch = (row.get("exchange") or "").strip()
+        if not (tok and rsym and rexch):
+            continue
+        try:
+            by_key[(rsym, rexch)] = int(tok)
+        except ValueError:
+            continue
+    tok = by_key.get((sym, exch_pref)) or by_key.get((sym, "NSE")) or by_key.get((sym, "BSE"))
+    if tok is None:
+        return None, f"'{sym}' not found in Kite's instruments dump"
+    return tok, None
+
+
+async def fetch_ohlc_for_ticker(
+    db: AsyncSession,
+    *,
+    ticker: str,
+    start_date: date,
+    end_date: date | None = None,
+) -> dict:
+    """Fetch day candles from Kite for a single ticker between start_date and
+    end_date (defaults to today) and write them to price_history. The ticker
+    must belong to an Instrument the user has traded. Returns a result dict
+    shaped for the kite_ohlc_fetch_status partial."""
+    ticker_clean = (ticker or "").strip().upper()
+    if not ticker_clean:
+        return {"error": "Ticker is required"}
+    end = end_date or date.today()
+    if end < start_date:
+        return {"error": f"End date {end} is before start date {start_date}"}
+
+    # Pick the Instrument row: ticker must match, and it must have at least
+    # one trade (so we don't build price history for random untracked symbols).
+    traded_ids = select(Trade.instrument_id).distinct()
+    candidates = list(
+        (
+            await db.execute(
+                select(Instrument)
+                .where(Instrument.id.in_(traded_ids))
+                .where(func.upper(Instrument.tradingsymbol) == ticker_clean)
+            )
+        ).scalars().all()
+    )
+    if not candidates:
+        return {
+            "error": (
+                f"No traded instrument found with ticker '{ticker_clean}'. "
+                "Add a trade for this symbol first, or use manual CSV upload."
+            )
+        }
+    # If multiple (e.g. NSE + BSE listings), pick the one with more trades.
+    if len(candidates) > 1:
+        trade_counts = {
+            iid: n for iid, n in (
+                await db.execute(
+                    select(Trade.instrument_id, func.count())
+                    .where(Trade.instrument_id.in_([c.id for c in candidates]))
+                    .group_by(Trade.instrument_id)
+                )
+            ).all()
+        }
+        candidates.sort(key=lambda i: trade_counts.get(i.id, 0), reverse=True)
+    instrument = candidates[0]
+
+    config = await _get_config(db)
+    _assert_token_valid(config)
+
+    # Resolve + cache the instrument_token.
+    token, tok_err = await _resolve_ticker_token(instrument)
+    if tok_err:
+        return {"error": tok_err, "symbol": instrument.tradingsymbol}
+    if not instrument.kite_instrument_token:
+        instrument.kite_instrument_token = token
+        await db.commit()
+
+    # Windowed fetch.
+    all_candles: list[dict] = []
+    cursor = start_date
+    while cursor <= end:
+        window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), end)
+        try:
+            chunk = await kite_client.get_historical_candles(
+                config.api_key,
+                config.access_token,
+                token,
+                cursor,
+                window_end,
+            )
+        except (httpx.HTTPError, ValueError) as e:
+            return {
+                "error": f"Kite fetch failed: {e}",
+                "symbol": instrument.tradingsymbol,
+                "requested_start": start_date.isoformat(),
+                "requested_end": end.isoformat(),
+            }
+        all_candles.extend(chunk)
+        cursor = window_end + timedelta(days=1)
+
+    if not all_candles:
+        return {
+            "symbol": instrument.tradingsymbol,
+            "isin": instrument.isin,
+            "requested_start": start_date.isoformat(),
+            "requested_end": end.isoformat(),
+            "rows_added": 0,
+            "rows_in_response": 0,
+            "actual_start": None,
+            "actual_end": None,
+            "no_data": True,
+        }
+
+    stmt = pg_insert(PriceHistory).values(
+        [
+            {"instrument_id": instrument.id, "price_date": c["date"], "close": c["close"]}
+            for c in all_candles
+        ]
+    ).on_conflict_do_nothing(index_elements=["instrument_id", "price_date"])
+    result = await db.execute(stmt)
+    rows_added = result.rowcount or 0
+    await db.commit()
+
+    dates = [c["date"] for c in all_candles]
+    return {
+        "symbol": instrument.tradingsymbol,
+        "isin": instrument.isin,
+        "requested_start": start_date.isoformat(),
+        "requested_end": end.isoformat(),
+        "rows_added": rows_added,
+        "rows_in_response": len(all_candles),
+        "actual_start": min(dates).isoformat(),
+        "actual_end": max(dates).isoformat(),
+        "no_data": False,
+    }

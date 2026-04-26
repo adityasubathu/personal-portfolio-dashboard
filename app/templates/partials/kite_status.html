@@ -1,0 +1,59 @@
+{% if config %}
+<article>
+  <header>Saved Credentials</header>
+  <p>
+    <strong>API key:</strong> <code>{{ config.api_key }}</code><br>
+    <strong>API secret:</strong> <small>stored ({{ config.api_secret | length }} chars)</small><br>
+    <small>Saved {{ config.updated_at.strftime("%d %b %Y %H:%M IST") if config.updated_at else "—" }}</small>
+  </p>
+  <button class="secondary outline"
+          hx-delete="/api/v1/kite/config"
+          hx-target="#kite-status"
+          hx-swap="innerHTML"
+          hx-confirm="Delete the saved Kite API key, secret, and access token? You'll need to enter new credentials and log in again.">
+    Delete credentials
+  </button>
+</article>
+{% endif %}
+
+<article>
+  <header>Token Status</header>
+  {% if not config %}
+  <p>Not configured. Save your API key and secret above.</p>
+  {% elif token_valid %}
+  <p>
+    <ins>Connected</ins> &mdash; token valid until
+    {{ config.access_token_expiry.strftime("%d %b %Y %H:%M IST") if config.access_token_expiry else "unknown" }}.
+  </p>
+  <button hx-post="/api/v1/kite/sync"
+          hx-target="#sync-result"
+          hx-swap="innerHTML"
+          hx-indicator="#sync-spinner">
+    Sync Now
+  </button>
+  <span id="sync-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Syncing…</span>
+  <div id="sync-result"></div>
+  {% else %}
+  <p>
+    <del>Token expired or missing.</del>
+    Log in with Kite to get a fresh token.
+  </p>
+  <a href="{{ login_url }}" role="button">Login with Kite</a>
+  {% endif %}
+</article>
+
+{% if last_sync %}
+<article>
+  <header>Last Sync</header>
+  <p>
+    {{ last_sync.synced_at.strftime("%d %b %Y %H:%M IST") }}
+    &mdash;
+    <strong>{{ last_sync.status }}</strong>
+    &mdash;
+    {{ last_sync.holdings_count }} holdings, {{ last_sync.positions_count }} positions
+    {% if last_sync.error_message %}
+    <br><small style="color:red">{{ last_sync.error_message }}</small>
+    {% endif %}
+  </p>
+</article>
+{% endif %}

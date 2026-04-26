@@ -1,0 +1,162 @@
+{% if fds or ppf or nps or cash %}
+<table style="font-size:0.9rem;">
+  <thead>
+    <tr>
+      <th>Asset</th>
+      <th>Details</th>
+      <th>Current Value</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if fds %}
+    <tr class="section-header"><td colspan="4">Fixed Deposits</td></tr>
+    {% for fd in fds %}
+    <tr>
+      <td>
+        <strong>{{ fd.label }}</strong>
+        {% if fd.is_emergency_fund %}<br><small style="color:#b85c00">Emergency Fund</small>{% endif %}
+      </td>
+      <td>
+        <small>
+          Principal {{ fd.principal | inr(2) }} @ {{ "%.2f"|format(fd.interest_rate) }}%
+          <br>{{ fd.start_date.strftime("%d %b %Y") if fd.start_date else "—" }}
+          → {{ fd.maturity_date.strftime("%d %b %Y") if fd.maturity_date else "—" }}
+          <br>Maturity value {{ fd.maturity_value | inr(2) }}
+        </small>
+      </td>
+      <td><strong>{{ fd.current_value | inr(2) }}</strong></td>
+      <td>
+        <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                hx-delete="/api/v1/manual-assets/{{ fd.id }}"
+                hx-confirm="Delete this FD?"
+                hx-target="#manual-assets">Remove</button>
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+
+    {% if ppf %}
+    <tr class="section-header"><td colspan="4">PPF</td></tr>
+    <tr data-asset="ppf">
+      <td><strong>{{ ppf.label }}</strong></td>
+      <td><small>Debt</small></td>
+      <td>
+        <span class="asset-view"><strong>{{ ppf.current_value | inr(2) }}</strong></span>
+        <span class="asset-edit" style="display:none;">
+          <input type="number" form="ppf-update" name="current_value" value="{{ ppf.current_value }}"
+                 step="0.01" style="width:8rem; padding:0.2rem 0.4rem; font-size:0.85rem; margin:0;">
+        </span>
+      </td>
+      <td style="white-space:nowrap;">
+        <span class="asset-view">
+          <button class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Edit</button>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  hx-delete="/api/v1/manual-assets/{{ ppf.id }}"
+                  hx-confirm="Delete PPF?"
+                  hx-target="#manual-assets">Remove</button>
+        </span>
+        <span class="asset-edit" style="display:none;">
+          <form id="ppf-update" hx-post="/api/v1/manual-assets/ppf" hx-target="#manual-assets" style="display:inline;">
+            <input type="hidden" name="label" value="{{ ppf.label }}">
+            <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
+          </form>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Cancel</button>
+        </span>
+      </td>
+    </tr>
+    {% endif %}
+
+    {% if nps %}
+    <tr class="section-header"><td colspan="4">NPS</td></tr>
+    <tr data-asset="nps">
+      <td><strong>{{ nps.label }}</strong></td>
+      <td><small>75% Equity · 25% Debt</small></td>
+      <td>
+        <span class="asset-view"><strong>{{ nps.current_value | inr(2) }}</strong></span>
+        <span class="asset-edit" style="display:none;">
+          <input type="number" form="nps-update" name="current_value" value="{{ nps.current_value }}"
+                 step="0.01" style="width:8rem; padding:0.2rem 0.4rem; font-size:0.85rem; margin:0;">
+        </span>
+      </td>
+      <td style="white-space:nowrap;">
+        <span class="asset-view">
+          <button class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Edit</button>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  hx-delete="/api/v1/manual-assets/{{ nps.id }}"
+                  hx-confirm="Delete NPS?"
+                  hx-target="#manual-assets">Remove</button>
+        </span>
+        <span class="asset-edit" style="display:none;">
+          <form id="nps-update" hx-post="/api/v1/manual-assets/nps" hx-target="#manual-assets" style="display:inline;">
+            <input type="hidden" name="label" value="{{ nps.label }}">
+            <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
+          </form>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Cancel</button>
+        </span>
+      </td>
+    </tr>
+    {% endif %}
+
+    {% if cash %}
+    <tr class="section-header"><td colspan="4">Cash</td></tr>
+    <tr data-asset="cash">
+      <td><strong>{{ cash.label }}</strong></td>
+      <td><small>Savings / Current</small></td>
+      <td>
+        <span class="asset-view"><strong>{{ cash.current_value | inr(2) }}</strong></span>
+        <span class="asset-edit" style="display:none;">
+          <input type="number" form="cash-update" name="current_value" value="{{ cash.current_value }}"
+                 step="0.01" style="width:8rem; padding:0.2rem 0.4rem; font-size:0.85rem; margin:0;">
+        </span>
+      </td>
+      <td style="white-space:nowrap;">
+        <span class="asset-view">
+          <button class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Edit</button>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  hx-delete="/api/v1/manual-assets/{{ cash.id }}"
+                  hx-confirm="Delete Cash?"
+                  hx-target="#manual-assets">Remove</button>
+        </span>
+        <span class="asset-edit" style="display:none;">
+          <form id="cash-update" hx-post="/api/v1/manual-assets/cash" hx-target="#manual-assets" style="display:inline;">
+            <input type="hidden" name="label" value="{{ cash.label }}">
+            <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
+          </form>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleEdit(this)">Cancel</button>
+        </span>
+      </td>
+    </tr>
+    {% endif %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="2"><strong>Total Manual Assets</strong></td>
+      <td><strong>{{ total_manual | inr(2) }}</strong></td>
+      <td></td>
+    </tr>
+    {% if emergency_total > 0 %}
+    <tr>
+      <td colspan="2"><small>of which Emergency Fund</small></td>
+      <td><small>{{ emergency_total | inr(2) }}</small></td>
+      <td></td>
+    </tr>
+    {% endif %}
+  </tfoot>
+</table>
+{% else %}
+<p><small>No manual assets added yet.</small></p>
+{% endif %}
+<script>
+function toggleEdit(btn) {
+  const row = btn.closest('tr');
+  row.querySelectorAll('.asset-view').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+  row.querySelectorAll('.asset-edit').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+}
+</script>

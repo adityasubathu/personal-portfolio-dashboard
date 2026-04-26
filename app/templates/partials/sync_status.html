@@ -1,0 +1,48 @@
+{% if result.status in ("SUCCESS", "PARTIAL") %}
+<p>
+  Synced
+  <strong>{{ result.holdings_count }}</strong> holdings,
+  <strong>{{ result.positions_count }}</strong> positions
+  at {{ result.synced_at[:19].replace("T", " ") }} IST.
+  {% if result.status == "PARTIAL" %}
+  <br><small style="color: orange">Partial: {{ result.error_message }}</small>
+  {% endif %}
+</p>
+{% elif result.status == "MISMATCH" %}
+<article style="border: 1px solid #b85c00; padding: 0.75rem;">
+  <p style="color:#b85c00; margin-bottom: 0.5rem;">
+    <strong>Sync aborted — Kite and local holdings are out of sync.</strong><br>
+    {{ result.error_message }}. No changes were written.
+  </p>
+  <table role="grid" style="margin: 0;">
+    <thead>
+      <tr>
+        <th>Issue</th>
+        <th>Symbol</th>
+        <th>ISIN</th>
+        <th style="text-align:right">Kite qty</th>
+        <th style="text-align:right">Local qty</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in result.discrepancies %}
+      <tr>
+        <td>
+          {% if d.kind == "new_on_kite" %}New on Kite
+          {% elif d.kind == "missing_from_kite" %}Missing from Kite
+          {% else %}Quantity mismatch{% endif %}
+        </td>
+        <td><small>{{ d.symbol }}</small></td>
+        <td><small>{{ d.isin }}</small></td>
+        <td style="text-align:right">{{ d.kite_qty if d.kite_qty is not none else "—" }}</td>
+        <td style="text-align:right">{{ d.local_qty if d.local_qty is not none else "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+{% else %}
+<p style="color: red;">
+  Sync failed: {{ result.error_message }}
+</p>
+{% endif %}

@@ -1,0 +1,114 @@
+{% macro sort_header(label, field, current_sort, current_dir, sections_enabled) %}
+  {% set next_dir = 'desc' if current_sort == field and current_dir == 'asc' else 'asc' %}
+  {% set sections_param = 'on' if sections_enabled else 'off' %}
+  <th class="sortable"
+      hx-get="/api/v1/portfolio/direct?sort={{ field }}&dir={{ next_dir }}&sections={{ sections_param }}"
+      hx-target="#holdings-table"
+      hx-swap="innerHTML">
+    {{ label }}
+    {% if current_sort == field %}
+    <span class="sort-indicator">{{ '↑' if current_dir == 'asc' else '↓' }}</span>
+    {% endif %}
+  </th>
+{% endmacro %}
+
+{% set total_rows = namespace(count=0) %}
+{% for g in groups %}{% set total_rows.count = total_rows.count + (g.rows | length) %}{% endfor %}
+
+{% if total_rows.count == 0 %}
+<p>No holdings yet. <a href="/import">Import your trades</a> to get started.</p>
+{% else %}
+
+<div id="holdings-table-state"
+     data-sort="{{ current_sort }}"
+     data-dir="{{ current_dir }}"
+     data-sections="{{ 'on' if sections_enabled else 'off' }}">
+
+  <label style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+    <input type="checkbox"
+           {% if sections_enabled %}checked{% endif %}
+           hx-get="/api/v1/portfolio/direct?sort={{ current_sort }}&dir={{ current_dir }}&sections={{ 'off' if sections_enabled else 'on' }}"
+           hx-target="#holdings-table"
+           hx-swap="innerHTML"
+           hx-trigger="change">
+    <span>Group by type</span>
+  </label>
+
+  <table>
+    <thead>
+      <tr>
+        {{ sort_header('Symbol',    'symbol',    current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Type',      'type',      current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Qty',       'qty',       current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Avg Price', 'avg_price', current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Cost',      'cost',      current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('LTP',       'ltp',       current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('As of',     'as_of',     current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Value',     'value',     current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('P&L',       'pnl',       current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('P&L %',     'pnl_pct',   current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('XIRR',      'xirr',      current_sort, current_dir, sections_enabled) }}
+      </tr>
+    </thead>
+
+    {% for group in groups %}
+    <tbody>
+      {% if group.label %}
+      <tr class="section-header"><td colspan="11">{{ group.label }}</td></tr>
+      {% endif %}
+      {% for r in group.rows %}
+      <tr>
+        <td><strong>{{ r.instrument.tradingsymbol }}</strong><br><small>{{ r.instrument.isin or "" }}</small></td>
+        <td>{{ r.instrument.instrument_type }}</td>
+        <td>{{ "%.3f"|format(r.qty) }}</td>
+        <td>{{ r.avg_price | inr(2) }}</td>
+        <td>{{ r.cost | inr(2) }}</td>
+        <td>
+          {{ r.ltp | inr(2) if r.ltp else "—" }}
+          {% if r.nav_premium is not none %}
+          <br>
+          {% set hi = r.nav_premium > 1 %}
+          {% set lo = r.nav_premium < -1 %}
+          <small class="etf-premium{% if hi %} premium-high{% elif lo %} premium-low{% endif %}"
+                 title="NAV {{ r.nav | inr(2) }} on {{ r.nav_as_of.strftime('%Y-%m-%d') if r.nav_as_of else '—' }}">
+            {{ "%+.2f"|format(r.nav_premium) }}%
+          </small>
+          {% endif %}
+        </td>
+        <td><small>{{ r.as_of.strftime("%Y-%m-%d") if r.as_of else "—" }}</small></td>
+        <td>{{ r.value | inr(2) }}</td>
+        <td style="{{ r.pnl | heatmap(pnl_min, pnl_max) }}">
+          {{ r.pnl | inr(2) }}
+        </td>
+        <td style="{{ r.pnl_pct | heatmap(pnl_pct_min, pnl_pct_max) }}">
+          {{ "%.1f"|format(r.pnl_pct) + "%" if r.pnl_pct is not none else "—" }}
+        </td>
+        <td style="{{ r.xirr | heatmap(xirr_min, xirr_max) }}">
+          {{ "%.1f"|format(r.xirr) + "%" if r.xirr is not none else "—" }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+
+    <tfoot>
+      <tr>
+        <td colspan="4"><strong>Total</strong></td>
+        <td><strong>{{ total_cost | inr(2) }}</strong></td>
+        <td></td>
+        <td></td>
+        <td><strong>{{ total_value | inr(2) }}</strong></td>
+        <td class="{{ 'pnl-positive' if (total_value - total_cost) >= 0 else 'pnl-negative' }}">
+          <strong>{{ (total_value - total_cost) | inr(2) }}</strong>
+        </td>
+        <td class="{{ 'pnl-positive' if (total_value - total_cost) >= 0 else 'pnl-negative' }}">
+          {% if total_cost > 0 %}
+          <strong>{{ "%.1f"|format((total_value - total_cost) / total_cost * 100) }}%</strong>
+          {% endif %}
+        </td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endif %}

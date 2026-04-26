@@ -1,0 +1,16 @@
+{% if result.error %}
+<p style="color:red">{{ result.error }}</p>
+{% else %}
+<p>
+  Ingested <strong>{{ result.rows_added }}</strong> new close(s) for
+  <strong>{{ result.symbol }}</strong>{% if result.isin %} (<small>{{ result.isin }}</small>){% endif %}
+  &mdash; {{ result.rows_submitted }} parsed, {{ result.rows_skipped }} skipped
+  (duplicates are silently ignored).
+</p>
+{% if result.errors %}
+<details>
+  <summary style="color:#b85c00">{{ result.errors | length }} parse error(s)</summary>
+  <ul>{% for e in result.errors %}<li><small>{{ e }}</small></li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% endif %}

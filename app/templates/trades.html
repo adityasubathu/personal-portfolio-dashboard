@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Trades — Portfolio Manager{% endblock %}
+
+{% block content %}
+<h2>Trade History</h2>
+
+<div style="margin-bottom: 0.75rem">
+  <input type="search" name="q" placeholder="Search by ticker or ISIN…"
+         hx-get="/api/v1/trades"
+         hx-trigger="input changed delay:250ms, search"
+         hx-target="#trades-table"
+         hx-swap="innerHTML"
+         style="max-width: 24rem;"
+         autocomplete="off">
+</div>
+
+<div id="trades-table"
+     hx-get="/api/v1/trades?page=1"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <p aria-busy="true">Loading trades…</p>
+</div>
+{% endblock %}
