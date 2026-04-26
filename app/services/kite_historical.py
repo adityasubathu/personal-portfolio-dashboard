@@ -32,7 +32,7 @@ from app.models.trade import Trade
 from app.services import kite_client
 from app.services.kite_sync import _assert_token_valid, _get_config
 
-EQUITY_TYPES = ("STOCK", "BOND")
+EQUITY_TYPES = ("STOCK", "BOND", "ETF")
 KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
 
 
@@ -155,10 +155,26 @@ async def _sync_one(
 
     stmt = pg_insert(PriceHistory).values(
         [
-            {"instrument_id": instrument.id, "price_date": c["date"], "close": c["close"]}
+            {
+                "instrument_id": instrument.id,
+                "price_date": c["date"],
+                "open": c.get("open"),
+                "high": c.get("high"),
+                "low": c.get("low"),
+                "close": c["close"],
+            }
             for c in all_candles
         ]
-    ).on_conflict_do_nothing(index_elements=["instrument_id", "price_date"])
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["instrument_id", "price_date"],
+        set_={
+            "open": stmt.excluded.open,
+            "high": stmt.excluded.high,
+            "low": stmt.excluded.low,
+            "close": stmt.excluded.close,
+        },
+    )
     result = await db.execute(stmt)
     rows_added = result.rowcount or 0
 
@@ -360,10 +376,26 @@ async def fetch_ohlc_for_ticker(
 
     stmt = pg_insert(PriceHistory).values(
         [
-            {"instrument_id": instrument.id, "price_date": c["date"], "close": c["close"]}
+            {
+                "instrument_id": instrument.id,
+                "price_date": c["date"],
+                "open": c.get("open"),
+                "high": c.get("high"),
+                "low": c.get("low"),
+                "close": c["close"],
+            }
             for c in all_candles
         ]
-    ).on_conflict_do_nothing(index_elements=["instrument_id", "price_date"])
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["instrument_id", "price_date"],
+        set_={
+            "open": stmt.excluded.open,
+            "high": stmt.excluded.high,
+            "low": stmt.excluded.low,
+            "close": stmt.excluded.close,
+        },
+    )
     result = await db.execute(stmt)
     rows_added = result.rowcount or 0
     await db.commit()

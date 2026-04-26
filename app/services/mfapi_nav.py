@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.price_history import PriceHistory
+from app.models.nav_history import NavHistory
 from app.models.trade import Trade
 from app.services.amfi_nav import fetch_navs
 
@@ -95,7 +95,7 @@ async def _sync_one(
     holding-level price refresh. Returns {rows_added, latest_nav_date, error?}."""
     latest_existing: date | None = (
         await db.execute(
-            select(func.max(PriceHistory.price_date)).where(PriceHistory.instrument_id == instrument.id)
+            select(func.max(NavHistory.nav_date)).where(NavHistory.instrument_id == instrument.id)
         )
     ).scalar_one_or_none()
 
@@ -111,24 +111,22 @@ async def _sync_one(
         return {"rows_added": 0, "latest_nav_date": None, "error": f"mfapi: {e}"}
 
     if not rows:
-        # Nothing new; still refresh last_price from the most recent stored row if present.
         latest_row = (
             await db.execute(
-                select(PriceHistory)
-                .where(PriceHistory.instrument_id == instrument.id)
-                .order_by(PriceHistory.price_date.desc())
+                select(NavHistory)
+                .where(NavHistory.instrument_id == instrument.id)
+                .order_by(NavHistory.nav_date.desc())
                 .limit(1)
             )
         ).scalar_one_or_none()
         if latest_row:
-            _apply_to_holding(instrument, holding, latest_row.price_date, float(latest_row.close))
-            return {"rows_added": 0, "latest_nav_date": latest_row.price_date.isoformat()}
+            _apply_to_holding(instrument, holding, latest_row.nav_date, float(latest_row.nav))
+            return {"rows_added": 0, "latest_nav_date": latest_row.nav_date.isoformat()}
         return {"rows_added": 0, "latest_nav_date": None}
 
-    # INSERT OR IGNORE on the unique (instrument_id, price_date) — keeps the sync idempotent.
-    stmt = pg_insert(PriceHistory).values(
-        [{"instrument_id": instrument.id, "price_date": r["nav_date"], "close": r["nav"]} for r in rows]
-    ).on_conflict_do_nothing(index_elements=["instrument_id", "price_date"])
+    stmt = pg_insert(NavHistory).values(
+        [{"instrument_id": instrument.id, "nav_date": r["nav_date"], "nav": r["nav"]} for r in rows]
+    ).on_conflict_do_nothing(index_elements=["instrument_id", "nav_date"])
     result = await db.execute(stmt)
     rows_added = result.rowcount or 0
 

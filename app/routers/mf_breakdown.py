@@ -6,9 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.mf_breakdown import MfSchemeBreakdown
 from app.services.mf_breakdown import (
+    get_allocation_comparison,
+    get_allocation_targets,
+    get_available_schemes,
     get_breakdown_chart_data,
+    get_scheme_breakdown,
     get_stock_holdings_table,
     ingest_scheme_csvs,
+    save_allocation_targets,
     sync_amfi_market_cap,
 )
 from app.templating import templates
@@ -72,4 +77,43 @@ async def chart_data(db: AsyncSession = Depends(get_db)):
 @router.get("/stock-holdings")
 async def stock_holdings(db: AsyncSession = Depends(get_db)):
     data = await get_stock_holdings_table(db)
+    return JSONResponse(data)
+
+
+@router.get("/allocation-comparison")
+async def allocation_comparison(db: AsyncSession = Depends(get_db)):
+    data = await get_allocation_comparison(db)
+    return JSONResponse(data)
+
+
+@router.get("/allocation-targets")
+async def allocation_targets(db: AsyncSession = Depends(get_db)):
+    targets = await get_allocation_targets(db)
+    return JSONResponse(targets)
+
+
+@router.post("/allocation-targets", response_class=HTMLResponse)
+async def update_allocation_targets(request: Request, db: AsyncSession = Depends(get_db)):
+    form = await request.form()
+    targets: dict[str, float] = {}
+    for key, val in form.items():
+        if key.startswith("target_"):
+            cat = key[7:]
+            try:
+                targets[cat] = float(val)
+            except ValueError:
+                continue
+    await save_allocation_targets(db, targets)
+    return HTMLResponse("<small style='color:green'>Targets saved.</small>")
+
+
+@router.get("/schemes")
+async def schemes(db: AsyncSession = Depends(get_db)):
+    data = await get_available_schemes(db)
+    return JSONResponse(data)
+
+
+@router.get("/scheme/{scheme_isin}")
+async def scheme_detail(scheme_isin: str, db: AsyncSession = Depends(get_db)):
+    data = await get_scheme_breakdown(db, scheme_isin)
     return JSONResponse(data)

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Fund Breakdown — Portfolio Manager{% endblock %}
+
+{% block content %}
+<h2>Fund Breakdown</h2>
+
+<article>
+  <div style="max-width:400px;">
+    <label for="fund-select">Select Fund</label>
+    <input type="search" id="fund-search" list="fund-list" placeholder="Search by name or ISIN…"
+           oninput="onFundSearch(this.value)" autocomplete="off">
+    <datalist id="fund-list"></datalist>
+  </div>
+</article>
+
+<div id="fund-detail" style="display:none;">
+  <article>
+    <header>Market Cap Summary</header>
+    <table style="font-size:0.85rem;">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th style="text-align:right;">Allocation %</th>
+        </tr>
+      </thead>
+      <tbody id="cat-summary-body"></tbody>
+    </table>
+  </article>
+
+  <article>
+    <header>All Holdings</header>
+    <input type="search" id="holding-search" placeholder="Search holdings…"
+           oninput="renderHoldings()" style="margin-bottom:0.5rem;">
+    <div style="max-height:600px; overflow-y:auto;">
+      <table style="font-size:0.85rem;">
+        <thead style="position:sticky; top:0; background:var(--pico-background-color); z-index:1;">
+          <tr>
+            <th style="cursor:pointer;" onclick="sortHoldings('name')">Name <span id="hsort-name"></span></th>
+            <th>Type</th>
+            <th style="cursor:pointer;" onclick="sortHoldings('category')">Category <span id="hsort-category"></span></th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortHoldings('pct')">Weight % <span id="hsort-pct"></span></th>
+          </tr>
+        </thead>
+        <tbody id="holdings-body"></tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+<p id="fund-empty" style="text-align:center;">
+  <small>Select a fund above to view its breakdown.</small>
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let schemes = [];
+let holdingsData = [];
+let holdingSortKey = 'pct';
+let holdingSortAsc = false;
+
+async function loadSchemes() {
+  const r = await fetch('/api/v1/mf-breakdown/schemes');
+  schemes = await r.json();
+  const dl = document.getElementById('fund-list');
+  dl.innerHTML = schemes.map(s => `<option value="${s.name}" data-isin="${s.isin}">`).join('');
+}
+
+function onFundSearch(val) {
+  const match = schemes.find(s => s.name === val);
+  if (match) loadFund(match.isin);
+}
+
+async function loadFund(isin) {
+  const r = await fetch(`/api/v1/mf-breakdown/scheme/${isin}`);
+  const data = await r.json();
+
+  document.getElementById('fund-empty').style.display = 'none';
+  document.getElementById('fund-detail').style.display = '';
+
+  document.getElementById('cat-summary-body').innerHTML = data.category_summary.map(c =>
+    `<tr><td>${c.category}</td><td style="text-align:right">${c.pct.toFixed(2)}%</td></tr>`
+  ).join('');
+
+  holdingsData = data.holdings;
+  holdingSortKey = 'pct';
+  holdingSortAsc = false;
+  document.getElementById('holding-search').value = '';
+  renderHoldings();
+}
+
+function renderHoldings() {
+  const q = (document.getElementById('holding-search').value || '').toLowerCase();
+  let rows = holdingsData;
+  if (q) rows = rows.filter(h => h.name.toLowerCase().includes(q) || h.category.toLowerCase().includes(q));
+
+  rows = [...rows].sort((a, b) => {
+    let va = a[holdingSortKey], vb = b[holdingSortKey];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    if (va < vb) return holdingSortAsc ? -1 : 1;
+    if (va > vb) return holdingSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  document.querySelectorAll('[id^="hsort-"]').forEach(s => s.textContent = '');
+  const ind = document.getElementById('hsort-' + holdingSortKey);
+  if (ind) ind.textContent = holdingSortAsc ? ' ▲' : ' ▼';
+
+  document.getElementById('holdings-body').innerHTML = rows.map(h =>
+    `<tr>
+      <td>${h.name}</td>
+      <td><small>${h.type}</small></td>
+      <td><small>${h.category}</small></td>
+      <td style="text-align:right">${h.pct.toFixed(2)}%</td>
+    </tr>`
+  ).join('');
+}
+
+function sortHoldings(key) {
+  if (holdingSortKey === key) { holdingSortAsc = !holdingSortAsc; }
+  else { holdingSortKey = key; holdingSortAsc = key !== 'pct'; }
+  renderHoldings();
+}
+
+document.addEventListener('DOMContentLoaded', loadSchemes);
+</script>
+{% endblock %}

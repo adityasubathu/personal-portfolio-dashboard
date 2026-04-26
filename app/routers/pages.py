@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.instrument import Instrument
+from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
 from app.templating import templates
@@ -37,15 +38,36 @@ async def nav_history_page(request: Request, db: AsyncSession = Depends(get_db))
     # price_history rows we already have for it. Instruments with zero rows
     # are the ones that typically need a manual upload.
     traded_ids = select(Trade.instrument_id).distinct()
+
+    price_count_sub = (
+        select(
+            PriceHistory.instrument_id,
+            func.count(PriceHistory.id).label("n"),
+        )
+        .group_by(PriceHistory.instrument_id)
+        .subquery()
+    )
+    nav_count_sub = (
+        select(
+            NavHistory.instrument_id,
+            func.count(NavHistory.id).label("n"),
+        )
+        .group_by(NavHistory.instrument_id)
+        .subquery()
+    )
     result = await db.execute(
         select(
             Instrument,
-            func.count(PriceHistory.id).label("n_prices"),
+            func.coalesce(price_count_sub.c.n, 0).label("n_prices"),
+            func.coalesce(nav_count_sub.c.n, 0).label("n_navs"),
         )
-        .outerjoin(PriceHistory, PriceHistory.instrument_id == Instrument.id)
+        .outerjoin(price_count_sub, price_count_sub.c.instrument_id == Instrument.id)
+        .outerjoin(nav_count_sub, nav_count_sub.c.instrument_id == Instrument.id)
         .where(Instrument.id.in_(traded_ids))
-        .group_by(Instrument.id)
-        .order_by(func.count(PriceHistory.id).asc(), Instrument.tradingsymbol)
+        .order_by(
+            (func.coalesce(price_count_sub.c.n, 0) + func.coalesce(nav_count_sub.c.n, 0)).asc(),
+            Instrument.tradingsymbol,
+        )
     )
     instruments = [
         {
@@ -53,9 +75,9 @@ async def nav_history_page(request: Request, db: AsyncSession = Depends(get_db))
             "symbol": i.tradingsymbol,
             "isin": i.isin,
             "type": i.instrument_type,
-            "n_prices": n,
+            "n_prices": n_prices + n_navs,
         }
-        for i, n in result.all()
+        for i, n_prices, n_navs in result.all()
     ]
     return templates.TemplateResponse(
         "nav_history.html",
@@ -64,8 +86,19 @@ async def nav_history_page(request: Request, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/portfolio/mf-breakdown", response_class=HTMLResponse)
-async def mf_breakdown_page(request: Request):
+async def mf_breakdown_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/portfolio/breakdown", status_code=301)
+
+
+@router.get("/portfolio/breakdown", response_class=HTMLResponse)
+async def breakdown_page(request: Request):
     return templates.TemplateResponse("mf_breakdown.html", {"request": request})
+
+
+@router.get("/portfolio/fund-breakdown", response_class=HTMLResponse)
+async def fund_breakdown_page(request: Request):
+    return templates.TemplateResponse("fund_breakdown.html", {"request": request})
 
 
 @router.get("/settings", response_class=HTMLResponse)

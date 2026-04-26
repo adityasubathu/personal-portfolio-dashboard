@@ -20,9 +20,15 @@
       </button>
       <button class="secondary"
               hx-delete="/api/v1/settings/price-history"
-              hx-confirm="Delete ALL price history (Kite + MF NAV)? This cannot be undone."
+              hx-confirm="Delete ALL Kite OHLC price history? This cannot be undone."
               hx-target="#danger-result">
-        Clear Price History
+        Clear Kite Price History
+      </button>
+      <button class="secondary"
+              hx-delete="/api/v1/settings/nav-history"
+              hx-confirm="Delete ALL MF/ETF NAV history? This cannot be undone."
+              hx-target="#danger-result">
+        Clear MF NAV History
       </button>
       <button class="secondary"
               hx-delete="/api/v1/settings/mf-breakdown"

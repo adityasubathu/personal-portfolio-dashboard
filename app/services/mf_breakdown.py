@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.allocation_target import AllocationTarget
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
@@ -321,112 +322,188 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
 _SGB_RE = re.compile(r"^SGB", re.IGNORECASE)
 
 
-async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF")))
-    )
-    all_holdings = result.all()
+async def _load_amfi_lookups(db: AsyncSession) -> tuple[dict[str, str], dict[str, str]]:
+    """Returns (isin_to_cat, norm_name_to_cat) from AmfiMarketCap."""
+    amfi_rows = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    isin_to_cat: dict[str, str] = {}
+    name_to_cat: dict[str, str] = {}
+    for a in amfi_rows:
+        if a.isin:
+            isin_to_cat[a.isin] = a.categorization
+        name_to_cat[a.name_normalized] = a.categorization
+    return isin_to_cat, name_to_cat
 
-    holding_values: dict[str, float] = {}
-    for h, i in all_holdings:
-        if not i.isin:
+
+def _classify_stock_instrument(
+    isin: str | None,
+    name: str | None,
+    tradingsymbol: str | None,
+    isin_to_cat: dict[str, str],
+    name_to_cat: dict[str, str],
+) -> str:
+    if isin and isin in isin_to_cat:
+        return isin_to_cat[isin]
+    for raw in (name, tradingsymbol):
+        if not raw:
             continue
-        ltp = float(h.last_price) if h.last_price else None
-        holding_values[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        norm = normalize_company_name(raw)
+        cat = name_to_cat.get(norm)
+        if cat:
+            return cat
+        best_ratio = 0.0
+        best_cat = None
+        for amfi_norm, amfi_cat in name_to_cat.items():
+            r = SequenceMatcher(None, norm, amfi_norm).ratio()
+            if r > best_ratio:
+                best_ratio = r
+                best_cat = amfi_cat
+        if best_ratio >= 0.85 and best_cat:
+            return best_cat
+    return "Unclassified Equity"
 
-    if not holding_values:
-        return []
 
-    breakdown_rows = (await db.execute(
-        select(MfSchemeBreakdown).where(
-            MfSchemeBreakdown.scheme_isin.in_(list(holding_values.keys())),
-            MfSchemeBreakdown.holding_type == "Equity",
-        )
-    )).scalars().all()
+async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
+    isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
 
-    stock_totals: dict[str, float] = {}
-    for row in breakdown_rows:
-        hv = holding_values.get(row.scheme_isin, 0)
-        contribution = hv * (float(row.holdings_pct) / 100.0)
-        stock_totals[row.name] = stock_totals.get(row.name, 0) + contribution
-
-    total_portfolio = sum(holding_values.values())
-    if total_portfolio <= 0:
-        return []
-
+    # Build ticker lookup from AMFI
     amfi_rows = (await db.execute(select(AmfiMarketCap))).scalars().all()
     ticker_lookup: dict[str, str] = {}
     for a in amfi_rows:
         ticker_lookup[normalize_company_name(a.company_name)] = a.nse_symbol or a.bse_symbol or ""
 
-    stocks = []
-    for name, value in stock_totals.items():
-        if value <= 0:
+    # MF/ETF fund holdings
+    fund_result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF")))
+    )
+    fund_holdings = fund_result.all()
+
+    fund_values: dict[str, float] = {}
+    for h, i in fund_holdings:
+        if not i.isin:
             continue
-        ticker = ticker_lookup.get(normalize_company_name(name), "")
+        ltp = float(h.last_price) if h.last_price else None
+        fund_values[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+
+    stock_totals: dict[str, dict] = {}
+
+    if fund_values:
+        breakdown_rows = (await db.execute(
+            select(MfSchemeBreakdown).where(
+                MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
+                MfSchemeBreakdown.holding_type == "Equity",
+            )
+        )).scalars().all()
+
+        for row in breakdown_rows:
+            hv = fund_values.get(row.scheme_isin, 0)
+            contribution = hv * (float(row.holdings_pct) / 100.0)
+            if row.name not in stock_totals:
+                ticker = ticker_lookup.get(normalize_company_name(row.name), "")
+                stock_totals[row.name] = {"ticker": ticker, "category": row.category, "value": 0}
+            stock_totals[row.name]["value"] += contribution
+
+    # Direct stock holdings
+    stock_result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type == "STOCK")
+    )
+    for h, i in stock_result.all():
+        ltp = float(h.last_price) if h.last_price else None
+        value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        name = i.name or i.tradingsymbol or "Unknown"
+        cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
+        ticker = i.tradingsymbol or ""
+        if name in stock_totals:
+            stock_totals[name]["value"] += value
+        else:
+            stock_totals[name] = {"ticker": ticker, "category": cat, "value": value}
+
+    total_equity = sum(s["value"] for s in stock_totals.values())
+    if total_equity <= 0:
+        return []
+
+    stocks = []
+    for name, info in stock_totals.items():
+        if info["value"] <= 0:
+            continue
         stocks.append({
             "name": name,
-            "ticker": ticker,
-            "weight_pct": round(value / total_portfolio * 100, 4),
-            "value": round(value, 2),
+            "ticker": info["ticker"],
+            "category": info["category"],
+            "weight_pct": round(info["value"] / total_equity * 100, 4),
+            "value": round(info["value"], 2),
         })
 
     stocks.sort(key=lambda s: s["value"], reverse=True)
     return stocks
 
 
-async def get_breakdown_chart_data(db: AsyncSession) -> dict:
+async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: bool) -> dict[str, float]:
     from app.services.manual_assets import get_manual_assets_summary
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND")))
-    )
-    all_holdings = result.all()
-
+    isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
     category_totals: dict[str, float] = {}
     fund_isins: list[str] = []
 
     for h, i in all_holdings:
-        ltp = float(h.last_price) if h.last_price else None
-        value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        if use_cost:
+            value = float(h.total_cost or 0)
+        else:
+            ltp = float(h.last_price) if h.last_price else None
+            value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
 
-        if i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+        if i.instrument_type == "STOCK":
+            cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
+            category_totals[cat] = category_totals.get(cat, 0) + value
+        elif i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
             category_totals["Gold"] = category_totals.get("Gold", 0) + value
         elif i.instrument_type in ("MF", "ETF") and i.isin:
             fund_isins.append(i.isin)
 
-    holding_values: dict[str, float] = {}
+    hv: dict[str, float] = {}
     for h, i in all_holdings:
         if i.isin and i.isin in fund_isins:
-            ltp = float(h.last_price) if h.last_price else None
-            holding_values[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            if use_cost:
+                hv[i.isin] = float(h.total_cost or 0)
+            else:
+                ltp = float(h.last_price) if h.last_price else None
+                hv[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
 
-    if holding_values:
+    if hv:
         breakdown_rows = (await db.execute(
             select(MfSchemeBreakdown).where(
-                MfSchemeBreakdown.scheme_isin.in_(list(holding_values.keys()))
+                MfSchemeBreakdown.scheme_isin.in_(list(hv.keys()))
             )
         )).scalars().all()
-
         for row in breakdown_rows:
-            hv = holding_values.get(row.scheme_isin, 0)
-            contribution = hv * (float(row.holdings_pct) / 100.0)
+            contribution = hv.get(row.scheme_isin, 0) * (float(row.holdings_pct) / 100.0)
             category_totals[row.category] = category_totals.get(row.category, 0) + contribution
 
     manual = await get_manual_assets_summary(db)
-    debt_from_manual = manual["total_fd"] + manual["total_ppf"]
+    debt = manual["total_fd"] + manual["total_ppf"]
     if manual["nps"]:
         nps_val = manual["nps"]["current_value"]
         category_totals["Large Cap"] = category_totals.get("Large Cap", 0) + nps_val * 0.75
-        debt_from_manual += nps_val * 0.25
-    if debt_from_manual > 0:
-        category_totals["Debt"] = category_totals.get("Debt", 0) + debt_from_manual
+        debt += nps_val * 0.25
+    if debt > 0:
+        category_totals["Debt"] = category_totals.get("Debt", 0) + debt
     if manual.get("total_cash", 0) > 0:
         category_totals["Cash"] = category_totals.get("Cash", 0) + manual["total_cash"]
+
+    return category_totals
+
+
+async def get_breakdown_chart_data(db: AsyncSession) -> dict:
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    all_holdings = result.all()
+    category_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
 
     if not category_totals:
         return {"labels": [], "values": [], "total": 0}
@@ -448,3 +525,149 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
         "values": values,
         "total": round(sum(values), 2),
     }
+
+
+DEFAULT_TARGETS = {
+    "Large Cap": 50.0,
+    "Mid Cap": 30.0,
+    "Small Cap": 20.0,
+}
+
+
+async def get_allocation_targets(db: AsyncSession) -> dict[str, float]:
+    rows = (await db.execute(select(AllocationTarget))).scalars().all()
+    if not rows:
+        return dict(DEFAULT_TARGETS)
+    return {r.category: float(r.target_pct) for r in rows}
+
+
+async def save_allocation_targets(db: AsyncSession, targets: dict[str, float]):
+    for category, pct in targets.items():
+        existing = (await db.execute(
+            select(AllocationTarget).where(AllocationTarget.category == category)
+        )).scalar_one_or_none()
+        if existing:
+            existing.target_pct = pct
+        else:
+            db.add(AllocationTarget(category=category, target_pct=pct))
+    await db.execute(
+        delete(AllocationTarget).where(
+            AllocationTarget.category.notin_(list(targets.keys()))
+        )
+    )
+    await db.commit()
+
+
+EQUITY_CATS = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}
+
+
+async def get_allocation_comparison(db: AsyncSession) -> dict:
+    targets = await get_allocation_targets(db)
+
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    all_holdings = result.all()
+
+    current_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
+    invested_totals = await _build_category_totals_full(db, all_holdings, use_cost=True)
+
+    current_equity = sum(v for c, v in current_totals.items() if c in EQUITY_CATS)
+    invested_equity = sum(v for c, v in invested_totals.items() if c in EQUITY_CATS)
+
+    large_target = targets.get("Large Cap", 50)
+
+    categories = sorted(targets.keys())
+    rows = []
+    for cat in categories:
+        target_pct = targets[cat]
+        cur_val = current_totals.get(cat, 0)
+        inv_val = invested_totals.get(cat, 0)
+        cur_pct = (cur_val / current_equity * 100) if current_equity > 0 else 0
+        inv_pct = (inv_val / invested_equity * 100) if invested_equity > 0 else 0
+
+        cur_large = current_totals.get("Large Cap", 0)
+        inv_large = invested_totals.get("Large Cap", 0)
+        if cat == "Large Cap":
+            cur_ideal_val = cur_large
+            inv_ideal_val = inv_large
+        else:
+            cur_ideal_val = cur_large * (target_pct / large_target) if large_target > 0 else 0
+            inv_ideal_val = inv_large * (target_pct / large_target) if large_target > 0 else 0
+
+        rows.append({
+            "category": cat,
+            "target_pct": target_pct,
+            "current_pct": round(cur_pct, 2),
+            "current_value": round(cur_val, 2),
+            "current_diff": round(cur_pct - target_pct, 2),
+            "invested_pct": round(inv_pct, 2),
+            "invested_value": round(inv_val, 2),
+            "invested_diff": round(inv_pct - target_pct, 2),
+            "current_ideal_value": round(cur_ideal_val, 2),
+            "current_value_diff": round(cur_val - cur_ideal_val, 2),
+            "invested_ideal_value": round(inv_ideal_val, 2),
+            "invested_value_diff": round(inv_val - inv_ideal_val, 2),
+        })
+
+    return {
+        "rows": rows,
+        "targets": targets,
+        "current_equity": round(current_equity, 2),
+        "invested_equity": round(invested_equity, 2),
+    }
+
+
+async def get_available_schemes(db: AsyncSession) -> list[dict]:
+    scheme_isins = (await db.execute(
+        select(MfSchemeBreakdown.scheme_isin).distinct()
+    )).scalars().all()
+    if not scheme_isins:
+        return []
+
+    instruments = (await db.execute(
+        select(Instrument).where(Instrument.isin.in_(scheme_isins))
+    )).scalars().all()
+    isin_to_name = {i.isin: i.tradingsymbol or i.name or i.isin for i in instruments}
+
+    result = []
+    for isin in sorted(scheme_isins, key=lambda s: isin_to_name.get(s, s)):
+        result.append({"isin": isin, "name": isin_to_name.get(isin, isin)})
+    return result
+
+
+async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
+    rows = (await db.execute(
+        select(MfSchemeBreakdown)
+        .where(MfSchemeBreakdown.scheme_isin == scheme_isin)
+        .order_by(MfSchemeBreakdown.holdings_pct.desc())
+    )).scalars().all()
+
+    if not rows:
+        return {"holdings": [], "category_summary": []}
+
+    holdings = []
+    cat_totals: dict[str, float] = {}
+    for r in rows:
+        pct = float(r.holdings_pct)
+        holdings.append({
+            "name": r.name,
+            "type": r.holding_type,
+            "category": r.category,
+            "pct": round(pct, 4),
+        })
+        cat_totals[r.category] = cat_totals.get(r.category, 0) + pct
+
+    order = [
+        "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
+        "Gold", "Debt", "Cash", "Other",
+    ]
+    category_summary = []
+    for cat in order:
+        v = cat_totals.get(cat, 0)
+        if v > 0:
+            category_summary.append({"category": cat, "pct": round(v, 2)})
+
+    return {"holdings": holdings, "category_summary": category_summary}

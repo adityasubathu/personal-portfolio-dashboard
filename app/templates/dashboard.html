@@ -13,39 +13,28 @@
 
 <h3>Holdings</h3>
 
-<div style="margin-bottom: 0.75rem">
-  <button hx-post="/api/v1/mf/sync-nav-history"
-          hx-target="#mf-sync-result"
-          hx-swap="innerHTML"
-          hx-on::after-request="refreshHoldings()">
-    Sync NAV History (mfapi.in)
-  </button>
-  <button class="secondary"
-          hx-post="/api/v1/mf/sync-nav"
-          hx-target="#mf-sync-result"
-          hx-swap="innerHTML"
-          hx-on::after-request="refreshHoldings()">
-    Latest-only fallback (AMFI)
-  </button>
-  <script>
-    function refreshHoldings() {
-      const state = document.getElementById('holdings-table-state');
-      const qs = state
-        ? `?sort=${state.dataset.sort}&dir=${state.dataset.dir}&sections=${state.dataset.sections}`
-        : '';
-      htmx.ajax('GET', '/api/v1/portfolio/direct' + qs, '#holdings-table');
-      htmx.ajax('GET', '/api/v1/portfolio/summary-cards', '#summary-cards');
-    }
-  </script>
-  <span id="mf-sync-result"></span>
-</div>
+<script>
+  function refreshHoldings() {
+    const state = document.getElementById('holdings-table-state');
+    const compare = state ? state.dataset.compare : (document.cookie.match(/day_compare=(\w+)/)||[])[1] || 'prev_close';
+    const qs = state
+      ? `?sort=${state.dataset.sort}&dir=${state.dataset.dir}&sections=${state.dataset.sections}&compare=${compare}`
+      : `?compare=${compare}`;
+    htmx.ajax('GET', '/api/v1/portfolio/direct' + qs, '#holdings-table');
+    htmx.ajax('GET', '/api/v1/portfolio/summary-cards', '#summary-cards');
+  }
+</script>
 
 <div id="holdings-table"
-     hx-get="/api/v1/portfolio/direct"
-     hx-trigger="load"
      hx-swap="innerHTML">
   <p aria-busy="true">Loading holdings…</p>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const cmp = (document.cookie.match(/day_compare=(\w+)/)||[])[1] || 'prev_close';
+  htmx.ajax('GET', '/api/v1/portfolio/direct?compare=' + cmp, '#holdings-table');
+});
+</script>
 
 <h3>Manual Assets</h3>
 

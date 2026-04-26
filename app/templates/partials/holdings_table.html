@@ -1,8 +1,8 @@
-{% macro sort_header(label, field, current_sort, current_dir, sections_enabled) %}
+{% macro sort_header(label, field, current_sort, current_dir, sections_enabled, compare) %}
   {% set next_dir = 'desc' if current_sort == field and current_dir == 'asc' else 'asc' %}
   {% set sections_param = 'on' if sections_enabled else 'off' %}
   <th class="sortable"
-      hx-get="/api/v1/portfolio/direct?sort={{ field }}&dir={{ next_dir }}&sections={{ sections_param }}"
+      hx-get="/api/v1/portfolio/direct?sort={{ field }}&dir={{ next_dir }}&sections={{ sections_param }}&compare={{ compare }}"
       hx-target="#holdings-table"
       hx-swap="innerHTML">
     {{ label }}
@@ -22,38 +22,52 @@
 <div id="holdings-table-state"
      data-sort="{{ current_sort }}"
      data-dir="{{ current_dir }}"
-     data-sections="{{ 'on' if sections_enabled else 'off' }}">
+     data-sections="{{ 'on' if sections_enabled else 'off' }}"
+     data-compare="{{ compare }}">
 
-  <label style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-    <input type="checkbox"
-           {% if sections_enabled %}checked{% endif %}
-           hx-get="/api/v1/portfolio/direct?sort={{ current_sort }}&dir={{ current_dir }}&sections={{ 'off' if sections_enabled else 'on' }}"
-           hx-target="#holdings-table"
-           hx-swap="innerHTML"
-           hx-trigger="change">
-    <span>Group by type</span>
-  </label>
+  <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; margin-bottom:0.75rem;">
+    <label style="display:inline-flex; align-items:center; gap:0.5rem; margin:0;">
+      <input type="checkbox"
+             {% if sections_enabled %}checked{% endif %}
+             hx-get="/api/v1/portfolio/direct?sort={{ current_sort }}&dir={{ current_dir }}&sections={{ 'off' if sections_enabled else 'on' }}&compare={{ compare }}"
+             hx-target="#holdings-table"
+             hx-swap="innerHTML"
+             hx-trigger="change">
+      <span>Group by type</span>
+    </label>
+    <label style="display:inline-flex; align-items:center; gap:0.5rem; margin:0;">
+      <span style="font-size:0.85rem;">Day change vs</span>
+      <select style="width:auto; padding:0.2rem 0.4rem; font-size:0.85rem; margin:0;"
+              onchange="switchCompare(this.value)">
+        <option value="prev_close" {% if compare == 'prev_close' %}selected{% endif %}>Prev Close</option>
+        <option value="open" {% if compare == 'open' %}selected{% endif %}>Today's Open</option>
+      </select>
+    </label>
+  </div>
 
   <div style="overflow-x:auto;">
   <table style="white-space:nowrap; font-size:0.85rem;">
     <thead>
       <tr>
-        {{ sort_header('Symbol',    'symbol',    current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('Qty',       'qty',       current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('Avg Price', 'avg_price', current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('Cost',      'cost',      current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('LTP',       'ltp',       current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('Value',     'value',     current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('P&L',       'pnl',       current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('P&L %',     'pnl_pct',   current_sort, current_dir, sections_enabled) }}
-        {{ sort_header('XIRR',      'xirr',      current_sort, current_dir, sections_enabled) }}
+        {{ sort_header('Symbol',    'symbol',      current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Qty',       'qty',         current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Avg Buy',   'avg_price',   current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Invested',  'cost',        current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Day %',     'day_chg_pct', current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Day Chg',   'day_chg_abs', current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Prev Cl',   'ltp',         current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('LTP',       'ltp',         current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('Current',   'value',       current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('P&L',       'pnl',         current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('P&L %',     'pnl_pct',     current_sort, current_dir, sections_enabled, compare) }}
+        {{ sort_header('XIRR',      'xirr',        current_sort, current_dir, sections_enabled, compare) }}
       </tr>
     </thead>
 
     {% for group in groups %}
     <tbody>
       {% if group.label %}
-      <tr class="section-header"><td colspan="9">{{ group.label }}</td></tr>
+      <tr class="section-header"><td colspan="12">{{ group.label }}</td></tr>
       {% endif %}
       {% for r in group.rows %}
       <tr>
@@ -64,6 +78,13 @@
         <td>{{ "%.3f"|format(r.qty) }}</td>
         <td>{{ r.avg_price | inr(2) }}</td>
         <td>{{ r.cost | inr(2) }}</td>
+        <td style="{% if r.day_chg_pct is not none %}background:{{ 'rgba(34,139,34,0.25)' if r.day_chg_pct >= 0 else 'rgba(220,20,20,0.25)' }}{% endif %}">
+          {{ "%+.2f"|format(r.day_chg_pct) + "%" if r.day_chg_pct is not none else "—" }}
+        </td>
+        <td style="{{ r.day_chg_abs | heatmap(group.day_chg_abs_min, group.day_chg_abs_max) }}">
+          {{ r.day_chg_abs | inr(2) if r.day_chg_abs is not none else "—" }}
+        </td>
+        <td title="{{ r.prev_close_date.strftime('%d %b %Y') if r.prev_close_date else '' }}">{{ r.prev_close | inr(2) if r.prev_close else "—" }}</td>
         <td title="{{ r.as_of.strftime('%d %b %Y') if r.as_of else '' }}">
           {{ r.ltp | inr(2) if r.ltp else "—" }}
           {% if r.nav_premium is not none %}
@@ -95,6 +116,9 @@
         <td colspan="3"><strong>Total</strong></td>
         <td><strong>{{ total_cost | inr(2) }}</strong></td>
         <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td><strong>{{ total_value | inr(2) }}</strong></td>
         <td class="{{ 'pnl-positive' if (total_value - total_cost) >= 0 else 'pnl-negative' }}">
           <strong>{{ (total_value - total_cost) | inr(2) }}</strong>
@@ -110,4 +134,14 @@
   </table>
   </div>
 </div>
+
+<script>
+function switchCompare(val) {
+  document.cookie = 'day_compare=' + val + '; path=/; max-age=0; SameSite=Lax';
+  document.cookie = 'day_compare=' + val + '; path=/; SameSite=Lax';
+  const state = document.getElementById('holdings-table-state');
+  const qs = `?sort=${state.dataset.sort}&dir=${state.dataset.dir}&sections=${state.dataset.sections}&compare=${val}`;
+  htmx.ajax('GET', '/api/v1/portfolio/direct' + qs, '#holdings-table');
+}
+</script>
 {% endif %}

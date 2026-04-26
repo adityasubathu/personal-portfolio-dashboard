@@ -19,8 +19,12 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.instrument import Instrument
+from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
+
+MF_TYPES = {"MF"}
 
 
 async def compute_nav_series(db: AsyncSession) -> list[dict]:
@@ -33,6 +37,12 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
     if not trades:
         return []
 
+    traded_ids = {t.instrument_id for t in trades}
+    instr_rows = (
+        await db.execute(select(Instrument).where(Instrument.id.in_(traded_ids)))
+    ).scalars().all()
+    mf_ids = {i.id for i in instr_rows if i.instrument_type in MF_TYPES}
+
     price_rows = list(
         (
             await db.execute(
@@ -44,10 +54,24 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
             )
         ).all()
     )
-    # price_lookup[instrument_id][date] = close
+    nav_rows = list(
+        (
+            await db.execute(
+                select(
+                    NavHistory.instrument_id,
+                    NavHistory.nav_date,
+                    NavHistory.nav,
+                ).order_by(NavHistory.instrument_id, NavHistory.nav_date)
+            )
+        ).all()
+    )
+
     price_lookup: dict[int, dict[date, float]] = defaultdict(dict)
     for iid, d, c in price_rows:
         price_lookup[iid][d] = float(c)
+    for iid, d, nav in nav_rows:
+        if iid in mf_ids:
+            price_lookup[iid][d] = float(nav)
 
     # Group trades by date for O(1) lookup inside the day loop.
     trades_by_date: dict[date, list[Trade]] = defaultdict(list)

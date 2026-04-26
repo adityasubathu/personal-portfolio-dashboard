@@ -31,6 +31,9 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS kite_sync_log ADD COLUMN IF NOT EXISTS mf_holdings_count INTEGER",
             "ALTER TABLE IF EXISTS instruments ADD COLUMN IF NOT EXISTS amfi_scheme_code VARCHAR(20)",
             "ALTER TABLE IF EXISTS instruments ADD COLUMN IF NOT EXISTS kite_instrument_token INTEGER",
+            "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS open NUMERIC(18,6)",
+            "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS high NUMERIC(18,6)",
+            "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS low NUMERIC(18,6)",
         ):
             await _run_migration(conn, stmt)
 
@@ -47,6 +50,24 @@ async def lifespan(app: FastAPI):
             conn,
             "ALTER TABLE kite_config ADD CONSTRAINT ck_kite_config_singleton CHECK (id = 1)",
         )
+
+        # One-time: migrate MF/ETF NAV rows from price_history → nav_history.
+        await _run_migration(conn, """
+            INSERT INTO nav_history (instrument_id, nav_date, nav, created_at)
+            SELECT ph.instrument_id, ph.price_date, ph.close, ph.created_at
+            FROM price_history ph
+            JOIN instruments i ON i.id = ph.instrument_id
+            WHERE i.instrument_type IN ('MF', 'ETF')
+              AND ph.open IS NULL
+            ON CONFLICT (instrument_id, nav_date) DO NOTHING
+        """)
+        await _run_migration(conn, """
+            DELETE FROM price_history
+            WHERE open IS NULL
+              AND instrument_id IN (
+                  SELECT id FROM instruments WHERE instrument_type IN ('MF', 'ETF')
+              )
+        """)
 
     yield
 

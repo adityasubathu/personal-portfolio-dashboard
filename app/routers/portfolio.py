@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.kite import KiteSyncLog
+from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.services.kite_historical import fetch_ohlc_for_ticker, sync_price_history
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
@@ -19,7 +20,7 @@ from app.templating import templates
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["portfolio"])
 
-SORT_FIELDS = {"symbol", "type", "qty", "avg_price", "cost", "ltp", "as_of", "value", "pnl", "pnl_pct", "xirr"}
+SORT_FIELDS = {"symbol", "type", "qty", "avg_price", "cost", "ltp", "as_of", "value", "pnl", "pnl_pct", "xirr", "day_chg_pct", "day_chg_abs"}
 
 SECTION_ORDER = [
     ("Equity", {"STOCK", "ETF"}),
@@ -44,6 +45,7 @@ async def direct_holdings(
     sort: str = Query("symbol"),
     dir: Literal["asc", "desc"] = Query("asc"),
     sections: Literal["on", "off"] = Query("on"),
+    compare: Literal["prev_close", "open"] = Query("prev_close"),
     db: AsyncSession = Depends(get_db),
 ):
     if sort not in SORT_FIELDS:
@@ -57,27 +59,79 @@ async def direct_holdings(
     today = date.today()
     xirrs = await compute_holdings_xirr(db, as_of=today)
 
-    # Latest NAV per ETF (we stored ETF NAV history separately so we can show
-    # the market-price-vs-NAV premium alongside Kite's LTP).
+    instr_ids = [instr.id for _, instr in raw]
+    mf_instr_ids = {instr.id for _, instr in raw if instr.instrument_type == "MF"}
+    non_mf_ids = [i for i in instr_ids if i not in mf_instr_ids]
+    mf_id_list = [i for i in instr_ids if i in mf_instr_ids]
+    prev_close_map: dict[int, tuple[float, date]] = {}
+    today_open_map: dict[int, float] = {}
+
+    if non_mf_ids:
+        sub = select(
+            PriceHistory.instrument_id,
+            PriceHistory.price_date,
+            PriceHistory.open,
+            PriceHistory.close,
+            func.row_number().over(
+                partition_by=PriceHistory.instrument_id,
+                order_by=PriceHistory.price_date.desc(),
+            ).label("rn"),
+        ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
+        all_rows = (await db.execute(select(sub).where(sub.c.rn <= 2))).all()
+
+        by_instr: dict[int, list] = {}
+        for r in all_rows:
+            by_instr.setdefault(r.instrument_id, []).append(r)
+
+        for iid, entries in by_instr.items():
+            entries.sort(key=lambda e: e.price_date, reverse=True)
+            if entries[0].open is not None:
+                today_open_map[iid] = float(entries[0].open)
+            if len(entries) >= 2:
+                prev_close_map[iid] = (float(entries[1].close), entries[1].price_date)
+            elif entries[0].open is not None:
+                prev_close_map[iid] = (float(entries[0].close), entries[0].price_date)
+
+    if mf_id_list:
+        nav_sub = select(
+            NavHistory.instrument_id,
+            NavHistory.nav_date,
+            NavHistory.nav,
+            func.row_number().over(
+                partition_by=NavHistory.instrument_id,
+                order_by=NavHistory.nav_date.desc(),
+            ).label("rn"),
+        ).where(NavHistory.instrument_id.in_(mf_id_list)).subquery()
+        nav_rows = (await db.execute(select(nav_sub).where(nav_sub.c.rn <= 2))).all()
+
+        by_mf: dict[int, list] = {}
+        for r in nav_rows:
+            by_mf.setdefault(r.instrument_id, []).append(r)
+
+        for iid, entries in by_mf.items():
+            entries.sort(key=lambda e: e.nav_date, reverse=True)
+            if len(entries) >= 2:
+                prev_close_map[iid] = (float(entries[1].nav), entries[1].nav_date)
+
     etf_ids = [instr.id for _, instr in raw if instr.instrument_type == "ETF"]
     etf_nav: dict[int, tuple[float, date]] = {}
     if etf_ids:
         sub = (
             select(
-                PriceHistory.instrument_id,
-                func.max(PriceHistory.price_date).label("max_date"),
+                NavHistory.instrument_id,
+                func.max(NavHistory.nav_date).label("max_date"),
             )
-            .where(PriceHistory.instrument_id.in_(etf_ids))
-            .group_by(PriceHistory.instrument_id)
+            .where(NavHistory.instrument_id.in_(etf_ids))
+            .group_by(NavHistory.instrument_id)
             .subquery()
         )
-        latest_q = select(PriceHistory).join(
+        latest_q = select(NavHistory).join(
             sub,
-            (PriceHistory.instrument_id == sub.c.instrument_id)
-            & (PriceHistory.price_date == sub.c.max_date),
+            (NavHistory.instrument_id == sub.c.instrument_id)
+            & (NavHistory.nav_date == sub.c.max_date),
         )
         for row in (await db.execute(latest_q)).scalars().all():
-            etf_nav[row.instrument_id] = (float(row.close), row.price_date)
+            etf_nav[row.instrument_id] = (float(row.nav), row.nav_date)
 
     # Materialise each row into a flat dict of sortable/derived values + refs to h and instr
     enriched: list[dict] = []
@@ -95,6 +149,14 @@ async def direct_holdings(
             nav, nav_as_of = etf_nav[instr.id]
             if ltp is not None and nav > 0:
                 nav_premium = (ltp - nav) / nav * 100
+        prev_close_entry = prev_close_map.get(instr.id)
+        prev_close = prev_close_entry[0] if prev_close_entry else None
+        prev_close_date = prev_close_entry[1] if prev_close_entry else None
+        today_open = today_open_map.get(instr.id)
+        ref_price = today_open if compare == "open" else prev_close
+        day_chg_pct = ((ltp - ref_price) / ref_price * 100) if ltp is not None and ref_price else None
+        day_chg_abs = ((ltp - ref_price) * float(h.quantity)) if ltp is not None and ref_price else None
+
         enriched.append({
             "holding": h,
             "instrument": instr,
@@ -112,6 +174,10 @@ async def direct_holdings(
             "nav": nav,
             "nav_as_of": nav_as_of,
             "nav_premium": nav_premium,
+            "prev_close": prev_close,
+            "prev_close_date": prev_close_date,
+            "day_chg_pct": day_chg_pct,
+            "day_chg_abs": day_chg_abs,
         })
 
     total_cost = sum(r["cost"] for r in enriched)
@@ -127,6 +193,7 @@ async def direct_holdings(
     pnl_min, pnl_max = _range([r["pnl"] for r in enriched])
     pnl_pct_min, pnl_pct_max = _range([r["pnl_pct"] for r in enriched])
     xirr_min, xirr_max = _range([r["xirr"] for r in enriched])
+    day_chg_abs_min, day_chg_abs_max = _range([r["day_chg_abs"] for r in enriched])
 
     # Sort with stable tiebreak on symbol
     reverse = dir == "desc"
@@ -139,9 +206,10 @@ async def direct_holdings(
         for label, types in SECTION_ORDER:
             group_rows = [r for r in enriched if r["type"] in types]
             if group_rows:
-                groups.append({"label": label, "rows": group_rows})
+                gmin, gmax = _range([r["day_chg_abs"] for r in group_rows])
+                groups.append({"label": label, "rows": group_rows, "day_chg_abs_min": gmin, "day_chg_abs_max": gmax})
     else:
-        groups = [{"label": None, "rows": enriched}]
+        groups = [{"label": None, "rows": enriched, "day_chg_abs_min": day_chg_abs_min, "day_chg_abs_max": day_chg_abs_max}]
 
     return templates.TemplateResponse(
         "partials/holdings_table.html",
@@ -153,9 +221,11 @@ async def direct_holdings(
             "current_dir": dir,
             "total_cost": total_cost,
             "total_value": total_value,
+            "compare": compare,
             "pnl_min": pnl_min, "pnl_max": pnl_max,
             "pnl_pct_min": pnl_pct_min, "pnl_pct_max": pnl_pct_max,
             "xirr_min": xirr_min, "xirr_max": xirr_max,
+            "day_chg_abs_min": day_chg_abs_min, "day_chg_abs_max": day_chg_abs_max,
         },
     )
 

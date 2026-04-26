@@ -9,6 +9,7 @@ from app.models.import_log import CSVImportLog
 from app.models.instrument import Instrument
 from app.models.manual_asset import ManualAsset
 from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
 
@@ -34,7 +35,15 @@ async def delete_price_history(db: AsyncSession = Depends(get_db)):
     n = (await db.execute(select(func.count()).select_from(PriceHistory))).scalar_one()
     await db.execute(delete(PriceHistory))
     await db.commit()
-    return HTMLResponse(f"<p>Deleted {n} price history rows.</p>")
+    return HTMLResponse(f"<p>Deleted {n} Kite OHLC price history rows.</p>")
+
+
+@router.delete("/nav-history", response_class=HTMLResponse)
+async def delete_nav_history(db: AsyncSession = Depends(get_db)):
+    n = (await db.execute(select(func.count()).select_from(NavHistory))).scalar_one()
+    await db.execute(delete(NavHistory))
+    await db.commit()
+    return HTMLResponse(f"<p>Deleted {n} MF/ETF NAV history rows.</p>")
 
 
 @router.delete("/mf-breakdown", response_class=HTMLResponse)

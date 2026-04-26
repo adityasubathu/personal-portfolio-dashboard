@@ -5,14 +5,26 @@
 <h2>NAV History</h2>
 <p><small>Portfolio market value since your first trade, overlaid with cumulative cash invested. The gap is unrealised P&amp;L.</small></p>
 
-<div style="margin-bottom: 0.75rem">
+<div style="margin-bottom: 0.75rem; display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
   <button hx-post="/api/v1/portfolio/sync-price-history"
           hx-target="#sync-status"
           hx-swap="innerHTML"
           hx-on::after-request="loadChart()">
     Sync price history (Kite)
   </button>
-  <small>MF NAVs come from the Dashboard's "Sync NAV History (mfapi.in)" button.</small>
+  <button hx-post="/api/v1/mf/sync-nav-history"
+          hx-target="#sync-status"
+          hx-swap="innerHTML"
+          hx-on::after-request="loadChart()">
+    Sync NAV History (mfapi.in)
+  </button>
+  <button class="secondary"
+          hx-post="/api/v1/mf/sync-nav"
+          hx-target="#sync-status"
+          hx-swap="innerHTML"
+          hx-on::after-request="loadChart()">
+    Latest-only fallback (AMFI)
+  </button>
   <span id="sync-status"></span>
 </div>
 

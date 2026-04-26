@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}MF Breakdown — Portfolio Manager{% endblock %}
+{% block title %}Portfolio Breakdown — Portfolio Manager{% endblock %}
 
 {% block content %}
-<h2>MF Portfolio Breakdown</h2>
+<h2>Portfolio Breakdown</h2>
 
 <article>
   <header>Ingest</header>
@@ -15,7 +15,7 @@
           hx-target="#ingest-status"
           hx-swap="innerHTML"
           hx-indicator="#ingest-spinner"
-          hx-on::after-request="loadBreakdownChart(); loadStockHoldings()">
+          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData()">
     Ingest Portfolios
   </button>
   <span id="ingest-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Working…</span>
@@ -24,8 +24,53 @@
 
 <article>
   <header>Market Cap Breakdown</header>
-  <div style="position:relative; height:420px; max-width:600px; margin:0 auto;">
-    <canvas id="breakdown-chart"></canvas>
+  <div class="grid" style="align-items:start;">
+    <div style="position:relative; height:420px;">
+      <canvas id="breakdown-chart"></canvas>
+    </div>
+    <div>
+      <div style="display:flex; align-items:center; gap:1rem; margin-bottom:0.75rem;">
+        <strong>Ideal vs Actual</strong>
+        <label style="margin:0; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem;">
+          <input type="checkbox" id="alloc-toggle" onchange="renderAllocTable()" style="margin:0;">
+          Show invested
+        </label>
+        <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                onclick="toggleAllocEdit()">Edit Targets</button>
+      </div>
+      <div id="alloc-edit" style="display:none; margin-bottom:0.75rem;">
+        <form id="alloc-targets-form"
+              hx-post="/api/v1/mf-breakdown/allocation-targets"
+              hx-target="#alloc-save-status"
+              hx-swap="innerHTML"
+              hx-on::after-request="loadAllocData()">
+          <div id="alloc-edit-fields"></div>
+          <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+            <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
+            <button type="button" class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                    onclick="toggleAllocEdit()">Cancel</button>
+            <span id="alloc-save-status"></span>
+          </div>
+        </form>
+      </div>
+      <table id="alloc-table" style="font-size:0.85rem;">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th style="text-align:right;">Target</th>
+            <th style="text-align:right;">Actual</th>
+            <th style="text-align:right;">Value</th>
+            <th style="text-align:right;">Diff</th>
+            <th style="text-align:right;">Ideal (vs LC)</th>
+            <th style="text-align:right;">Gap</th>
+          </tr>
+        </thead>
+        <tbody id="alloc-body"></tbody>
+      </table>
+      <p id="alloc-empty" style="text-align:center; display:none;">
+        <small>No data yet.</small>
+      </p>
+    </div>
   </div>
   <p id="chart-empty" style="text-align:center; display:none;">
     <small>No breakdown data yet. Click <strong>Ingest Portfolios</strong> above.</small>
@@ -42,6 +87,7 @@
         <tr>
           <th style="cursor:pointer;" onclick="sortStockTable('name')">Stock Name <span id="sort-name"></span></th>
           <th>Ticker</th>
+          <th style="cursor:pointer;" onclick="sortStockTable('category')">Category <span id="sort-category"></span></th>
           <th style="cursor:pointer; text-align:right;" onclick="sortStockTable('weight_pct')">Weight % <span id="sort-weight_pct"></span></th>
           <th style="text-align:right;">Value</th>
         </tr>
@@ -111,7 +157,24 @@ async function loadBreakdownChart() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'right' },
+          legend: {
+            position: 'right',
+            labels: {
+              generateLabels: function(chart) {
+                const ds = chart.data.datasets[0];
+                const total = ds.data.reduce((a, b) => a + b, 0);
+                return chart.data.labels.map((label, i) => {
+                  const pct = total > 0 ? (ds.data[i] / total * 100).toFixed(1) : 0;
+                  return {
+                    text: `${label} — ${inrCompact(ds.data[i])} (${pct}%)`,
+                    fillStyle: ds.backgroundColor[i],
+                    hidden: !chart.getDataVisibility(i),
+                    index: i,
+                  };
+                });
+              }
+            }
+          },
           tooltip: {
             callbacks: {
               label: function(ctx) {
@@ -171,6 +234,7 @@ function renderStockTable() {
     `<tr>
       <td>${s.name}</td>
       <td><small>${s.ticker || '—'}</small></td>
+      <td><small>${s.category || '—'}</small></td>
       <td style="text-align:right">${s.weight_pct.toFixed(2)}%</td>
       <td style="text-align:right">${inrCompact(s.value)}</td>
     </tr>`
@@ -185,6 +249,61 @@ function sortStockTable(key) {
 
 function filterStockTable() { renderStockTable(); }
 
-document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); });
+let allocData = null;
+
+async function loadAllocData() {
+  try {
+    const r = await fetch('/api/v1/mf-breakdown/allocation-comparison');
+    allocData = await r.json();
+    renderAllocTable();
+    renderAllocEditFields();
+  } catch (e) { console.error('Alloc load failed:', e); }
+}
+
+function renderAllocTable() {
+  const empty = document.getElementById('alloc-empty');
+  const tbody = document.getElementById('alloc-body');
+  if (!allocData || !allocData.rows.length) { empty.style.display = ''; tbody.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  const useInvested = document.getElementById('alloc-toggle').checked;
+  tbody.innerHTML = allocData.rows.map(r => {
+    const pct = useInvested ? r.invested_pct : r.current_pct;
+    const val = useInvested ? r.invested_value : r.current_value;
+    const diff = useInvested ? r.invested_diff : r.current_diff;
+    const idealVal = useInvested ? r.invested_ideal_value : r.current_ideal_value;
+    const valDiff = useInvested ? r.invested_value_diff : r.current_value_diff;
+    const color = diff > 0 ? '#2e7d32' : diff < 0 ? '#c62828' : '';
+    const gapColor = valDiff > 0 ? '#2e7d32' : valDiff < 0 ? '#c62828' : '';
+    return `<tr>
+      <td>${r.category}</td>
+      <td style="text-align:right">${r.target_pct.toFixed(1)}%</td>
+      <td style="text-align:right">${pct.toFixed(1)}%</td>
+      <td style="text-align:right">${inrCompact(val)}</td>
+      <td style="text-align:right; color:${color}; font-weight:600;">${diff > 0 ? '+' : ''}${diff.toFixed(1)}%</td>
+      <td style="text-align:right">${inrCompact(idealVal)}</td>
+      <td style="text-align:right; color:${gapColor}; font-weight:600;">${valDiff > 0 ? '+' : ''}${inrCompact(valDiff)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAllocEditFields() {
+  if (!allocData) return;
+  const container = document.getElementById('alloc-edit-fields');
+  container.innerHTML = allocData.rows.map(r =>
+    `<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+      <label style="margin:0; min-width:6rem; font-size:0.85rem;">${r.category}</label>
+      <input type="number" name="target_${r.category}" value="${r.target_pct}" step="0.1" min="0" max="100"
+             style="width:5rem; padding:0.2rem 0.4rem; font-size:0.85rem; margin:0;">
+      <small>%</small>
+    </div>`
+  ).join('');
+}
+
+function toggleAllocEdit() {
+  const el = document.getElementById('alloc-edit');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); loadAllocData(); });
 </script>
 {% endblock %}
