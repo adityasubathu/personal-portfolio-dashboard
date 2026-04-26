@@ -58,7 +58,7 @@ app/
 │   ├── import.html          # Multi-file CSV upload + import history
 │   ├── kite.html            # Kite config, login, sync controls
 │   ├── nav_history.html     # Instrument dropdown + NAV chart
-│   ├── mf_breakdown.html    # Ingest button + doughnut chart
+│   ├── mf_breakdown.html    # Ingest button + doughnut chart + stock holdings table
 │   ├── settings.html        # Danger-zone delete buttons
 │   └── partials/            # HTMX fragments (swapped into parent pages)
 │       ├── summary_cards.html
@@ -154,6 +154,7 @@ Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes
 - **AMFI xlsx parse:** Reads `AverageMarketCapitalization*.xlsx` from `data/mf_portfolio_breakdown/`, extracts company → market-cap classification, pre-computes normalized names. Warns if file >6 months old.
 - **Scheme CSV ingest:** Parses per-scheme CSVs. Classifies each holding: Equity → AMFI lookup (exact then fuzzy ≥85%) → Large/Mid/Small/Unclassified. Bonds → Debt. Cash → Cash. Debt/liquid funds (detected by tradingsymbol) → all Debt. ETF overrides for known index funds.
 - **Chart aggregation:** Weights each holding's category by `holding_value × holdings_pct / 100`. Adds manual assets: FD+PPF → Debt, NPS → 75% Large Cap + 25% Debt, Cash → Cash. SGB bonds → Gold.
+- **Stock holdings table:** Aggregates equity holdings across all MF/ETF schemes, computes per-stock portfolio weight and value, looks up NSE/BSE ticker from AmfiMarketCap. Sortable by name/weight, searchable by name/ticker.
 
 ### Manual Assets (`manual_assets.py`)
 FD current value via quarterly compounding: `FV = P × (1 + r/400)^(4t)`. Summary returns totals for FDs, PPF, NPS, Cash, plus emergency fund subtotal. Feeds into both dashboard summary and breakdown chart.
@@ -226,6 +227,7 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `POST /ingest` | Load AMFI xlsx + ingest scheme CSVs |
 | `PATCH /classify-batch` | Manual category override for unmatched |
 | `GET /chart-data` | JSON for allocation doughnut chart |
+| `GET /stock-holdings` | JSON: per-stock breakdown across all MF/ETF holdings |
 
 ### Manual Assets (`/api/v1/manual-assets`)
 | Endpoint | Description |
