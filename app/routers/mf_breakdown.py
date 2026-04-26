@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.mf_breakdown import MfSchemeBreakdown
 from app.services.mf_breakdown import (
     get_breakdown_chart_data,
+    get_stock_holdings_table,
     ingest_scheme_csvs,
     sync_amfi_market_cap,
 )
@@ -65,4 +66,10 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/chart-data")
 async def chart_data(db: AsyncSession = Depends(get_db)):
     data = await get_breakdown_chart_data(db)
+    return JSONResponse(data)
+
+
+@router.get("/stock-holdings")
+async def stock_holdings(db: AsyncSession = Depends(get_db)):
+    data = await get_stock_holdings_table(db)
     return JSONResponse(data)

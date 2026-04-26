@@ -321,6 +321,62 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
 _SGB_RE = re.compile(r"^SGB", re.IGNORECASE)
 
 
+async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF")))
+    )
+    all_holdings = result.all()
+
+    holding_values: dict[str, float] = {}
+    for h, i in all_holdings:
+        if not i.isin:
+            continue
+        ltp = float(h.last_price) if h.last_price else None
+        holding_values[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+
+    if not holding_values:
+        return []
+
+    breakdown_rows = (await db.execute(
+        select(MfSchemeBreakdown).where(
+            MfSchemeBreakdown.scheme_isin.in_(list(holding_values.keys())),
+            MfSchemeBreakdown.holding_type == "Equity",
+        )
+    )).scalars().all()
+
+    stock_totals: dict[str, float] = {}
+    for row in breakdown_rows:
+        hv = holding_values.get(row.scheme_isin, 0)
+        contribution = hv * (float(row.holdings_pct) / 100.0)
+        stock_totals[row.name] = stock_totals.get(row.name, 0) + contribution
+
+    total_portfolio = sum(holding_values.values())
+    if total_portfolio <= 0:
+        return []
+
+    amfi_rows = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    ticker_lookup: dict[str, str] = {}
+    for a in amfi_rows:
+        ticker_lookup[normalize_company_name(a.company_name)] = a.nse_symbol or a.bse_symbol or ""
+
+    stocks = []
+    for name, value in stock_totals.items():
+        if value <= 0:
+            continue
+        ticker = ticker_lookup.get(normalize_company_name(name), "")
+        stocks.append({
+            "name": name,
+            "ticker": ticker,
+            "weight_pct": round(value / total_portfolio * 100, 4),
+            "value": round(value, 2),
+        })
+
+    stocks.sort(key=lambda s: s["value"], reverse=True)
+    return stocks
+
+
 async def get_breakdown_chart_data(db: AsyncSession) -> dict:
     from app.services.manual_assets import get_manual_assets_summary
 

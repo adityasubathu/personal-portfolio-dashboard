@@ -15,7 +15,7 @@
           hx-target="#ingest-status"
           hx-swap="innerHTML"
           hx-indicator="#ingest-spinner"
-          hx-on::after-request="loadBreakdownChart()">
+          hx-on::after-request="loadBreakdownChart(); loadStockHoldings()">
     Ingest Portfolios
   </button>
   <span id="ingest-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Working…</span>
@@ -29,6 +29,28 @@
   </div>
   <p id="chart-empty" style="text-align:center; display:none;">
     <small>No breakdown data yet. Click <strong>Ingest Portfolios</strong> above.</small>
+  </p>
+</article>
+
+<article>
+  <header>Underlying Stock Holdings</header>
+  <input type="search" id="stock-search" placeholder="Search by stock name or ticker…"
+         oninput="filterStockTable()" style="margin-bottom:0.5rem;">
+  <div style="max-height:600px; overflow-y:auto;">
+    <table id="stock-holdings-table" style="font-size:0.85rem;">
+      <thead style="position:sticky; top:0; background:var(--pico-background-color); z-index:1;">
+        <tr>
+          <th style="cursor:pointer;" onclick="sortStockTable('name')">Stock Name <span id="sort-name"></span></th>
+          <th>Ticker</th>
+          <th style="cursor:pointer; text-align:right;" onclick="sortStockTable('weight_pct')">Weight % <span id="sort-weight_pct"></span></th>
+          <th style="text-align:right;">Value</th>
+        </tr>
+      </thead>
+      <tbody id="stock-holdings-body"></tbody>
+    </table>
+  </div>
+  <p id="stock-empty" style="text-align:center; display:none;">
+    <small>No stock holdings data. Ingest portfolios first.</small>
   </p>
 </article>
 {% endblock %}
@@ -82,6 +104,7 @@ async function loadBreakdownChart() {
           data: data.values,
           backgroundColor: bg,
           borderWidth: 1,
+          cutout: '70%',
         }],
       },
       options: {
@@ -107,6 +130,61 @@ async function loadBreakdownChart() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadBreakdownChart);
+let stockData = [];
+let stockSortKey = 'weight_pct';
+let stockSortAsc = false;
+
+async function loadStockHoldings() {
+  const empty = document.getElementById('stock-empty');
+  try {
+    const r = await fetch('/api/v1/mf-breakdown/stock-holdings');
+    stockData = await r.json();
+    if (!stockData.length) { empty.style.display = ''; return; }
+    empty.style.display = 'none';
+    renderStockTable();
+  } catch (e) {
+    console.error('Stock holdings load failed:', e);
+  }
+}
+
+function renderStockTable() {
+  const q = (document.getElementById('stock-search').value || '').toLowerCase();
+  let rows = stockData;
+  if (q) rows = rows.filter(s =>
+    s.name.toLowerCase().includes(q) || (s.ticker && s.ticker.toLowerCase().includes(q))
+  );
+
+  rows = [...rows].sort((a, b) => {
+    let va = a[stockSortKey], vb = b[stockSortKey];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    if (va < vb) return stockSortAsc ? -1 : 1;
+    if (va > vb) return stockSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  document.querySelectorAll('#stock-holdings-table thead span').forEach(s => s.textContent = '');
+  const indicator = document.getElementById('sort-' + stockSortKey);
+  if (indicator) indicator.textContent = stockSortAsc ? ' ▲' : ' ▼';
+
+  const tbody = document.getElementById('stock-holdings-body');
+  tbody.innerHTML = rows.map(s =>
+    `<tr>
+      <td>${s.name}</td>
+      <td><small>${s.ticker || '—'}</small></td>
+      <td style="text-align:right">${s.weight_pct.toFixed(2)}%</td>
+      <td style="text-align:right">${inrCompact(s.value)}</td>
+    </tr>`
+  ).join('');
+}
+
+function sortStockTable(key) {
+  if (stockSortKey === key) { stockSortAsc = !stockSortAsc; }
+  else { stockSortKey = key; stockSortAsc = key === 'name'; }
+  renderStockTable();
+}
+
+function filterStockTable() { renderStockTable(); }
+
+document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); });
 </script>
 {% endblock %}
