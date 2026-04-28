@@ -4,7 +4,7 @@
 
 A self-hosted portfolio tracker for Indian investors. Imports trades from Zerodha Kite CSVs, syncs live prices from Kite and AMFI, tracks manual assets (FDs, PPF, NPS, cash), computes FIFO cost basis, XIRR, and portfolio NAV over time, and visualizes allocation by market-cap category.
 
-**Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Jinja2 · HTMX · Pico CSS · Chart.js
+**Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Alembic · Jinja2 · HTMX · Pico CSS · Chart.js
 
 ---
 
@@ -12,7 +12,7 @@ A self-hosted portfolio tracker for Indian investors. Imports trades from Zerodh
 
 ```
 app/
-├── main.py                  # FastAPI app, lifespan migrations, router registration
+├── main.py                  # FastAPI app, lifespan (runs alembic upgrade), router registration
 ├── config.py                # Pydantic settings (.env): DATABASE_URL, Kite keys
 ├── database.py              # AsyncEngine + AsyncSession (postgresql+asyncpg)
 ├── templating.py            # Jinja2 env, custom filters: inr(), heatmap()
@@ -22,14 +22,16 @@ app/
 │   ├── instrument.py        # Instrument — master security record
 │   ├── trade.py             # Trade — immutable buy/sell ledger
 │   ├── holding.py           # Holding — current FIFO position per instrument
-│   ├── price_history.py     # PriceHistory — daily OHLC / NAV
+│   ├── price_history.py     # PriceHistory — daily OHLC from Kite
+│   ├── nav_history.py       # NavHistory — daily NAV from mfapi.in / AMFI
 │   ├── kite.py              # KiteConfig (singleton) + KiteSyncLog
 │   ├── import_log.py        # CSVImportLog — per-batch import metadata
 │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash
-│   └── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
+│   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
+│   └── allocation_target.py # AllocationTarget — equity cap allocation targets
 ├── routers/
 │   ├── pages.py             # HTML page routes (/, /trades, /import, …)
-│   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload
+│   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, SSE sync
 │   ├── trades.py            # CSV import, split-credit, import history, trade list
 │   ├── kite.py              # Kite OAuth, config CRUD, holdings sync
 │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
@@ -39,17 +41,17 @@ app/
 ├── services/
 │   ├── csv_importer.py      # Multi-format CSV parser (Kite legacy/current, generic)
 │   ├── holdings_engine.py   # FIFO recompute from trades
-│   ├── instrument_registry.py # Smart dedup: ISIN → symbol+exchange → fuzzy bond match
+│   ├── instrument_registry.py # Smart dedup: ISIN → symbol+exchange → fuzzy bond match, symbol aliases
 │   ├── kite_client.py       # Async Kite API wrapper (OAuth, holdings, OHLC)
 │   ├── kite_sync.py         # Kite holdings/positions ingest + reconciliation
-│   ├── kite_historical.py   # Equity price history fetch (windowed, incremental)
+│   ├── kite_historical.py   # Equity OHLC history fetch (windowed, incremental, SSE progress)
 │   ├── kite_reconcile.py    # Local ↔ Kite quantity validation
 │   ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
-│   ├── mfapi_nav.py         # mfapi.in historical NAV per scheme
+│   ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │   ├── mf_breakdown.py      # AMFI xlsx parse, scheme CSV ingest, chart aggregation
 │   ├── manual_assets.py     # FD FV calc, manual assets summary
 │   ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
-│   ├── nav_history.py       # Day-by-day portfolio value reconstruction
+│   ├── nav_history.py       # Day-by-day portfolio value reconstruction (reads both tables)
 │   └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── templates/
 │   ├── base.html            # Layout: Pico CSS, HTMX, Chart.js, nav links
@@ -57,8 +59,9 @@ app/
 │   ├── trades.html          # Paginated trade list with search
 │   ├── import.html          # Multi-file CSV upload + import history
 │   ├── kite.html            # Kite config, login, sync controls
-│   ├── nav_history.html     # Instrument dropdown + NAV chart
+│   ├── nav_history.html     # Sync buttons, SSE log panel, NAV chart, manual OHLC upload
 │   ├── mf_breakdown.html    # Ingest button + doughnut chart + stock holdings table
+│   ├── fund_breakdown.html  # Per-fund breakdown with searchable dropdown
 │   ├── settings.html        # Danger-zone delete buttons
 │   └── partials/            # HTMX fragments (swapped into parent pages)
 │       ├── summary_cards.html
@@ -77,6 +80,12 @@ app/
 │       └── price_history_sync_status.html
 └── static/
     └── app.css
+alembic/
+├── env.py                   # Sync psycopg2 driver, imports app models
+├── script.py.mako
+└── versions/
+    └── 0001_baseline.py     # Full schema + data migrations
+alembic.ini                  # DB URL set programmatically from app.config
 data/
 └── mf_portfolio_breakdown/  # Drop scheme CSVs (named by ISIN) + AMFI xlsx here
 docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000)
@@ -99,7 +108,10 @@ Immutable buy/sell ledger entry. Fields: `trade_date`, `trade_type` (BUY/SELL), 
 Current position per instrument, derived from trades via FIFO. Fields: `quantity`, `average_price`, `total_cost`, `last_price`, `unrealised_pnl`, `kite_synced`. One-to-one with Instrument.
 
 ### PriceHistory
-Daily close prices. Sources: Kite (stocks/bonds), AMFI (MFs), mfapi.in (MF history), manual CSV. Unique on `(instrument_id, price_date)`.
+Daily OHLC from Kite historical API. Covers stocks, ETFs, and bonds. Fields: `instrument_id`, `price_date`, `open`, `high`, `low`, `close`. Unique on `(instrument_id, price_date)`.
+
+### NavHistory
+Daily NAV from mfapi.in / AMFI. Separate from PriceHistory so ETF market prices and fund NAVs don't collide. Fields: `instrument_id`, `nav_date`, `nav`. Unique on `(instrument_id, nav_date)`.
 
 ### KiteConfig
 Singleton (id=1). Stores Kite OAuth credentials: `api_key`, `api_secret`, `access_token`, expiry. Managed via the Kite settings page.
@@ -119,6 +131,9 @@ AMFI's semi-annual company → market-cap classification (Large / Mid / Small Ca
 ### MfSchemeBreakdown
 Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `category`. Unique on `(scheme_isin, name, holding_type)`.
 
+### AllocationTarget
+Per-category equity allocation targets (e.g. Large Cap 50%, Mid Cap 30%). Used by the allocation comparison view.
+
 ---
 
 ## Services
@@ -130,7 +145,7 @@ Detects three CSV formats (Kite legacy, Kite current, generic), normalizes colum
 Walks all trades chronologically per instrument in FIFO order. Outputs quantity, average_price, total_cost, realised PnL. Detects sell-exceeds-buy violations. Preserves last_price across reimports.
 
 ### Instrument Registry (`instrument_registry.py`)
-Deduplicates instruments by ISIN (preferred), then symbol+exchange, then symbol alone. Special handling for bonds (regex patterns for G-secs, SGBs, T-bills with multiple symbol variants). Infers segment: MF, BOND, ETF, STOCK.
+Deduplicates instruments by ISIN (preferred), then symbol+exchange, then symbol alone. Special handling for bonds (regex patterns for G-secs, SGBs, T-bills with multiple symbol variants). Infers segment: MF, BOND, ETF, STOCK. Maintains a `SYMBOL_ALIASES` map for renamed tickers (e.g. ZOMATO → ETERNAL) so old CSVs resolve to the current instrument.
 
 ### Kite Client (`kite_client.py`)
 Thin async wrapper over the Kite Connect API. Token exchange (checksum-protected), holdings/positions fetch, instruments CSV download (~100k rows), historical OHLC (2000-candle cap). Exponential backoff on 429.
@@ -139,7 +154,7 @@ Thin async wrapper over the Kite Connect API. Token exchange (checksum-protected
 Orchestrates holdings + positions ingest from Kite. Upserts instruments (fills ISIN, symbol, exchange), upserts holdings (price, PnL, kite_synced flags), detects Kite-only positions (transfers). Reconciles before writing.
 
 ### Kite Historical (`kite_historical.py`)
-Fetches daily OHLC for equities/bonds from Kite. Resolves `kite_instrument_token` (one-time from Kite instruments dump). Windowed fetch (1800 days/request). Incremental from last stored date.
+Fetches daily OHLC for equities/ETFs/bonds from Kite. Resolves `kite_instrument_token` (one-time from Kite instruments dump). Windowed fetch (1800 days/request). Incremental from last stored date. Stores full OHLC (open, high, low, close) in `price_history`. Accepts an `on_progress` callback for SSE streaming.
 
 ### Kite Reconcile (`kite_reconcile.py`)
 Compares local holdings ↔ Kite by ISIN. Flags: new_on_kite, missing_from_kite, quantity_mismatch (tolerance 0.0001). Blocks sync on discrepancy.
@@ -148,7 +163,7 @@ Compares local holdings ↔ Kite by ISIN. Flags: new_on_kite, missing_from_kite,
 Fetches the AMFI daily NAV feed (`NAVAll.txt`), matches MF holdings by ISIN (growth + dividend-reinvestment), updates `last_price` and `unrealised_pnl`.
 
 ### mfapi.in NAV (`mfapi_nav.py`)
-Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes from the NAV feed. Incremental, concurrent (semaphore=4). For ETFs, stores NAV separately to show market premium.
+Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes from the NAV feed. Incremental, concurrent (semaphore=4). Writes to `nav_history` table. For MFs, updates `last_price` on the holding; for ETFs, the authoritative price is the exchange LTP from Kite.
 
 ### MF Breakdown (`mf_breakdown.py`)
 - **AMFI xlsx parse:** Reads `AverageMarketCapitalization*.xlsx` from `data/mf_portfolio_breakdown/`, extracts company → market-cap classification, pre-computes normalized names. Warns if file >6 months old.
@@ -160,7 +175,7 @@ Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes
 FD current value via quarterly compounding: `FV = P × (1 + r/400)^(4t)`. Summary returns totals for FDs, PPF, NPS, Cash, plus emergency fund subtotal. Feeds into both dashboard summary and breakdown chart.
 
 ### NAV History (`nav_history.py`)
-Reconstructs daily portfolio value from first trade to today. Walks trades chronologically, maintains quantity + cost per instrument, forward-fills prices for weekends/holidays. Outputs `{date, value, invested}` timeseries.
+Reconstructs daily portfolio value from first trade to today. Walks trades chronologically, maintains quantity + cost per instrument, forward-fills prices for weekends/holidays. Reads from both `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs). Outputs `{date, value, invested}` timeseries.
 
 ### XIRR (`xirr.py`)
 Annualized IRR via Newton-Raphson with bisection fallback. Per-holding cashflows: buys (negative) + sells (positive) + current value as terminal. Portfolio-level: union of all trade cashflows + total value.
@@ -179,18 +194,19 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `GET /trades` | Trade list |
 | `GET /import` | CSV import |
 | `GET /kite` | Kite settings |
-| `GET /portfolio/nav-history` | NAV chart |
-| `GET /portfolio/mf-breakdown` | MF breakdown chart |
+| `GET /portfolio/nav-history` | NAV chart + sync controls |
+| `GET /portfolio/breakdown` | MF breakdown chart |
+| `GET /portfolio/fund-breakdown` | Per-fund breakdown |
 | `GET /settings` | Danger zone |
 
 ### Portfolio (`/api/v1/portfolio`)
 | Endpoint | Description |
 |---|---|
-| `GET /direct` | Holdings table (sortable, filterable by section) |
+| `GET /direct` | Holdings table (sortable, grouped by type, day change columns) |
 | `GET /summary` | JSON: total cost, value, PnL |
 | `GET /summary-cards` | HTML: summary + last Kite sync + XIRR |
 | `GET /nav-history` | JSON: portfolio value timeseries |
-| `POST /sync-price-history` | Trigger Kite equity OHLC sync |
+| `GET /sync-price-history/stream` | SSE: Kite OHLC sync with live progress log |
 | `POST /upload-ohlc` | Manual OHLC CSV upload |
 | `POST /fetch-ohlc` | Fetch Kite OHLC for a specific ticker |
 
@@ -243,7 +259,8 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | Endpoint | Description |
 |---|---|
 | `DELETE /trades` | Clear trades, holdings, import logs |
-| `DELETE /price-history` | Clear all price history |
+| `DELETE /price-history` | Clear Kite OHLC price history |
+| `DELETE /nav-history` | Clear MF/ETF NAV history |
 | `DELETE /mf-breakdown` | Clear breakdown + AMFI classification |
 | `DELETE /manual-assets` | Clear manual assets |
 
@@ -252,35 +269,66 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 ## Key Workflows
 
 ### Trade Import
-Upload CSV → detect format (Kite legacy/current, generic) → normalize columns → validate rows → find/create instruments (by ISIN/symbol) → insert trades → recompute FIFO holdings → commit. Rollback via `DELETE /import/{batch_id}`.
+Upload CSV → detect format (Kite legacy/current, generic) → normalize columns → validate rows → find/create instruments (by ISIN/symbol, with alias resolution for renamed tickers) → insert trades → recompute FIFO holdings → commit. Rollback via `DELETE /import/{batch_id}`.
 
 ### Kite Sync
 OAuth login → exchange token (expires 06:00 IST next day) → fetch holdings + positions → find/create instruments → reconcile quantities (block on mismatch) → upsert holdings → log sync.
 
 ### MF NAV Update
-AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `price_history`.
+AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`.
 
-### Price History Sync
-For each stock/ETF/bond holding → resolve `kite_instrument_token` → fetch OHLC in 1800-day windows → upsert into `price_history`. Incremental from last stored date.
+### Price History Sync (SSE)
+Click "Sync price history (Kite)" → opens EventSource to SSE endpoint → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert into `price_history` → stream progress per instrument → send final result. UI shows scrollable log panel with spinner, disables button during sync.
 
 ### MF Breakdown
 Load AMFI xlsx (company → cap classification) → parse scheme CSVs from `data/mf_portfolio_breakdown/` → classify holdings (equity via AMFI fuzzy match, bonds → Debt, cash → Cash) → upsert breakdown rows. Chart: weight by `holding_value × pct` across all funds + manual assets.
 
 ### NAV History Chart
-Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` → forward-fill gaps → output `{date, value, invested}` timeseries.
+Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.
+
+### Holdings Table
+Fetches prev_close and day change from `price_history` (stocks/ETFs/bonds) and `nav_history` (MFs). Columns: Symbol, Qty, Avg Buy, Invested, Day %, Day Chg, Prev Cl, LTP, Current, P&L, P&L %, XIRR. Footer shows total day change (absolute + %) colored by profit/loss. Compare toggle (prev close vs today's open) stored in session cookie. ETF NAV premium shown inline from `nav_history`.
+
+---
+
+## Database Migrations
+
+Managed by **Alembic**. The migration files live in `alembic/versions/`.
+
+- **`env.py`** uses the sync `psycopg2` driver (strips `+asyncpg` from the URL) so migrations work both from the CLI and inside the async app.
+- **`main.py` lifespan** runs `alembic upgrade head` on startup — new tables/columns are applied automatically when the container restarts.
+- **Existing DB stamp:** `alembic stamp head` marks an already-migrated DB as current without re-running migrations.
+
+### CLI Usage (from host)
+```bash
+# Set DB URL (host machine connects via localhost, not Docker's 'db')
+export DATABASE_URL="postgresql+asyncpg://portfolio:portfolio@localhost:5432/portfolio"
+
+# Check current revision
+venv/bin/alembic current
+
+# Create a new migration (autogenerate from model changes)
+venv/bin/alembic revision --autogenerate -m "description"
+
+# Apply pending migrations
+venv/bin/alembic upgrade head
+
+# Rollback one step
+venv/bin/alembic downgrade -1
+```
 
 ---
 
 ## Deployment
 
-**docker-compose.yml** runs PostgreSQL 17 + the app (uvicorn on :8000). Volumes mount `./app` (live reload) and `./data` (scheme CSVs + AMFI xlsx).
+**docker-compose.yml** runs PostgreSQL 17 + the app (uvicorn on :8000). Volumes mount `./app` (live reload), `./data` (scheme CSVs + AMFI xlsx). Alembic config and migrations are baked into the Docker image.
 
 **Environment variables** (`.env`):
-- `DATABASE_URL` — PostgreSQL connection string
+- `DATABASE_URL` — PostgreSQL connection string (uses `+asyncpg` driver)
 - `KITE_REDIRECT_URL` — OAuth callback (default `http://localhost:8000/api/v1/kite/auth/callback`)
 - `KITE_API_KEY`, `KITE_API_SECRET` — optional, configurable via web UI
 
-Schema migrations run automatically at startup via the lifespan handler in `main.py`.
+**Python venv:** Local development uses `venv/` in the project root. All CLI commands (alembic, pytest, etc.) should use `venv/bin/`.
 
 ---
 
