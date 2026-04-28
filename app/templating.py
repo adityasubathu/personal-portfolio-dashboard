@@ -56,6 +56,14 @@ def _heatmap(value, vmin, vmax, alpha_max: float = 0.4) -> str:
     return ""
 
 
-templates = Jinja2Templates(directory="app/templates")
+class _PatchedTemplates(Jinja2Templates):
+    def TemplateResponse(self, name, context=None, **kwargs):
+        if context and "request" in context:
+            request = context.pop("request")
+            return super().TemplateResponse(request, name, context, **kwargs)
+        return super().TemplateResponse(name, context, **kwargs)
+
+
+templates = _PatchedTemplates(directory="app/templates")
 templates.env.filters["inr"] = _inr
 templates.env.filters["heatmap"] = _heatmap

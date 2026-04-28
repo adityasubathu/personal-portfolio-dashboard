@@ -182,15 +182,23 @@ async def _sync_one(
     return {"rows_added": rows_added, "latest_price_date": newest["date"].isoformat()}
 
 
-async def sync_price_history(db: AsyncSession) -> dict:
+async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
     """Main entry point. Covers every STOCK/BOND the user has ever traded (not
-    just current holdings). Resolves any missing tokens, then fans out
-    per-instrument history fetches with a small concurrency cap
-    (Kite historical = 3 req/s)."""
+    just current holdings). Resolves any missing tokens, then fetches history
+    sequentially (Kite historical = 3 req/s).
+
+    If `on_progress` is provided, it's called with a string message after each
+    instrument completes — used for SSE streaming."""
     config = await _get_config(db)
     _assert_token_valid(config)
 
+    if on_progress:
+        await on_progress("Resolving instrument tokens…")
+
     resolved = await resolve_instrument_tokens(db)
+
+    if on_progress and resolved["resolved"]:
+        await on_progress(f"Resolved {resolved['resolved']} new token(s)")
 
     traded_ids = select(Trade.instrument_id).distinct()
     result = await db.execute(
@@ -200,31 +208,40 @@ async def sync_price_history(db: AsyncSession) -> dict:
     )
     instruments = list(result.scalars().all())
 
+    if on_progress:
+        await on_progress(f"Syncing {len(instruments)} instrument(s)…")
+
     per_instrument: list[dict] = []
     failed: list[str] = []
     no_data: list[str] = []
     total_rows_added = 0
     latest_price_date: date | None = None
 
-    sem = asyncio.Semaphore(1)
-
-    async def _run(instr: Instrument) -> None:
-        nonlocal total_rows_added, latest_price_date
+    for idx, instr in enumerate(instruments, 1):
+        sym = instr.tradingsymbol or "?"
         if not instr.kite_instrument_token:
-            failed.append(f"{instr.tradingsymbol or '?'}: no Kite token (not found in instruments dump)")
-            return
-        async with sem:
-            await asyncio.sleep(0.5)
-            outcome = await _sync_one(db, config, instr)
+            failed.append(f"{sym}: no Kite token (not found in instruments dump)")
+            if on_progress:
+                await on_progress(f"[{idx}/{len(instruments)}] {sym} — skipped (no token)")
+            continue
+
+        await asyncio.sleep(0.5)
+        outcome = await _sync_one(db, config, instr)
+
         if outcome.get("error"):
-            failed.append(f"{instr.tradingsymbol}: {outcome['error']}")
-            return
+            failed.append(f"{sym}: {outcome['error']}")
+            if on_progress:
+                await on_progress(f"[{idx}/{len(instruments)}] {sym} — error: {outcome['error']}")
+            continue
         if outcome.get("no_data"):
-            no_data.append(f"{instr.tradingsymbol} ({instr.instrument_type})")
-            return
+            no_data.append(f"{sym} ({instr.instrument_type})")
+            if on_progress:
+                await on_progress(f"[{idx}/{len(instruments)}] {sym} — no data from Kite")
+            continue
+
         total_rows_added += outcome["rows_added"]
         per_instrument.append({
-            "symbol": instr.tradingsymbol,
+            "symbol": sym,
             "rows_added": outcome["rows_added"],
             "latest_price_date": outcome["latest_price_date"],
         })
@@ -233,7 +250,12 @@ async def sync_price_history(db: AsyncSession) -> dict:
             if latest_price_date is None or d > latest_price_date:
                 latest_price_date = d
 
-    await asyncio.gather(*[_run(i) for i in instruments])
+        if on_progress:
+            msg = f"[{idx}/{len(instruments)}] {sym} — +{outcome['rows_added']} row(s)"
+            if outcome["latest_price_date"]:
+                msg += f" (latest: {outcome['latest_price_date']})"
+            await on_progress(msg)
+
     await db.commit()
 
     return {

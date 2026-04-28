@@ -6,10 +6,7 @@
 <p><small>Portfolio market value since your first trade, overlaid with cumulative cash invested. The gap is unrealised P&amp;L.</small></p>
 
 <div style="margin-bottom: 0.75rem; display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
-  <button hx-post="/api/v1/portfolio/sync-price-history"
-          hx-target="#sync-status"
-          hx-swap="innerHTML"
-          hx-on::after-request="loadChart()">
+  <button id="btn-kite-sync" onclick="startKiteSync()">
     Sync price history (Kite)
   </button>
   <button hx-post="/api/v1/mf/sync-nav-history"
@@ -26,6 +23,17 @@
     Latest-only fallback (AMFI)
   </button>
   <span id="sync-status"></span>
+</div>
+
+<div id="kite-sync-panel" style="display:none; margin-bottom:1rem;">
+  <article style="padding:0.75rem; margin:0;">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+      <span id="kite-sync-spinner" aria-busy="true" style="display:inline-block; width:1.25rem; height:1.25rem;"></span>
+      <strong id="kite-sync-heading">Syncing Kite price history…</strong>
+    </div>
+    <pre id="kite-sync-log" style="max-height:16rem; overflow-y:auto; font-size:0.78rem; margin:0; padding:0.5rem; background:var(--pico-code-background-color); border-radius:4px; white-space:pre-wrap;"></pre>
+    <div id="kite-sync-result" style="margin-top:0.5rem;"></div>
+  </article>
 </div>
 
 <div style="position: relative; height: 420px;">
@@ -185,6 +193,71 @@
         },
       },
     });
+  }
+
+  let kiteSyncRunning = false;
+
+  function startKiteSync() {
+    if (kiteSyncRunning) return;
+    kiteSyncRunning = true;
+
+    const btn = document.getElementById('btn-kite-sync');
+    const panel = document.getElementById('kite-sync-panel');
+    const log = document.getElementById('kite-sync-log');
+    const spinner = document.getElementById('kite-sync-spinner');
+    const heading = document.getElementById('kite-sync-heading');
+    const resultDiv = document.getElementById('kite-sync-result');
+
+    btn.setAttribute('disabled', 'true');
+    btn.setAttribute('aria-busy', 'true');
+    panel.style.display = 'block';
+    log.textContent = '';
+    resultDiv.innerHTML = '';
+    spinner.style.display = 'inline-block';
+    heading.textContent = 'Syncing Kite price history…';
+
+    const es = new EventSource('/api/v1/portfolio/sync-price-history/stream');
+
+    es.addEventListener('log', function(e) {
+      log.textContent += e.data + '\n';
+      log.scrollTop = log.scrollHeight;
+    });
+
+    es.addEventListener('done', function(e) {
+      const d = JSON.parse(e.data);
+      if (d.ok) {
+        const r = d.result;
+        heading.textContent = 'Sync complete';
+        let html = '<p>Synced <strong>' + r.instruments_synced + '</strong> instrument(s) — <strong>' + r.rows_added + '</strong> new row(s)';
+        if (r.latest_price_date) html += ' — latest: <strong>' + r.latest_price_date + '</strong>';
+        html += '</p>';
+        if (r.failed && r.failed.length) {
+          html += '<details><summary style="color:#b85c00">' + r.failed.length + ' failed</summary><ul>';
+          r.failed.forEach(f => html += '<li><small>' + f + '</small></li>');
+          html += '</ul></details>';
+        }
+        resultDiv.innerHTML = html;
+      } else {
+        heading.textContent = 'Sync failed';
+        resultDiv.innerHTML = '<p style="color:red">' + d.error + '</p>';
+      }
+      finish(es, btn);
+      loadChart();
+    });
+
+    es.onerror = function() {
+      if (!kiteSyncRunning) return;
+      heading.textContent = 'Connection lost';
+      finish(es, btn);
+    };
+  }
+
+  function finish(es, btn) {
+    es.close();
+    kiteSyncRunning = false;
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('aria-busy');
+    document.getElementById('kite-sync-spinner').style.display = 'none';
   }
 
   // Chart.js is deferred — wait for DOMContentLoaded to ensure it's ready.

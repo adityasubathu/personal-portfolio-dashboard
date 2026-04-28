@@ -34,6 +34,9 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS open NUMERIC(18,6)",
             "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS high NUMERIC(18,6)",
             "ALTER TABLE IF EXISTS price_history ADD COLUMN IF NOT EXISTS low NUMERIC(18,6)",
+            "UPDATE instruments SET tradingsymbol = '734GS2064-GS', name = '734GS2064-GS' WHERE tradingsymbol = '734GOI2064'",
+            "UPDATE instruments SET tradingsymbol = 'SGBFEB32IV-GB', name = 'SGBFEB32IV-GB' WHERE tradingsymbol = 'SGBFEB32IV'",
+            "UPDATE instruments SET tradingsymbol = 'ETERNAL', name = 'ETERNAL' WHERE tradingsymbol = 'ZOMATO'",
         ):
             await _run_migration(conn, stmt)
 

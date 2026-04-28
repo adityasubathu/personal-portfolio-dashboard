@@ -6,13 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.instrument import Instrument
 
 # Kite symbols for Indian govt bonds / T-bills don't carry ISINs in tradebooks.
-# Covers: SGB*, 734GOI2064, 734GS2064 (n-year G-Sec), 706GS2028, 182D301123 (T-bills), *-GB suffix.
-_BOND_SYMBOL_RE = re.compile(r"^(SGB|\d{2,4}(GS|D|GOI))|(?:GOI|-GB)$")
+# Covers: SGB*, 734GS2064-GS (n-year G-Sec), 706GS2028, 182D301123 (T-bills), *-GB/*-GS suffix.
+_BOND_SYMBOL_RE = re.compile(r"^(SGB|\d{2,4}(GS|D|GOI))|(?:GOI|-GB|-GS)$")
 
 # Canonical bond-dedup patterns — the same bond appears under multiple symbol forms
-# (e.g. 734GOI2064 in EQX, 734GS2064 in regular EQ, SGBFEB32 vs SGBFEB32IV-GB).
-_GSEC_RE = re.compile(r"^(\d{2,4})[A-Z]+(\d{4})$")     # coupon + letters + maturity year
-_SGB_RE = re.compile(r"^(SGB[A-Z]{3}\d{2})")           # SGB + 3-letter month + 2-digit year
+# (e.g. 734GOI2064 in EQX, 734GS2064-GS in regular EQ, SGBFEB32 vs SGBFEB32IV-GB).
+_GSEC_RE = re.compile(r"^(\d{2,4})[A-Z]+(\d{4})(?:-[A-Z]+)?$")  # coupon + letters + maturity year + optional suffix
+_SGB_RE = re.compile(r"^(SGB[A-Z]{3}\d{2})")            # SGB + 3-letter month + 2-digit year
+
+
+SYMBOL_ALIASES: dict[str, str] = {
+    "ZOMATO": "ETERNAL",
+}
 
 
 def _is_bond_symbol(symbol: str) -> bool:
@@ -44,13 +49,16 @@ async def find_or_create(
     Look up an instrument by ISIN (preferred) or symbol (+ exchange if known).
     Creates a new record if not found.
     """
+    if tradingsymbol:
+        tradingsymbol = SYMBOL_ALIASES.get(tradingsymbol.upper(), tradingsymbol)
+
     if isin:
         result = await db.execute(select(Instrument).where(Instrument.isin == isin))
         inst = result.scalar_one_or_none()
         if inst:
             return inst
 
-    # Bond dedup: same bond appears under symbol variants (734GOI2064 vs 734GS2064)
+    # Bond dedup: same bond appears under symbol variants (734GOI2064 vs 734GS2064-GS)
     # and EQX rows lack ISINs. Match on a canonical pattern so either direction dedupes.
     if instrument_type == "BOND" and tradingsymbol:
         pattern = _bond_like_pattern(tradingsymbol)

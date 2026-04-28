@@ -1,3 +1,5 @@
+import asyncio
+import json as jsonlib
 from datetime import date
 from typing import Literal
 
@@ -5,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.models.holding import Holding
@@ -291,19 +294,44 @@ async def summary_cards(request: Request, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/sync-price-history", response_class=HTMLResponse)
-async def sync_price_history_route(request: Request, db: AsyncSession = Depends(get_db)):
-    try:
-        result = await sync_price_history(db)
-        return templates.TemplateResponse(
-            "partials/price_history_sync_status.html",
-            {"request": request, "result": result, "error": None},
-        )
-    except Exception as e:
-        return templates.TemplateResponse(
-            "partials/price_history_sync_status.html",
-            {"request": request, "result": None, "error": str(e)},
-        )
+_price_sync_lock = asyncio.Lock()
+
+
+@router.get("/sync-price-history/stream")
+async def sync_price_history_stream(request: Request, db: AsyncSession = Depends(get_db)):
+    if _price_sync_lock.locked():
+        async def _busy():
+            yield {"event": "done", "data": jsonlib.dumps({"ok": False, "error": "A price history sync is already running."})}
+        return EventSourceResponse(_busy())
+
+    async def _generate():
+        async with _price_sync_lock:
+            queue: asyncio.Queue[str] = asyncio.Queue()
+
+            async def _on_progress(msg: str):
+                await queue.put(msg)
+
+            async def _run_sync():
+                try:
+                    result = await sync_price_history(db, on_progress=_on_progress)
+                    await queue.put(None)
+                    await queue.put(jsonlib.dumps({"ok": True, "result": result}))
+                except Exception as e:
+                    await queue.put(None)
+                    await queue.put(jsonlib.dumps({"ok": False, "error": str(e)}))
+
+            task = asyncio.create_task(_run_sync())
+            while True:
+                msg = await queue.get()
+                if msg is None:
+                    break
+                yield {"event": "log", "data": msg}
+
+            final = await queue.get()
+            yield {"event": "done", "data": final}
+            await task
+
+    return EventSourceResponse(_generate())
 
 
 @router.get("/nav-history")
