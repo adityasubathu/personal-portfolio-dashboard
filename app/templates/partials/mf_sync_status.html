@@ -8,22 +8,11 @@
   {% endif %}
   &mdash; from AMFI ({{ result.total_isins_in_feed }} ISINs in feed).
 </p>
-{% if result.etf_nav_rows_upserted %}
-<p><small>ETF NAV: upserted <strong>{{ result.etf_nav_rows_upserted }}</strong> row(s) into NavHistory for premium calculation.</small></p>
-{% endif %}
 {% if result.missing %}
 <details>
   <summary>{{ result.missing | length }} MF holding(s) not matched in AMFI feed</summary>
   <ul>
     {% for m in result.missing %}<li><small>{{ m }}</small></li>{% endfor %}
-  </ul>
-</details>
-{% endif %}
-{% if result.etf_missing %}
-<details>
-  <summary>{{ result.etf_missing | length }} ETF(s) not matched in AMFI feed</summary>
-  <ul>
-    {% for m in result.etf_missing %}<li><small>{{ m }}</small></li>{% endfor %}
   </ul>
 </details>
 {% endif %}

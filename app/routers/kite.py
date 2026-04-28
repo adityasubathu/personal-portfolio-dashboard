@@ -8,7 +8,6 @@ from app.models.kite import KiteConfig, KiteSyncLog
 from app.services import kite_client, kite_sync
 from app.templating import templates
 from app.time_util import now_ist
-
 router = APIRouter(prefix="/api/v1/kite", tags=["kite"])
 
 
