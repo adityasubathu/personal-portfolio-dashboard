@@ -182,6 +182,9 @@ async def direct_holdings(
 
     total_cost = sum(r["cost"] for r in enriched)
     total_value = sum(r["value"] for r in enriched)
+    total_day_chg = sum(r["day_chg_abs"] for r in enriched if r["day_chg_abs"] is not None)
+    prev_total = total_value - total_day_chg
+    total_day_chg_pct = (total_day_chg / prev_total * 100) if prev_total else None
 
     # Heatmap ranges — global across visible rows, regardless of sections toggle
     def _range(vs):
@@ -221,6 +224,8 @@ async def direct_holdings(
             "current_dir": dir,
             "total_cost": total_cost,
             "total_value": total_value,
+            "total_day_chg": total_day_chg,
+            "total_day_chg_pct": total_day_chg_pct,
             "compare": compare,
             "pnl_min": pnl_min, "pnl_max": pnl_max,
             "pnl_pct_min": pnl_pct_min, "pnl_pct_max": pnl_pct_max,

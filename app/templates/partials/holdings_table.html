@@ -115,8 +115,12 @@
       <tr>
         <td colspan="3"><strong>Total</strong></td>
         <td><strong>{{ total_cost | inr(2) }}</strong></td>
-        <td></td>
-        <td></td>
+        <td class="{{ 'pnl-positive' if total_day_chg_pct is not none and total_day_chg_pct >= 0 else 'pnl-negative' if total_day_chg_pct is not none else '' }}">
+          {% if total_day_chg_pct is not none %}<strong>{{ "%+.2f"|format(total_day_chg_pct) }}%</strong>{% endif %}
+        </td>
+        <td class="{{ 'pnl-positive' if total_day_chg >= 0 else 'pnl-negative' }}">
+          <strong>{{ total_day_chg | inr(2) }}</strong>
+        </td>
         <td></td>
         <td></td>
         <td><strong>{{ total_value | inr(2) }}</strong></td>
