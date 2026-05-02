@@ -113,7 +113,8 @@ async def _sync_one(
     {rows_added, latest_price_date, error?}."""
     latest_stored = await _latest_stored_price_date(db, instrument.id)
     if latest_stored:
-        start = latest_stored + timedelta(days=1)
+        # Re-fetch the last 5 days so any corrected/late-published candles are overwritten.
+        start = latest_stored - timedelta(days=4)
     else:
         earliest_trade = await _earliest_trade_date(db, instrument.id)
         if earliest_trade is None:

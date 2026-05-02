@@ -29,7 +29,10 @@
   <article style="padding:0.75rem; margin:0;">
     <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
       <span id="kite-sync-spinner" aria-busy="true" style="display:inline-block; width:1.25rem; height:1.25rem;"></span>
-      <strong id="kite-sync-heading">Syncing Kite price history…</strong>
+      <strong id="kite-sync-heading" style="flex:1;">Syncing Kite price history…</strong>
+      <button id="btn-kite-sync-close" class="secondary outline" disabled
+              onclick="document.getElementById('kite-sync-panel').style.display='none'"
+              style="padding:0.2rem 0.6rem; font-size:0.8rem; margin:0;">✕ Close</button>
     </div>
     <pre id="kite-sync-log" style="max-height:16rem; overflow-y:auto; font-size:0.78rem; margin:0; padding:0.5rem; background:var(--pico-code-background-color); border-radius:4px; white-space:pre-wrap;"></pre>
     <div id="kite-sync-result" style="margin-top:0.5rem;"></div>
@@ -202,6 +205,7 @@
     kiteSyncRunning = true;
 
     const btn = document.getElementById('btn-kite-sync');
+    const closeBtn = document.getElementById('btn-kite-sync-close');
     const panel = document.getElementById('kite-sync-panel');
     const log = document.getElementById('kite-sync-log');
     const spinner = document.getElementById('kite-sync-spinner');
@@ -210,6 +214,7 @@
 
     btn.setAttribute('disabled', 'true');
     btn.setAttribute('aria-busy', 'true');
+    closeBtn.setAttribute('disabled', 'true');
     panel.style.display = 'block';
     log.textContent = '';
     resultDiv.innerHTML = '';
@@ -258,6 +263,7 @@
     btn.removeAttribute('disabled');
     btn.removeAttribute('aria-busy');
     document.getElementById('kite-sync-spinner').style.display = 'none';
+    document.getElementById('btn-kite-sync-close').removeAttribute('disabled');
   }
 
   // Chart.js is deferred — wait for DOMContentLoaded to ensure it's ready.
