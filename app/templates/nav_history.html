@@ -55,10 +55,7 @@
     per request; longer ranges are auto-windowed. For tickers not in Kite's dump
     (e.g. TATAMOTORS post-split), use the manual upload below instead.
   </small></p>
-  <form hx-post="/api/v1/portfolio/fetch-ohlc"
-        hx-target="#kite-fetch-status"
-        hx-swap="innerHTML"
-        hx-on::after-request="loadChart()">
+  <form onsubmit="startOhlcFetch(event, this)">
     <div class="grid">
       <label>
         Ticker
@@ -74,8 +71,14 @@
         <input type="date" name="end_date">
       </label>
     </div>
-    <button type="submit">Fetch & save</button>
+    <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:normal; margin-bottom:0.75rem;">
+      <input type="checkbox" name="skip_token_check" style="width:auto; margin:0;">
+      Skip Kite instrument dump check (use cached token)
+    </label>
+    <br>
+    <button type="submit" id="btn-ohlc-fetch">Fetch &amp; save</button>
   </form>
+  <pre id="kite-fetch-log" style="display:none; max-height:12rem; overflow-y:auto; font-size:0.78rem; margin-top:0.5rem; padding:0.5rem; background:var(--pico-code-background-color); border-radius:4px; white-space:pre-wrap;"></pre>
   <div id="kite-fetch-status"></div>
 </details>
 
@@ -264,6 +267,62 @@
     btn.removeAttribute('aria-busy');
     document.getElementById('kite-sync-spinner').style.display = 'none';
     document.getElementById('btn-kite-sync-close').removeAttribute('disabled');
+  }
+
+  function startOhlcFetch(e, form) {
+    e.preventDefault();
+    const data = new FormData(form);
+    const ticker = data.get('ticker');
+    const startDate = data.get('start_date');
+    const endDate = data.get('end_date') || '';
+    const skipDump = form.querySelector('[name=skip_token_check]').checked;
+
+    const btn = document.getElementById('btn-ohlc-fetch');
+    const log = document.getElementById('kite-fetch-log');
+    const statusDiv = document.getElementById('kite-fetch-status');
+
+    btn.setAttribute('disabled', 'true');
+    btn.setAttribute('aria-busy', 'true');
+    log.textContent = '';
+    log.style.display = 'block';
+    statusDiv.innerHTML = '';
+
+    const params = new URLSearchParams({ ticker, start_date: startDate, end_date: endDate, skip_token_check: skipDump });
+    const es = new EventSource('/api/v1/portfolio/fetch-ohlc/stream?' + params);
+
+    es.addEventListener('log', function(ev) {
+      log.textContent += ev.data + '\n';
+      log.scrollTop = log.scrollHeight;
+    });
+
+    es.addEventListener('done', function(ev) {
+      es.close();
+      btn.removeAttribute('disabled');
+      btn.removeAttribute('aria-busy');
+      const d = JSON.parse(ev.data);
+      if (!d.ok) {
+        statusDiv.innerHTML = '<p style="color:red">' + d.error + (d.result && d.result.symbol ? '<br><small>Resolved to ' + d.result.symbol + '.</small>' : '') + '</p>';
+        return;
+      }
+      const r = d.result;
+      if (r.error) {
+        statusDiv.innerHTML = '<p style="color:red">' + r.error + (r.symbol ? '<br><small>Resolved to ' + r.symbol + '.</small>' : '') + '</p>';
+      } else if (r.no_data) {
+        statusDiv.innerHTML = '<p style="color:#b85c00">Kite returned zero candles for <strong>' + r.symbol + '</strong> between ' + r.requested_start + ' and ' + r.requested_end + '.<br><small>Common for delisted, pre-listing, or illiquid instruments. Try manual CSV upload.</small></p>';
+      } else {
+        let html = '<p>Fetched <strong>' + r.rows_in_response + '</strong> candle(s) for <strong>' + r.symbol + '</strong>' + (r.isin ? ' (<small>' + r.isin + '</small>)' : '') + '; <strong>' + r.rows_added + '</strong> new row(s) saved.</p>';
+        html += '<p><small>Requested: <strong>' + r.requested_start + '</strong> &rarr; <strong>' + r.requested_end + '</strong>. Kite returned: <strong>' + r.actual_start + '</strong> &rarr; <strong>' + r.actual_end + '</strong>.</small></p>';
+        statusDiv.innerHTML = html;
+      }
+      loadChart();
+    });
+
+    es.onerror = function() {
+      es.close();
+      btn.removeAttribute('disabled');
+      btn.removeAttribute('aria-busy');
+      log.textContent += 'Connection lost.\n';
+    };
   }
 
   // Chart.js is deferred — wait for DOMContentLoaded to ensure it's ready.

@@ -36,6 +36,7 @@ EQUITY_TYPES = ("STOCK", "BOND", "ETF")
 KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
 
 
+
 async def resolve_instrument_tokens(db: AsyncSession) -> dict:
     """Populate Instrument.kite_instrument_token for every STOCK/BOND instrument
     the user has ever traded (including sold-out positions) whose
@@ -305,11 +306,18 @@ async def fetch_ohlc_for_ticker(
     ticker: str,
     start_date: date,
     end_date: date | None = None,
+    skip_token_check: bool = False,
+    on_progress=None,
 ) -> dict:
     """Fetch day candles from Kite for a single ticker between start_date and
     end_date (defaults to today) and write them to price_history. The ticker
     must belong to an Instrument the user has traded. Returns a result dict
     shaped for the kite_ohlc_fetch_status partial."""
+
+    async def _progress(msg: str):
+        if on_progress:
+            await on_progress(msg)
+
     ticker_clean = (ticker or "").strip().upper()
     if not ticker_clean:
         return {"error": "Ticker is required"}
@@ -349,23 +357,39 @@ async def fetch_ohlc_for_ticker(
         }
         candidates.sort(key=lambda i: trade_counts.get(i.id, 0), reverse=True)
     instrument = candidates[0]
+    await _progress(f"Instrument: {instrument.tradingsymbol} (id={instrument.id})")
 
     config = await _get_config(db)
     _assert_token_valid(config)
 
     # Resolve + cache the instrument_token.
-    token, tok_err = await _resolve_ticker_token(instrument)
-    if tok_err:
-        return {"error": tok_err, "symbol": instrument.tradingsymbol}
-    if not instrument.kite_instrument_token:
-        instrument.kite_instrument_token = token
-        await db.commit()
+    if instrument.kite_instrument_token and skip_token_check:
+        token = instrument.kite_instrument_token
+        await _progress(f"Using cached token {token} (dump check skipped)")
+    else:
+        if skip_token_check:
+            await _progress("No cached token — falling back to Kite dump resolution…")
+        else:
+            await _progress("Resolving instrument token from Kite dump…")
+        token, tok_err = await _resolve_ticker_token(instrument)
+        if tok_err:
+            return {"error": tok_err, "symbol": instrument.tradingsymbol}
+        if not instrument.kite_instrument_token:
+            instrument.kite_instrument_token = token
+            await db.commit()
+        await _progress(f"Token resolved: {token}")
 
     # Windowed fetch.
     all_candles: list[dict] = []
     cursor = start_date
+    n_windows = max(1, (end - start_date).days // KITE_DAY_CANDLE_CAP + 1)
+    win_idx = 0
     while cursor <= end:
+        win_idx += 1
         window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), end)
+        await _progress(
+            f"Fetching window {win_idx}/{n_windows}: {cursor} → {window_end}…"
+        )
         try:
             chunk = await kite_client.get_historical_candles(
                 config.api_key,
@@ -381,6 +405,7 @@ async def fetch_ohlc_for_ticker(
                 "requested_start": start_date.isoformat(),
                 "requested_end": end.isoformat(),
             }
+        await _progress(f"  → {len(chunk)} candle(s) received")
         all_candles.extend(chunk)
         cursor = window_end + timedelta(days=1)
 

@@ -68,6 +68,7 @@ async def direct_holdings(
     mf_id_list = [i for i in instr_ids if i in mf_instr_ids]
     prev_close_map: dict[int, tuple[float, date]] = {}
     today_open_map: dict[int, float] = {}
+    ohlc_ltp_map: dict[int, tuple[float, date]] = {}  # instrument_id -> (close, price_date)
 
     if non_mf_ids:
         sub = select(
@@ -88,12 +89,11 @@ async def direct_holdings(
 
         for iid, entries in by_instr.items():
             entries.sort(key=lambda e: e.price_date, reverse=True)
+            ohlc_ltp_map[iid] = (float(entries[0].close), entries[0].price_date)
             if entries[0].open is not None:
                 today_open_map[iid] = float(entries[0].open)
             if len(entries) >= 2:
                 prev_close_map[iid] = (float(entries[1].close), entries[1].price_date)
-            elif entries[0].open is not None:
-                prev_close_map[iid] = (float(entries[0].close), entries[0].price_date)
 
     if mf_id_list:
         nav_sub = select(
@@ -140,7 +140,12 @@ async def direct_holdings(
     enriched: list[dict] = []
     for h, instr in raw:
         cost = float(h.total_cost or 0)
-        ltp = float(h.last_price) if h.last_price else None
+        ohlc_entry = ohlc_ltp_map.get(instr.id)
+        if ohlc_entry and instr.instrument_type != "MF":
+            ltp, ltp_as_of = ohlc_entry
+        else:
+            ltp = float(h.last_price) if h.last_price else None
+            ltp_as_of = h.last_price_at
         value = float(h.quantity) * ltp if ltp else cost
         pnl = value - cost
         pnl_pct = (pnl / cost * 100) if cost > 0 else None
@@ -169,7 +174,7 @@ async def direct_holdings(
             "avg_price": float(h.average_price) if h.average_price else None,
             "cost": cost,
             "ltp": ltp,
-            "as_of": h.last_price_at,
+            "as_of": ltp_as_of,
             "value": value,
             "pnl": pnl,
             "pnl_pct": pnl_pct,
@@ -363,8 +368,6 @@ async def fetch_ohlc(
     end_date: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
-    # Parse dates with the same permissive format set used for CSV uploads —
-    # supports YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, DD-MMM-YYYY, etc.
     start = parse_flexible_date(start_date)
     if start is None:
         return templates.TemplateResponse(
@@ -380,12 +383,67 @@ async def fetch_ohlc(
                 {"request": request, "result": {"error": f"Unrecognised end date: '{end_date}'"}},
             )
     try:
-        result = await fetch_ohlc_for_ticker(
-            db, ticker=ticker, start_date=start, end_date=end
-        )
+        result = await fetch_ohlc_for_ticker(db, ticker=ticker, start_date=start, end_date=end)
     except Exception as e:
         result = {"error": str(e)}
     return templates.TemplateResponse(
         "partials/kite_ohlc_fetch_status.html",
         {"request": request, "result": result},
     )
+
+
+@router.get("/fetch-ohlc/stream")
+async def fetch_ohlc_stream(
+    request: Request,
+    ticker: str = Query(...),
+    start_date: str = Query(...),
+    end_date: str = Query(""),
+    skip_token_check: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    start = parse_flexible_date(start_date)
+    if start is None:
+        async def _err():
+            yield {"event": "done", "data": jsonlib.dumps({"ok": False, "error": f"Unrecognised start date: '{start_date}'"})}
+        return EventSourceResponse(_err())
+    end = None
+    if end_date.strip():
+        end = parse_flexible_date(end_date)
+        if end is None:
+            async def _err():
+                yield {"event": "done", "data": jsonlib.dumps({"ok": False, "error": f"Unrecognised end date: '{end_date}'"})}
+            return EventSourceResponse(_err())
+
+    async def _generate():
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        async def _on_progress(msg: str):
+            await queue.put(msg)
+
+        async def _run():
+            try:
+                result = await fetch_ohlc_for_ticker(
+                    db,
+                    ticker=ticker,
+                    start_date=start,
+                    end_date=end,
+                    skip_token_check=skip_token_check,
+                    on_progress=_on_progress,
+                )
+                await queue.put(None)
+                await queue.put(jsonlib.dumps({"ok": True, "result": result}))
+            except Exception as e:
+                await queue.put(None)
+                await queue.put(jsonlib.dumps({"ok": False, "error": str(e)}))
+
+        task = asyncio.create_task(_run())
+        while True:
+            msg = await queue.get()
+            if msg is None:
+                break
+            yield {"event": "log", "data": msg}
+        final = await queue.get()
+        yield {"event": "done", "data": final}
+        await task
+
+    return EventSourceResponse(_generate())
