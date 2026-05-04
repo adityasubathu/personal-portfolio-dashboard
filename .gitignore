@@ -6,3 +6,6 @@ data
 .DS_Store
 .vscode
 CLAUDE.md
+.env
+claude-resume.txt
+mf_portfolio_breakdown/
