@@ -3,6 +3,15 @@
 > **License:** MIT — see [LICENSE](LICENSE) for details.
 >
 > This app is entirely vibe-coded and comes with no guarantees of correctness, accuracy, or fitness for any purpose. It was built as a personal replacement for an Excel sheet and is shared as-is. Do not rely on it for financial decisions.
+>
+> Issues and pull requests may not get attention. I may get around to it when I have time.
+
+## Planned Features
+
+- Capital gains reporting for the current and prior financial year
+- Tax-loss harvesting opportunity detection
+- Crypto portfolio support — spot, dated futures, perpetuals, and options
+- Automated scraping of mutual fund factsheets and portfolio disclosures
 
 ## Overview
 
