@@ -67,12 +67,14 @@ app/
 │   ├── nav_history.py       # Day-by-day portfolio value reconstruction (reads both tables)
 │   └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── templates/
-│   ├── base.html            # Layout: Pico CSS, HTMX, Chart.js, nav links
+│   ├── base.html            # Layout: Pico CSS, HTMX, Lightweight Charts, nav links
 │   ├── dashboard.html       # Summary cards + holdings table + manual assets
 │   ├── trades.html          # Paginated trade list with search
 │   ├── import.html          # Multi-file CSV upload + import history
 │   ├── kite.html            # Kite config, login, sync controls
-│   ├── nav_history.html     # Sync buttons, SSE log panel, NAV chart, manual OHLC upload
+│   ├── nav_history.html     # Sync buttons, SSE log panel, portfolio NAV chart, manual OHLC upload
+│   ├── price_chart.html     # Candlestick chart for stocks/ETFs/bonds with trade markers
+│   ├── fund_nav_chart.html  # NAV area chart for MFs; ETFs overlay Kite price for premium view
 │   ├── mf_breakdown.html    # Ingest button + doughnut chart + stock holdings table
 │   ├── fund_breakdown.html  # Per-fund breakdown with searchable dropdown
 │   ├── settings.html        # Danger-zone delete buttons
@@ -207,9 +209,11 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `GET /trades` | Trade list |
 | `GET /import` | CSV import |
 | `GET /kite` | Kite settings |
-| `GET /portfolio/nav-history` | NAV chart + sync controls |
+| `GET /portfolio/nav-history` | Portfolio NAV chart + sync controls |
 | `GET /portfolio/breakdown` | MF breakdown chart |
 | `GET /portfolio/fund-breakdown` | Per-fund breakdown |
+| `GET /charts/price` | Candlestick chart for stocks/ETFs/bonds |
+| `GET /charts/nav` | NAV/price chart for MFs and ETFs |
 | `GET /settings` | Danger zone |
 
 ### Portfolio (`/api/v1/portfolio`)
@@ -222,6 +226,12 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `GET /sync-price-history/stream` | SSE: Kite OHLC sync with live progress log |
 | `POST /upload-ohlc` | Manual OHLC CSV upload |
 | `POST /fetch-ohlc` | Fetch Kite OHLC for a specific ticker |
+
+### Charts (`/api/v1/charts`)
+| Endpoint | Description |
+|---|---|
+| `GET /price/{instrument_id}` | OHLC candles + aggregated trade markers for a stock/ETF/bond |
+| `GET /nav/{instrument_id}` | NAV timeseries + trade markers; ETFs also return `price_history` close for premium overlay |
 
 ### Trades (`/api/v1/trades`)
 | Endpoint | Description |
