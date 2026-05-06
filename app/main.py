@@ -29,7 +29,7 @@ app = FastAPI(title="Portfolio Manager", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Routers
-from app.routers import pages, trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings  # noqa: E402
+from app.routers import pages, trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings, charts  # noqa: E402
 app.include_router(pages.router)
 app.include_router(trades.router)
 app.include_router(portfolio.router)
@@ -38,3 +38,4 @@ app.include_router(mf.router)
 app.include_router(mf_breakdown.router)
 app.include_router(manual_assets.router)
 app.include_router(settings.router)
+app.include_router(charts.router)

@@ -20,6 +20,8 @@
         <li><a href="/portfolio/nav-history" {% if request.url.path == "/portfolio/nav-history" %}aria-current="page"{% endif %}>NAV History</a></li>
         <li><a href="/portfolio/breakdown" {% if request.url.path == "/portfolio/breakdown" %}aria-current="page"{% endif %}>Portfolio Breakdown</a></li>
         <li><a href="/portfolio/fund-breakdown" {% if request.url.path == "/portfolio/fund-breakdown" %}aria-current="page"{% endif %}>Fund Breakdown</a></li>
+        <li><a href="/charts/price" {% if request.url.path == "/charts/price" %}aria-current="page"{% endif %}>OHLC Chart</a></li>
+        <li><a href="/charts/nav" {% if request.url.path == "/charts/nav" %}aria-current="page"{% endif %}>Fund NAV Chart</a></li>
         <li><a href="/trades" {% if request.url.path == "/trades" %}aria-current="page"{% endif %}>Trades</a></li>
         <li><a href="/import" {% if request.url.path == "/import" %}aria-current="page"{% endif %}>Import</a></li>
         <li><a href="/kite" {% if request.url.path == "/kite" %}aria-current="page"{% endif %}>Kite</a></li>

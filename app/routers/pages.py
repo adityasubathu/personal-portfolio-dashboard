@@ -101,6 +101,36 @@ async def fund_breakdown_page(request: Request):
     return templates.TemplateResponse("fund_breakdown.html", {"request": request})
 
 
+@router.get("/charts/price", response_class=HTMLResponse)
+async def price_chart_page(request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Instrument)
+        .join(PriceHistory, PriceHistory.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type != "MF")
+        .distinct()
+        .order_by(Instrument.tradingsymbol)
+    )
+    instruments = result.scalars().all()
+    return templates.TemplateResponse(
+        "price_chart.html", {"request": request, "instruments": instruments}
+    )
+
+
+@router.get("/charts/nav", response_class=HTMLResponse)
+async def fund_nav_chart_page(request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Instrument)
+        .join(NavHistory, NavHistory.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(["MF", "ETF"]))
+        .distinct()
+        .order_by(Instrument.instrument_type, Instrument.name)
+    )
+    instruments = result.scalars().all()
+    return templates.TemplateResponse(
+        "fund_nav_chart.html", {"request": request, "instruments": instruments}
+    )
+
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings(request: Request):
     from app.config import settings as app_settings

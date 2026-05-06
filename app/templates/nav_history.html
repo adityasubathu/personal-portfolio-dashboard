@@ -39,8 +39,9 @@
   </article>
 </div>
 
-<div style="position: relative; height: 420px;">
-  <canvas id="nav-chart"></canvas>
+<div id="nav-chart-wrapper" style="position:relative; height:420px; border:1px solid var(--pico-table-border-color); border-radius:4px;">
+  <div id="nav-chart" style="width:100%; height:100%;"></div>
+  <div id="nav-tooltip" style="position:absolute; top:8px; left:12px; z-index:10; background:rgba(255,255,255,0.88); border-radius:4px; padding:3px 8px; font-size:0.8rem; pointer-events:none; display:none; white-space:nowrap;"></div>
 </div>
 
 <p id="nav-empty" style="display:none; color: var(--pico-muted-color);">
@@ -119,8 +120,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
-  let navChart;
+  let chart, valueSeries, investedSeries;
 
   function inrCompact(n) {
     if (n == null) return '—';
@@ -131,6 +133,60 @@
     return '₹' + n.toFixed(0);
   }
 
+  function initChart() {
+    if (chart) return;
+    const container = document.getElementById('nav-chart');
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? '#d1d5db' : '#374151';
+    const gridColor = isDark ? '#374151' : '#e5e7eb';
+    const bgColor  = isDark ? '#1f2937' : '#ffffff';
+
+    chart = LightweightCharts.createChart(container, {
+      autoSize: true,
+      layout: { background: { color: bgColor }, textColor },
+      grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: gridColor },
+      timeScale: { borderColor: gridColor },
+      localization: { priceFormatter: inrCompact },
+    });
+
+    valueSeries = chart.addAreaSeries({
+      lineColor: '#16a34a',
+      topColor: 'rgba(22, 163, 74, 0.2)',
+      bottomColor: 'rgba(22, 163, 74, 0.02)',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'Portfolio value',
+    });
+
+    investedSeries = chart.addLineSeries({
+      color: '#9ca3af',
+      lineWidth: 1.5,
+      lineStyle: 2,  // dashed
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: 'Invested',
+    });
+
+    const tooltip = document.getElementById('nav-tooltip');
+    chart.subscribeCrosshairMove(param => {
+      if (!param.time || !param.seriesData.size) { tooltip.style.display = 'none'; return; }
+      const vd = param.seriesData.get(valueSeries);
+      const id = param.seriesData.get(investedSeries);
+      if (!vd) { tooltip.style.display = 'none'; return; }
+      const pnl = id ? vd.value - id.value : null;
+      const pnlColor = pnl != null ? (pnl >= 0 ? '#16a34a' : '#dc2626') : '';
+      tooltip.innerHTML =
+        `<span style="color:#6b7280">${param.time}</span>&ensp;` +
+        `<span style="color:#16a34a">${inrCompact(vd.value)}</span>&ensp;` +
+        (id ? `<span style="color:#9ca3af">invested ${inrCompact(id.value)}</span>` : '') +
+        (pnl != null ? `&ensp;<span style="color:${pnlColor}">P&amp;L ${inrCompact(pnl)}</span>` : '');
+      tooltip.style.display = 'block';
+    });
+  }
+
   async function loadChart() {
     const r = await fetch('/api/v1/portfolio/nav-history');
     if (!r.ok) { console.error('nav-history fetch failed', r.status); return; }
@@ -139,66 +195,15 @@
     const emptyEl = document.getElementById('nav-empty');
     if (!series.length) {
       emptyEl.style.display = 'block';
-      if (navChart) { navChart.destroy(); navChart = null; }
+      if (chart) { chart.remove(); chart = null; valueSeries = null; investedSeries = null; }
       return;
     }
     emptyEl.style.display = 'none';
 
-    const labels = series.map(p => p.date);
-    const values = series.map(p => p.value);
-    const invested = series.map(p => p.invested);
-
-    const ctx = document.getElementById('nav-chart');
-    if (navChart) navChart.destroy();
-    navChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: 'Portfolio value',
-            data: values,
-            borderColor: 'rgb(34, 139, 34)',
-            backgroundColor: 'rgba(34, 139, 34, 0.15)',
-            fill: true,
-            pointRadius: 0,
-            borderWidth: 1.75,
-            tension: 0.1,
-          },
-          {
-            label: 'Cumulative invested',
-            data: invested,
-            borderColor: '#666',
-            borderDash: [4, 4],
-            fill: false,
-            pointRadius: 0,
-            borderWidth: 1.25,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          x: {
-            ticks: { maxTicksLimit: 10, autoSkip: true },
-            grid: { display: false },
-          },
-          y: {
-            ticks: { callback: (v) => inrCompact(v) },
-          },
-        },
-        plugins: {
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${inrCompact(ctx.parsed.y)}`,
-            },
-          },
-          legend: { position: 'bottom' },
-        },
-      },
-    });
+    initChart();
+    valueSeries.setData(series.map(p => ({ time: p.date, value: p.value })));
+    investedSeries.setData(series.map(p => ({ time: p.date, value: p.invested })));
+    chart.timeScale().fitContent();
   }
 
   let kiteSyncRunning = false;
@@ -325,11 +330,6 @@
     };
   }
 
-  // Chart.js is deferred — wait for DOMContentLoaded to ensure it's ready.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadChart);
-  } else {
-    loadChart();
-  }
+  document.addEventListener('DOMContentLoaded', loadChart);
 </script>
 {% endblock %}
