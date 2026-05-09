@@ -4,7 +4,7 @@
 >
 > This app is entirely vibe-coded and comes with no guarantees of correctness, accuracy, or fitness for any purpose. It was built as a personal replacement for an Excel sheet and is shared as-is. Do not rely on it for financial decisions.
 >
-> Issues and pull requests may not get attention. I may get around to it when I have time.
+> Issues and pull requests may not get attention. I may get around to addressing them if and when I have time.
 
 ## Planned Features
 
