@@ -1,12 +1,13 @@
 import csv
 import io
 import re
+from collections import defaultdict
 from datetime import date
 from difflib import SequenceMatcher
 from pathlib import Path
 
 import openpyxl
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,9 @@ from app.models.allocation_target import AllocationTarget
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.nav_history import NavHistory
+from app.models.price_history import PriceHistory
+from app.models.trade import Trade
 from app.time_util import now_ist
 
 BREAKDOWN_DIR = Path("data/mf_portfolio_breakdown")
@@ -671,3 +675,123 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
             category_summary.append({"category": cat, "pct": round(v, 2)})
 
     return {"holdings": holdings, "category_summary": category_summary}
+
+
+async def get_direct_trade_breakdown(db: AsyncSession) -> list[dict]:
+    trades_result = await db.execute(
+        select(Trade, Instrument)
+        .join(Instrument, Trade.instrument_id == Instrument.id)
+        .where(Trade.trade_type.in_(["BUY", "SELL"]))
+        .order_by(Instrument.tradingsymbol, Trade.trade_date)
+    )
+    rows = trades_result.all()
+    if not rows:
+        return []
+
+    instrument_info: dict[int, dict] = {}
+    # key: (instrument_id, trade_date, trade_type) → {qty, cost}
+    instrument_buckets: dict[tuple, dict] = defaultdict(lambda: {"qty": 0.0, "cost": 0.0})
+
+    for trade, instrument in rows:
+        iid = instrument.id
+        if iid not in instrument_info:
+            instrument_info[iid] = {
+                "symbol": instrument.tradingsymbol or "",
+                "name": instrument.name or instrument.tradingsymbol or "",
+                "instrument_type": instrument.instrument_type,
+            }
+        qty = float(trade.quantity)
+        key = (iid, trade.trade_date, trade.trade_type)
+        instrument_buckets[key]["qty"] += qty
+        instrument_buckets[key]["cost"] += qty * float(trade.price)
+
+    instrument_ids = list(instrument_info.keys())
+
+    # LTP from holdings
+    ltp_map: dict[int, float] = {}
+    holdings_result = await db.execute(
+        select(Holding.instrument_id, Holding.last_price)
+        .where(Holding.instrument_id.in_(instrument_ids))
+    )
+    for iid, lp in holdings_result.all():
+        if lp:
+            ltp_map[iid] = float(lp)
+
+    # Fall back to latest price_history close
+    missing = [iid for iid in instrument_ids if iid not in ltp_map]
+    if missing:
+        latest_sub = (
+            select(PriceHistory.instrument_id, func.max(PriceHistory.price_date).label("max_date"))
+            .where(PriceHistory.instrument_id.in_(missing))
+            .group_by(PriceHistory.instrument_id)
+            .subquery()
+        )
+        ph_result = await db.execute(
+            select(PriceHistory.instrument_id, PriceHistory.close)
+            .join(latest_sub, and_(
+                PriceHistory.instrument_id == latest_sub.c.instrument_id,
+                PriceHistory.price_date == latest_sub.c.max_date,
+            ))
+        )
+        for iid, close in ph_result.all():
+            if close:
+                ltp_map[iid] = float(close)
+
+    # Fall back to latest nav_history for MFs/ETFs still missing
+    missing = [iid for iid in instrument_ids if iid not in ltp_map]
+    if missing:
+        latest_nav_sub = (
+            select(NavHistory.instrument_id, func.max(NavHistory.nav_date).label("max_date"))
+            .where(NavHistory.instrument_id.in_(missing))
+            .group_by(NavHistory.instrument_id)
+            .subquery()
+        )
+        nav_result = await db.execute(
+            select(NavHistory.instrument_id, NavHistory.nav)
+            .join(latest_nav_sub, and_(
+                NavHistory.instrument_id == latest_nav_sub.c.instrument_id,
+                NavHistory.nav_date == latest_nav_sub.c.max_date,
+            ))
+        )
+        for iid, nav in nav_result.all():
+            if nav:
+                ltp_map[iid] = float(nav)
+
+    # Group buckets back by instrument, sorted by (date, type)
+    from collections import defaultdict as _dd
+    iid_trades: dict[int, list] = _dd(list)
+    for (iid, td, ttype), agg in instrument_buckets.items():
+        iid_trades[iid].append((td, ttype, agg))
+
+    result = []
+    for iid in sorted(instrument_ids, key=lambda x: instrument_info[x]["symbol"]):
+        info = instrument_info[iid]
+        current_price = ltp_map.get(iid)
+        trade_rows = []
+        for td, ttype, agg in sorted(iid_trades[iid], key=lambda x: (x[0], x[1])):
+            qty = round(agg["qty"], 6)
+            price = round(agg["cost"] / qty, 4) if qty else 0.0
+            amount = round(agg["cost"], 2)
+            current_value = round(qty * current_price, 2) if current_price else None
+            if current_price and price:
+                raw_pct = (current_price - price) / price * 100
+                pct_change = round(-raw_pct if ttype == "SELL" else raw_pct, 2)
+            else:
+                pct_change = None
+            trade_rows.append({
+                "date": str(td),
+                "trade_type": ttype,
+                "qty": qty,
+                "price": price,
+                "amount": amount,
+                "current_value": current_value,
+                "pct_change": pct_change,
+            })
+        result.append({
+            "symbol": info["symbol"],
+            "name": info["name"],
+            "instrument_type": info["instrument_type"],
+            "current_price": current_price,
+            "trades": trade_rows,
+        })
+    return result

@@ -10,6 +10,7 @@ from app.services.mf_breakdown import (
     get_allocation_targets,
     get_available_schemes,
     get_breakdown_chart_data,
+    get_direct_trade_breakdown,
     get_scheme_breakdown,
     get_stock_holdings_table,
     ingest_scheme_csvs,
@@ -105,6 +106,12 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
                 continue
     await save_allocation_targets(db, targets)
     return HTMLResponse("<small style='color:green'>Targets saved.</small>")
+
+
+@router.get("/direct-trades")
+async def direct_trades(db: AsyncSession = Depends(get_db)):
+    data = await get_direct_trade_breakdown(db)
+    return JSONResponse(data)
 
 
 @router.get("/schemes")

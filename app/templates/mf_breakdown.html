@@ -15,7 +15,7 @@
           hx-target="#ingest-status"
           hx-swap="innerHTML"
           hx-indicator="#ingest-spinner"
-          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData()">
+          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades()">
     Ingest Portfolios
   </button>
   <span id="ingest-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Working…</span>
@@ -97,6 +97,29 @@
   </div>
   <p id="stock-empty" style="text-align:center; display:none;">
     <small>No stock holdings data. Ingest portfolios first.</small>
+  </p>
+</article>
+<article>
+  <header>Direct Holdings — Trade-level Breakdown</header>
+  <input type="search" id="direct-search" placeholder="Search by symbol or name…"
+         oninput="renderDirectTable()" style="margin-bottom:0.5rem;">
+  <table id="direct-holdings-table" style="font-size:0.85rem;">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th style="text-align:right;">Qty</th>
+        <th style="text-align:right;">Price</th>
+        <th style="text-align:right;">Amount</th>
+        <th style="text-align:right;">Cur. Price</th>
+        <th style="text-align:right;">Cur. Value</th>
+        <th style="text-align:right;">% Change</th>
+      </tr>
+    </thead>
+    <tbody id="direct-holdings-body"></tbody>
+  </table>
+  <p id="direct-empty" style="text-align:center; display:none;">
+    <small>No direct equity trades found.</small>
   </p>
 </article>
 {% endblock %}
@@ -304,6 +327,85 @@ function toggleAllocEdit() {
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); loadAllocData(); });
+let directTradeData = [];
+
+function pctStyle(pct) {
+  if (pct == null) return 'color:#6b7280';
+  if (pct === 0) return 'color:#6b7280';
+  const t = Math.min(Math.abs(pct) / 50, 1);
+  if (pct > 0) {
+    const r = Math.round(107 + t * (22 - 107));
+    const g = Math.round(114 + t * (163 - 114));
+    const b = Math.round(128 + t * (74 - 128));
+    return `color:rgb(${r},${g},${b});font-weight:600`;
+  }
+  const r = Math.round(107 + t * (220 - 107));
+  const g = Math.round(114 + t * (38 - 114));
+  const b = Math.round(128 + t * (38 - 128));
+  return `color:rgb(${r},${g},${b});font-weight:600`;
+}
+
+function fmtPrice(v) {
+  if (v == null) return '—';
+  return '₹' + Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function fmtQty(v) {
+  if (v == null) return '—';
+  const n = Number(v);
+  return n % 1 === 0 ? n.toLocaleString('en-IN') : n.toFixed(3);
+}
+
+async function loadDirectTrades() {
+  try {
+    const r = await fetch('/api/v1/mf-breakdown/direct-trades');
+    directTradeData = await r.json();
+    renderDirectTable();
+  } catch (e) { console.error('Direct trades load failed:', e); }
+}
+
+function renderDirectTable() {
+  const q = (document.getElementById('direct-search').value || '').toLowerCase();
+  const empty = document.getElementById('direct-empty');
+  const tbody = document.getElementById('direct-holdings-body');
+
+  const filtered = q
+    ? directTradeData.filter(d => d.symbol.toLowerCase().includes(q) || d.name.toLowerCase().includes(q))
+    : directTradeData;
+
+  if (!filtered.length) { empty.style.display = ''; tbody.innerHTML = ''; return; }
+  empty.style.display = 'none';
+
+  const rows = [];
+  for (const inst of filtered) {
+    rows.push(
+      `<tr style="background:var(--pico-table-border-color,#e5e7eb);">` +
+      `<td colspan="8" style="padding:0.3rem 0.5rem;">` +
+      `<strong>${inst.symbol}</strong>` +
+      (inst.name && inst.name !== inst.symbol ? ` <small style="color:var(--pico-muted-color)">${inst.name}</small>` : '') +
+      ` <small style="color:var(--pico-muted-color)">[${inst.instrument_type}]</small>` +
+      `</td></tr>`
+    );
+    for (const t of inst.trades) {
+      const isBuy = t.trade_type === 'BUY';
+      const pctText = t.pct_change != null ? (t.pct_change > 0 ? '+' : '') + t.pct_change.toFixed(2) + '%' : '—';
+      rows.push(
+        `<tr>` +
+        `<td>${t.date}</td>` +
+        `<td><span style="color:${isBuy ? '#16a34a' : '#dc2626'};font-weight:600;font-size:0.8rem">${t.trade_type}</span></td>` +
+        `<td style="text-align:right">${fmtQty(t.qty)}</td>` +
+        `<td style="text-align:right">${fmtPrice(t.price)}</td>` +
+        `<td style="text-align:right">${inrCompact(t.amount)}</td>` +
+        `<td style="text-align:right">${fmtPrice(inst.current_price)}</td>` +
+        `<td style="text-align:right">${t.current_value != null ? inrCompact(t.current_value) : '—'}</td>` +
+        `<td style="text-align:right;${pctStyle(t.pct_change)}">${pctText}</td>` +
+        `</tr>`
+      );
+    }
+  }
+  tbody.innerHTML = rows.join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades(); });
 </script>
 {% endblock %}
