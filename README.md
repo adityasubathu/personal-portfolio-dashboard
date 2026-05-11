@@ -41,7 +41,8 @@ app/
 │   ├── import_log.py        # CSVImportLog — per-batch import metadata
 │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash
 │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
-│   └── allocation_target.py # AllocationTarget — equity cap allocation targets
+│   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
+│   └── nav_tracked_instrument.py # NavTrackedInstrument — manually imported MF/ETF ISINs
 ├── routers/
 │   ├── pages.py             # HTML page routes (/, /trades, /import, …)
 │   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, SSE sync
@@ -74,7 +75,7 @@ app/
 │   ├── kite.html            # Kite config, login, sync controls
 │   ├── nav_history.html     # Sync buttons, SSE log panel, portfolio NAV chart, manual OHLC upload
 │   ├── price_chart.html     # Candlestick chart for stocks/ETFs/bonds with trade markers
-│   ├── fund_nav_chart.html  # NAV area chart for MFs; ETFs overlay Kite price for premium view
+│   ├── fund_nav_chart.html  # NAV area chart for MFs; ETFs overlay Kite price for premium view; compare mode normalizes multiple funds to 0% with zoom-adaptive re-normalization
 │   ├── mf_breakdown.html    # Ingest button + doughnut chart + stock holdings table
 │   ├── fund_breakdown.html  # Per-fund breakdown with searchable dropdown
 │   ├── settings.html        # Danger-zone delete buttons
@@ -149,6 +150,9 @@ Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `s
 ### AllocationTarget
 Per-category equity allocation targets (e.g. Large Cap 50%, Mid Cap 30%). Used by the allocation comparison view.
 
+### NavTrackedInstrument
+Marks MF/ETF instruments imported by ISIN without a corresponding trade (e.g. manually tracked funds). Ensures `sync_nav_history` keeps their NAV up to date and they appear on the Fund NAV Chart.
+
 ---
 
 ## Services
@@ -178,13 +182,14 @@ Compares local holdings ↔ Kite by ISIN. Flags: new_on_kite, missing_from_kite,
 Fetches the AMFI daily NAV feed (`NAVAll.txt`), matches MF holdings by ISIN (growth + dividend-reinvestment), updates `last_price` and `unrealised_pnl`.
 
 ### mfapi.in NAV (`mfapi_nav.py`)
-Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes from the NAV feed. Incremental, concurrent (semaphore=4). Writes to `nav_history` table. For MFs, updates `last_price` on the holding; for ETFs, the authoritative price is the exchange LTP from Kite.
+Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes from the NAV feed. Incremental, concurrent (semaphore=4). Writes to `nav_history` table. For MFs, updates `last_price` on the holding; for ETFs, the authoritative price is the exchange LTP from Kite. Supports importing funds by ISIN without trades — creates the instrument from AMFI data and marks it in `nav_tracked_instruments` for ongoing sync.
 
 ### MF Breakdown (`mf_breakdown.py`)
 - **AMFI xlsx parse:** Reads `AverageMarketCapitalization*.xlsx` from `data/mf_portfolio_breakdown/`, extracts company → market-cap classification, pre-computes normalized names. Warns if file >6 months old.
 - **Scheme CSV ingest:** Parses per-scheme CSVs. Classifies each holding: Equity → AMFI lookup (exact then fuzzy ≥85%) → Large/Mid/Small/Unclassified. Bonds → Debt. Cash → Cash. Debt/liquid funds (detected by tradingsymbol) → all Debt. ETF overrides for known index funds.
 - **Chart aggregation:** Weights each holding's category by `holding_value × holdings_pct / 100`. Adds manual assets: FD+PPF → Debt, NPS → 75% Large Cap + 25% Debt, Cash → Cash. SGB bonds → Gold.
 - **Stock holdings table:** Aggregates equity holdings across all MF/ETF schemes, computes per-stock portfolio weight and value, looks up NSE/BSE ticker from AmfiMarketCap. Sortable by name/weight, searchable by name/ticker.
+- **Direct trade breakdown:** Groups all BUY/SELL trades by `(instrument, date, type)`, computes average price and amount per group, looks up current price from holdings → price_history → nav_history. Percentage change is inverted for SELL trades (price rise = loss). Used for the ticker-wise table on the breakdown page.
 
 ### Manual Assets (`manual_assets.py`)
 FD current value via quarterly compounding: `FV = P × (1 + r/400)^(4t)`. Summary returns totals for FDs, PPF, NPS, Cash, plus emergency fund subtotal. Feeds into both dashboard summary and breakdown chart.
@@ -258,7 +263,10 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | Endpoint | Description |
 |---|---|
 | `POST /sync-nav` | Update MF prices from AMFI daily feed |
-| `POST /sync-nav-history` | Download historical NAV from mfapi.in |
+| `POST /sync-nav-history` | Download historical NAV from mfapi.in (all traded + tracked funds) |
+| `POST /fetch-nav-by-isin` | Import a single fund by ISIN; creates instrument + tracking entry if needed |
+| `GET /nav-tracked` | HTML list of manually tracked funds |
+| `DELETE /nav-tracked/{instrument_id}` | Remove tracking entry (deletes nav_history + instrument if no trades) |
 
 ### MF Breakdown (`/api/v1/mf-breakdown`)
 | Endpoint | Description |
@@ -267,6 +275,12 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `PATCH /classify-batch` | Manual category override for unmatched |
 | `GET /chart-data` | JSON for allocation doughnut chart |
 | `GET /stock-holdings` | JSON: per-stock breakdown across all MF/ETF holdings |
+| `GET /allocation-comparison` | Current vs target equity cap allocation with value deltas |
+| `GET /allocation-targets` | Saved per-category target percentages |
+| `POST /allocation-targets` | Save per-category target percentages |
+| `GET /direct-trades` | Ticker-wise BUY/SELL breakdown with current value and % change |
+| `GET /schemes` | List scheme ISINs with fund names that have breakdown data |
+| `GET /scheme/{scheme_isin}` | Per-fund holding list with category classification |
 
 ### Manual Assets (`/api/v1/manual-assets`)
 | Endpoint | Description |
@@ -308,6 +322,9 @@ Load AMFI xlsx (company → cap classification) → parse scheme CSVs from `data
 
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.
+
+### Fund NAV Chart — Compare Mode
+Select any combination of MFs/ETFs via checkboxes → fetch NAV (and Kite price for ETFs) → normalize each series to 0% at its first data point → plot as TradingView Lightweight Charts line series. ETFs offer NAV / Kite / Both series options. On zoom/pan, all series re-normalize to 0% at the first *visible* data point (150 ms debounce) so relative performance is always legible at any zoom level.
 
 ### Holdings Table
 Fetches prev_close and day change from `price_history` (stocks/ETFs/bonds) and `nav_history` (MFs). Columns: Symbol, Qty, Avg Buy, Invested, Day %, Day Chg, Prev Cl, LTP, Current, P&L, P&L %, XIRR. Footer shows total day change (absolute + %) colored by profit/loss. Compare toggle (prev close vs today's open) stored in session cookie. ETF NAV premium shown inline from `nav_history`.

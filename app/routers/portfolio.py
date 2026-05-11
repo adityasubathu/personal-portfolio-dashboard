@@ -251,11 +251,31 @@ async def portfolio_summary(db: AsyncSession = Depends(get_db)):
     )
     rows = result.all()
 
+    non_mf_ids = [instr.id for _, instr in rows if instr.instrument_type != "MF"]
+    ohlc_ltp_map: dict[int, float] = {}
+    if non_mf_ids:
+        sub = select(
+            PriceHistory.instrument_id,
+            PriceHistory.close,
+            func.row_number().over(
+                partition_by=PriceHistory.instrument_id,
+                order_by=PriceHistory.price_date.desc(),
+            ).label("rn"),
+        ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
+        for r in (await db.execute(select(sub).where(sub.c.rn == 1))).all():
+            ohlc_ltp_map[r.instrument_id] = float(r.close)
+
     total_cost = sum(float(h.total_cost or 0) for h, _ in rows)
-    total_value = sum(
-        float(h.quantity) * float(h.last_price) if h.last_price else float(h.total_cost or 0)
-        for h, _ in rows
-    )
+    total_value = 0.0
+    for h, instr in rows:
+        cost = float(h.total_cost or 0)
+        if instr.instrument_type != "MF" and instr.id in ohlc_ltp_map:
+            ltp = ohlc_ltp_map[instr.id]
+        elif h.last_price:
+            ltp = float(h.last_price)
+        else:
+            ltp = None
+        total_value += float(h.quantity) * ltp if ltp else cost
 
     return {
         "total_cost": round(total_cost, 2),
@@ -272,11 +292,31 @@ async def summary_cards(request: Request, db: AsyncSession = Depends(get_db)):
     )
     rows = result.all()
 
+    non_mf_ids = [instr.id for _, instr in rows if instr.instrument_type != "MF"]
+    ohlc_ltp_map: dict[int, float] = {}
+    if non_mf_ids:
+        sub = select(
+            PriceHistory.instrument_id,
+            PriceHistory.close,
+            func.row_number().over(
+                partition_by=PriceHistory.instrument_id,
+                order_by=PriceHistory.price_date.desc(),
+            ).label("rn"),
+        ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
+        for r in (await db.execute(select(sub).where(sub.c.rn == 1))).all():
+            ohlc_ltp_map[r.instrument_id] = float(r.close)
+
     total_cost = sum(float(h.total_cost or 0) for h, _ in rows)
-    total_value = sum(
-        float(h.quantity) * float(h.last_price) if h.last_price else float(h.total_cost or 0)
-        for h, _ in rows
-    )
+    total_value = 0.0
+    for h, instr in rows:
+        cost = float(h.total_cost or 0)
+        if instr.instrument_type != "MF" and instr.id in ohlc_ltp_map:
+            ltp = ohlc_ltp_map[instr.id]
+        elif h.last_price:
+            ltp = float(h.last_price)
+        else:
+            ltp = None
+        total_value += float(h.quantity) * ltp if ltp else cost
 
     last_sync_row = (
         await db.execute(
