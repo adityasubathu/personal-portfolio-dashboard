@@ -84,6 +84,35 @@
 </details>
 
 <details style="margin-top: 0.75rem;">
+  <summary>Fetch MF NAV by ISIN (mfapi.in)</summary>
+  <p><small>
+    Fetch full NAV history for a single mutual fund or ETF by ISIN.
+    The instrument must already exist in your trades. AMFI scheme code is resolved automatically.
+  </small></p>
+  <form onsubmit="startNavFetch(event, this)">
+    <div class="grid">
+      <label>
+        ISIN
+        <input type="text" name="isin" placeholder="e.g. INF846K01EW2" required
+               autocomplete="off" style="text-transform:uppercase;">
+      </label>
+    </div>
+    <button type="submit" id="btn-nav-fetch">Fetch &amp; save</button>
+  </form>
+  <div id="nav-fetch-status"></div>
+
+  <hr style="margin:1rem 0 0.75rem;">
+  <strong style="font-size:0.85rem;">Manually tracked funds</strong>
+  <small style="color:var(--pico-muted-color);"> — not linked to any trade. Kept in sync by "Sync NAV History".</small>
+  <div id="nav-tracked-section"
+       hx-get="/api/v1/mf/nav-tracked"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <span aria-busy="true" style="display:inline-block;width:1rem;height:1rem;"></span>
+  </div>
+</details>
+
+<details style="margin-top: 0.75rem;">
   <summary>Upload manual OHLC CSV</summary>
   <p><small>
     For tickers not in Kite's instruments dump (delisted, merged, pre-split shells).
@@ -328,6 +357,30 @@
       btn.removeAttribute('aria-busy');
       log.textContent += 'Connection lost.\n';
     };
+  }
+
+  function startNavFetch(e, form) {
+    e.preventDefault();
+    const isin = form.querySelector('[name=isin]').value.trim().toUpperCase();
+    if (!isin) return;
+    const btn = document.getElementById('btn-nav-fetch');
+    const statusDiv = document.getElementById('nav-fetch-status');
+    btn.setAttribute('disabled', 'true');
+    btn.setAttribute('aria-busy', 'true');
+    statusDiv.innerHTML = '';
+    fetch('/api/v1/mf/fetch-nav-by-isin', {
+      method: 'POST',
+      body: new URLSearchParams({ isin }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+      .then(r => r.text())
+      .then(html => {
+        statusDiv.innerHTML = html;
+        loadChart();
+        htmx.ajax('GET', '/api/v1/mf/nav-tracked', '#nav-tracked-section');
+      })
+      .catch(err => { statusDiv.innerHTML = `<p style="color:red">${err}</p>`; })
+      .finally(() => { btn.removeAttribute('disabled'); btn.removeAttribute('aria-busy'); });
   }
 
   document.addEventListener('DOMContentLoaded', loadChart);

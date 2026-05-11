@@ -15,13 +15,14 @@ import asyncio
 from datetime import date, datetime
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.nav_history import NavHistory
+from app.models.nav_tracked_instrument import NavTrackedInstrument
 from app.models.trade import Trade
 from app.services.amfi_nav import fetch_navs
 
@@ -30,12 +31,13 @@ MFAPI_BASE = "https://api.mfapi.in/mf"
 
 async def resolve_scheme_codes(db: AsyncSession) -> dict:
     """Populate Instrument.amfi_scheme_code for every MF/ETF instrument the user
-    has ever traded (including sold-out positions) whose ISIN matches AMFI.
+    has ever traded or manually tracked whose ISIN matches AMFI.
     Returns {resolved, already_had, unresolved: [names]}."""
     traded_ids = select(Trade.instrument_id).distinct()
+    tracked_ids = select(NavTrackedInstrument.instrument_id)
     result = await db.execute(
         select(Instrument)
-        .where(Instrument.id.in_(traded_ids))
+        .where(or_(Instrument.id.in_(traded_ids), Instrument.id.in_(tracked_ids)))
         .where(Instrument.instrument_type.in_(["MF", "ETF"]))
     )
     mfs = list(result.scalars().all())
@@ -150,6 +152,73 @@ def _apply_to_holding(instrument: Instrument, holding: Holding | None, nav_date:
     holding.unrealised_pnl = round(float(holding.quantity) * nav - cost, 6)
 
 
+async def fetch_nav_by_isin(db: AsyncSession, isin: str) -> dict:
+    """Fetch NAV history for a single MF/ETF by ISIN.
+    Creates the instrument from AMFI data if it doesn't exist yet."""
+    isin = isin.strip().upper()
+    instrument = (await db.execute(
+        select(Instrument).where(Instrument.isin == isin)
+    )).scalar_one_or_none()
+
+    if not instrument:
+        navs_by_isin = await fetch_navs()
+        entry = navs_by_isin.get(isin)
+        if not entry:
+            return {"error": f"ISIN {isin} not found in AMFI feed. Verify the ISIN and try again."}
+        instrument = Instrument(
+            isin=isin,
+            tradingsymbol=isin,
+            instrument_type="MF",
+            name=entry["scheme_name"],
+            amfi_scheme_code=entry["scheme_code"],
+        )
+        db.add(instrument)
+        await db.flush()
+        db.add(NavTrackedInstrument(instrument_id=instrument.id))
+        await db.commit()
+    else:
+        if instrument.instrument_type not in ("MF", "ETF"):
+            return {"error": f"{instrument.tradingsymbol} is type {instrument.instrument_type}, not MF/ETF."}
+        has_trades = (await db.execute(
+            select(Trade.id).where(Trade.instrument_id == instrument.id).limit(1)
+        )).scalar_one_or_none()
+        if not has_trades:
+            existing = (await db.execute(
+                select(NavTrackedInstrument).where(NavTrackedInstrument.instrument_id == instrument.id)
+            )).scalar_one_or_none()
+            if not existing:
+                db.add(NavTrackedInstrument(instrument_id=instrument.id))
+                await db.commit()
+
+    if not instrument.amfi_scheme_code:
+        navs_by_isin = await fetch_navs()
+        entry = navs_by_isin.get(isin)
+        if entry and entry.get("scheme_code"):
+            instrument.amfi_scheme_code = entry["scheme_code"]
+            await db.commit()
+        else:
+            return {"error": f"Could not resolve AMFI scheme code for ISIN {isin}."}
+
+    holding = (await db.execute(
+        select(Holding).where(Holding.instrument_id == instrument.id)
+    )).scalar_one_or_none()
+
+    async with httpx.AsyncClient(follow_redirects=True, headers={"User-Agent": "portfolio-mac-arm/1.0"}) as client:
+        outcome = await _sync_one(db, client, instrument, holding)
+
+    await db.commit()
+
+    if outcome.get("error"):
+        return {"error": outcome["error"]}
+
+    return {
+        "symbol": instrument.name or instrument.tradingsymbol or instrument.amfi_scheme_code,
+        "isin": isin,
+        "rows_added": outcome["rows_added"],
+        "latest_nav_date": outcome["latest_nav_date"],
+    }
+
+
 async def sync_nav_history(db: AsyncSession) -> dict:
     """Main entry point. Covers every MF/ETF the user has ever traded, not just
     current holdings — so the NAV-history chart can value positions that have
@@ -157,10 +226,11 @@ async def sync_nav_history(db: AsyncSession) -> dict:
     resolved = await resolve_scheme_codes(db)
 
     traded_ids = select(Trade.instrument_id).distinct()
+    tracked_ids = select(NavTrackedInstrument.instrument_id)
     instr_rows = (
         await db.execute(
             select(Instrument)
-            .where(Instrument.id.in_(traded_ids))
+            .where(or_(Instrument.id.in_(traded_ids), Instrument.id.in_(tracked_ids)))
             .where(Instrument.instrument_type.in_(["MF", "ETF"]))
         )
     ).scalars().all()
@@ -216,3 +286,35 @@ async def sync_nav_history(db: AsyncSession) -> dict:
         "failed": failed,
         "per_fund": per_fund,
     }
+
+
+async def get_nav_tracked_instruments(db: AsyncSession) -> list[dict]:
+    rows = (await db.execute(
+        select(NavTrackedInstrument, Instrument)
+        .join(Instrument, NavTrackedInstrument.instrument_id == Instrument.id)
+        .order_by(Instrument.name)
+    )).all()
+    return [
+        {
+            "instrument_id": i.id,
+            "isin": i.isin,
+            "name": i.name or i.tradingsymbol or i.isin,
+            "instrument_type": i.instrument_type,
+        }
+        for _, i in rows
+    ]
+
+
+async def remove_nav_tracked_instrument(db: AsyncSession, instrument_id: int) -> None:
+    has_trades = (await db.execute(
+        select(Trade.id).where(Trade.instrument_id == instrument_id).limit(1)
+    )).scalar_one_or_none()
+
+    await db.execute(
+        delete(NavTrackedInstrument).where(NavTrackedInstrument.instrument_id == instrument_id)
+    )
+    if not has_trades:
+        await db.execute(delete(NavHistory).where(NavHistory.instrument_id == instrument_id))
+        await db.execute(delete(Instrument).where(Instrument.id == instrument_id))
+
+    await db.commit()

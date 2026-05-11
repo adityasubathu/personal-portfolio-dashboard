@@ -7,14 +7,54 @@
 {% if not instruments %}
 <p style="color: var(--pico-muted-color);">No NAV history data yet — sync NAV history from the NAV History page first.</p>
 {% else %}
-<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:0.75rem; flex-wrap:wrap;">
   <select id="instrument-select" style="margin:0; width:auto; min-width:300px;"
-          onchange="loadChart(this.value)">
+          onchange="if(!compareMode) loadChart(this.value)">
     {% for i in instruments %}
     <option value="{{ i.id }}">[{{ i.instrument_type }}] {{ i.name or i.tradingsymbol }}{% if i.isin %} ({{ i.isin }}){% endif %}</option>
     {% endfor %}
   </select>
   <small id="chart-meta" style="color:var(--pico-muted-color);"></small>
+  <label style="margin:0 0 0 auto; font-size:0.85rem; font-weight:normal; display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
+    <input type="checkbox" id="compare-toggle" onchange="toggleCompareMode()" style="width:auto; margin:0;">
+    Compare
+  </label>
+</div>
+
+<div id="compare-panel" style="display:none; margin-bottom:0.75rem;">
+  <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.4rem; flex-wrap:wrap;">
+    <span style="font-size:0.85rem; font-weight:600;">Select funds</span>
+    <a href="#" onclick="toggleAllCompare(true);return false;" style="font-size:0.8rem;">All</a>
+    <a href="#" onclick="toggleAllCompare(false);return false;" style="font-size:0.8rem;">None</a>
+    <button onclick="loadCompare()" id="btn-compare" style="margin:0 0 0 auto; padding:0.3rem 0.8rem;">Plot</button>
+  </div>
+  <div id="compare-list" style="max-height:260px; overflow-y:auto; border:1px solid var(--pico-table-border-color); border-radius:4px; padding:0.4rem 0.6rem;">
+    {% for i in instruments %}
+    <div style="display:flex; align-items:center; gap:0.75rem; padding:0.15rem 0;">
+      <label style="margin:0; display:flex; align-items:center; gap:0.4rem; font-weight:normal; cursor:pointer; flex:1; min-width:0;">
+        <input type="checkbox" value="{{ i.id }}"
+               data-label="{{ (i.name or i.tradingsymbol) | e }}"
+               data-inst-type="{{ i.instrument_type }}"
+               style="margin:0; width:auto; flex-shrink:0;">
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem;">[{{ i.instrument_type }}] {{ i.name or i.tradingsymbol }}</span>
+      </label>
+      {% if i.instrument_type == 'ETF' %}
+      <small style="display:flex; gap:0.5rem; color:var(--pico-muted-color); flex-shrink:0;">
+        <label style="margin:0; font-weight:normal; white-space:nowrap; cursor:pointer;">
+          <input type="radio" name="etf_series_{{ i.id }}" value="nav" checked style="margin:0; width:auto;"> NAV
+        </label>
+        <label style="margin:0; font-weight:normal; white-space:nowrap; cursor:pointer;">
+          <input type="radio" name="etf_series_{{ i.id }}" value="price" style="margin:0; width:auto;"> Kite
+        </label>
+        <label style="margin:0; font-weight:normal; white-space:nowrap; cursor:pointer;">
+          <input type="radio" name="etf_series_{{ i.id }}" value="both" style="margin:0; width:auto;"> Both
+        </label>
+      </small>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <div id="compare-legend" style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:0.6rem; font-size:0.85rem;"></div>
 </div>
 
 <div id="etf-legend" style="display:none; margin-bottom:0.5rem; font-size:0.85rem; display:flex; gap:1.5rem; align-items:center;">
@@ -32,6 +72,48 @@
 <script>
   let chart, areaSeries, priceSeries;
   let rawMarkers = [], dataDateToIndex = {}, markerDataMap = {}, currentInstrumentType = 'MF';
+  let compareMode = false;
+  let compareSeries = []; // { series, rawData: [{time, value}] }
+  let _renormTimer = null;
+
+  const COMPARE_COLORS = ['#2563eb','#dc2626','#16a34a','#f97316','#8b5cf6','#ec4899','#0891b2','#d97706'];
+
+  function _chartTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+      textColor: isDark ? '#d1d5db' : '#374151',
+      gridColor:  isDark ? '#374151' : '#e5e7eb',
+      bgColor:    isDark ? '#1f2937' : '#ffffff',
+    };
+  }
+
+  function _destroyChart() {
+    if (chart) { chart.remove(); chart = null; }
+    areaSeries = null; priceSeries = null;
+    rawMarkers = []; dataDateToIndex = {}; markerDataMap = {};
+    compareSeries = [];
+    if (_renormTimer) { clearTimeout(_renormTimer); _renormTimer = null; }
+  }
+
+  function _renormalizeToVisible() {
+    if (!chart || !compareSeries.length) return;
+    const range = chart.timeScale().getVisibleRange();
+    if (!range) return;
+    for (const { series, rawData } of compareSeries) {
+      const idx = rawData.findIndex(p => p.time >= range.from);
+      const baseIdx = idx >= 0 ? idx : 0;
+      const baseline = rawData[baseIdx].value;
+      if (!baseline) continue;
+      series.setData(rawData.map(p => ({ time: p.time, value: (p.value - baseline) / baseline * 100 })));
+    }
+  }
+
+  function _scheduleRenorm() {
+    if (_renormTimer) clearTimeout(_renormTimer);
+    _renormTimer = setTimeout(_renormalizeToVisible, 150);
+  }
+
+  // ── Single mode ──────────────────────────────────────────────────────────
 
   function groupIntoMarkerPairs(raw, windowSize, showText) {
     if (!raw.length) return [];
@@ -80,11 +162,7 @@
   function initChart() {
     const container = document.getElementById('chart-container');
     if (!container) return;
-
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const textColor = isDark ? '#d1d5db' : '#374151';
-    const gridColor = isDark ? '#374151' : '#e5e7eb';
-    const bgColor = isDark ? '#1f2937' : '#ffffff';
+    const { textColor, gridColor, bgColor } = _chartTheme();
 
     chart = LightweightCharts.createChart(container, {
       autoSize: true,
@@ -150,16 +228,12 @@
 
     areaSeries.setData(data.nav);
 
-    // ETF price overlay
     const isEtf = data.instrument_type === 'ETF' && data.prices && data.prices.length;
     if (isEtf) {
       if (!priceSeries) {
         priceSeries = chart.addLineSeries({
-          color: '#f97316',
-          lineWidth: 1.5,
-          title: 'Market Price',
-          priceLineVisible: false,
-          lastValueVisible: true,
+          color: '#f97316', lineWidth: 1.5, title: 'Market Price',
+          priceLineVisible: false, lastValueVisible: true,
         });
       }
       priceSeries.setData(data.prices);
@@ -175,12 +249,126 @@
     data.nav.forEach((n, i) => { dataDateToIndex[n.time] = i; });
     chart.timeScale().fitContent();
 
-    const first = data.nav[0].time;
-    const last = data.nav[data.nav.length - 1].time;
+    const first = data.nav[0].time, last = data.nav[data.nav.length - 1].time;
     let metaText = `${data.nav.length} NAV entries · ${first} → ${last}`;
     if (isEtf) metaText += ` · ${data.prices.length} price entries`;
     if (data.markers.length) metaText += ` · ${data.markers.length} trade(s)`;
     meta.textContent = metaText;
+  }
+
+  // ── Compare mode ─────────────────────────────────────────────────────────
+
+  function toggleAllCompare(checked) {
+    document.querySelectorAll('#compare-list input[type=checkbox]').forEach(cb => cb.checked = checked);
+  }
+
+  function toggleCompareMode() {
+    compareMode = document.getElementById('compare-toggle').checked;
+    document.getElementById('compare-panel').style.display = compareMode ? '' : 'none';
+    document.getElementById('etf-legend').style.display = 'none';
+    _destroyChart();
+
+    if (!compareMode) {
+      const sel = document.getElementById('instrument-select');
+      if (sel && sel.value) loadChart(sel.value);
+    } else {
+      document.getElementById('chart-meta').textContent = 'Check funds and click Plot.';
+      document.getElementById('compare-legend').innerHTML = '';
+    }
+  }
+
+  async function loadCompare() {
+    const checkboxes = Array.from(document.querySelectorAll('#compare-list input[type=checkbox]:checked'));
+    if (!checkboxes.length) return;
+
+    const selected = checkboxes.map(cb => ({
+      id: cb.value,
+      label: cb.dataset.label,
+      instType: cb.dataset.instType,
+      seriesType: cb.dataset.instType === 'ETF'
+        ? (document.querySelector(`input[name="etf_series_${cb.value}"]:checked`)?.value || 'nav')
+        : 'nav',
+    }));
+
+    const meta = document.getElementById('chart-meta');
+    const legendEl = document.getElementById('compare-legend');
+    const btn = document.getElementById('btn-compare');
+    meta.textContent = 'Loading…';
+    legendEl.innerHTML = '';
+    btn.setAttribute('disabled', 'true');
+    btn.setAttribute('aria-busy', 'true');
+
+    _destroyChart();
+
+    const container = document.getElementById('chart-container');
+    const { textColor, gridColor, bgColor } = _chartTheme();
+
+    chart = LightweightCharts.createChart(container, {
+      autoSize: true,
+      layout: { background: { color: bgColor }, textColor },
+      grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: gridColor },
+      timeScale: { borderColor: gridColor, timeVisible: false },
+      localization: { priceFormatter: v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%' },
+    });
+    chart.timeScale().subscribeVisibleTimeRangeChange(_scheduleRenorm);
+
+    const results = await Promise.all(
+      selected.map(s => fetch(`/api/v1/charts/nav/${s.id}`).then(r => r.json()))
+    );
+
+    let plotted = 0;
+    for (let i = 0; i < results.length; i++) {
+      const data = results[i];
+      const fund = selected[i];
+      if (!data.nav?.length) continue;
+
+      const color = COMPARE_COLORS[i % COMPARE_COLORS.length];
+      const showNav   = fund.seriesType === 'nav'   || fund.seriesType === 'both';
+      const showPrice = (fund.seriesType === 'price' || fund.seriesType === 'both')
+                        && data.prices?.length;
+
+      let lastPct = null;
+
+      if (showNav) {
+        const s = chart.addLineSeries({ color, lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: !showPrice });
+        const baseline = data.nav[0].value;
+        s.setData(data.nav.map(p => ({ time: p.time, value: (p.value - baseline) / baseline * 100 })));
+        compareSeries.push({ series: s, rawData: data.nav });
+        lastPct = (data.nav[data.nav.length - 1].value - baseline) / baseline * 100;
+      }
+
+      if (showPrice) {
+        const s = chart.addLineSeries({ color, lineWidth: 1.5, lineStyle: 2, priceLineVisible: false, lastValueVisible: true });
+        const baseline = data.prices[0].value;
+        s.setData(data.prices.map(p => ({ time: p.time, value: (p.value - baseline) / baseline * 100 })));
+        compareSeries.push({ series: s, rawData: data.prices });
+        if (lastPct === null) lastPct = (data.prices[data.prices.length - 1].value - baseline) / baseline * 100;
+      }
+
+      const label = fund.label.length > 42 ? fund.label.slice(0, 42) + '…' : fund.label;
+      const suffix = fund.seriesType === 'both' ? ' <small>(— NAV  ╌ Kite)</small>'
+                   : fund.seriesType === 'price' ? ' <small>(Kite)</small>' : '';
+      const pctColor = lastPct != null ? (lastPct >= 0 ? '#16a34a' : '#dc2626') : '';
+      legendEl.innerHTML +=
+        `<span style="display:inline-flex;align-items:center;gap:0.35rem;flex-wrap:wrap;">` +
+        `<span style="display:inline-block;width:18px;height:3px;background:${color};flex-shrink:0;"></span>` +
+        `<span>${label}${suffix}</span>` +
+        (lastPct != null ? `<span style="color:${pctColor};font-weight:600;">${lastPct >= 0 ? '+' : ''}${lastPct.toFixed(1)}%</span>` : '') +
+        `</span>`;
+      plotted++;
+    }
+
+    if (plotted) {
+      chart.timeScale().fitContent();
+      meta.textContent = `${plotted} fund${plotted > 1 ? 's' : ''} · normalised to 0% at first data point`;
+    } else {
+      meta.textContent = 'No data for selected funds.';
+    }
+
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('aria-busy');
   }
 
   document.addEventListener('DOMContentLoaded', () => {
