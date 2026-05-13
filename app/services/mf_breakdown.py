@@ -38,6 +38,7 @@ ETF_CAP_OVERRIDE: dict[str, str] = {
     "INF204KB14I2": "Large Cap",   # NIFTYBEES
     "INF732E01045": "Large Cap",   # JUNIORBEES (Nifty Next 50)
     "INF769K01IC9": "Mid Cap",     # MIDCAPETF
+    "INF0R8F01141": "Small Cap",   # SML100CASE
 }
 
 _BRACKET_RE = re.compile(r"\[.*?\]")
@@ -256,6 +257,7 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
         if not reader.fieldnames:
             errors.append(f"{csv_path.name}: empty or no header")
             continue
+        reader.fieldnames = [f.strip() for f in reader.fieldnames]
 
         dedup: dict[tuple[str, str], dict] = {}
         for row_num, row in enumerate(reader, start=2):
