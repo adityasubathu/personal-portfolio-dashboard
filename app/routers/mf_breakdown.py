@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.mf_breakdown import MfSchemeBreakdown
+from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
 from app.services.mf_breakdown import (
+    normalize_company_name,
     get_allocation_comparison,
     get_allocation_targets,
     get_available_schemes,
@@ -58,6 +60,7 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     categories = form.getlist("category")
 
     updated = 0
+    override_rows: list[dict] = []
     for isin, name, cat in zip(isins, names, categories):
         if cat not in VALID_CATEGORIES:
             continue
@@ -67,6 +70,19 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
             .values(category=cat, updated_at=now_ist())
         )
         updated += result.rowcount
+        override_rows.append({
+            "name_normalized": normalize_company_name(name),
+            "raw_name": name,
+            "category": cat,
+            "updated_at": now_ist(),
+        })
+
+    if override_rows:
+        stmt = pg_insert(EquityCategoryOverride).values(override_rows)
+        await db.execute(stmt.on_conflict_do_update(
+            index_elements=["name_normalized"],
+            set_={"raw_name": stmt.excluded.raw_name, "category": stmt.excluded.category, "updated_at": stmt.excluded.updated_at},
+        ))
     await db.commit()
 
     return HTMLResponse(f"<small style='color:green'>Updated {updated} holding(s).</small>")

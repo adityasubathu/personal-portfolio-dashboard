@@ -5,7 +5,7 @@ from app.models.price_history import PriceHistory
 from app.models.nav_history import NavHistory
 from app.models.kite import KiteConfig, KiteSyncLog
 from app.models.import_log import CSVImportLog
-from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, MfSchemeBreakdown
 from app.models.manual_asset import ManualAsset
 from app.models.allocation_target import AllocationTarget
 from app.models.nav_tracked_instrument import NavTrackedInstrument
@@ -20,6 +20,7 @@ __all__ = [
     "KiteSyncLog",
     "CSVImportLog",
     "AmfiMarketCap",
+    "EquityCategoryOverride",
     "MfSchemeBreakdown",
     "ManualAsset",
     "AllocationTarget",

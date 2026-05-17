@@ -142,10 +142,13 @@ Per-batch import metadata: filename, row counts, `errors_json`. `batch_id` enabl
 Non-traded assets. `asset_type`: FD, PPF, NPS, CASH. FDs have `principal`, `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. Others store `current_value`.
 
 ### AmfiMarketCap
-AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. `name_normalized` for fuzzy matching.
+AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker` (NSE > BSE > MSEI), `exchanges` (comma-separated), `categorization`, `sector` (from `sector_master.csv`), `aliases` (pipe-separated alternate names, user-editable via `company_master.csv`).
 
 ### MfSchemeBreakdown
-Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `category`. Unique on `(scheme_isin, name, holding_type)`.
+Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `category`, `sector`. Unique on `(scheme_isin, name, holding_type)`.
+
+### EquityCategoryOverride
+Persists manual market-cap classifications for equity holdings not found in the AMFI list. Keyed by `name_normalized`. Set via the classify form shown after ingest; applied automatically on subsequent ingests before flagging a holding as Unclassified.
 
 ### AllocationTarget
 Per-category equity allocation targets (e.g. Large Cap 50%, Mid Cap 30%). Used by the allocation comparison view.
@@ -185,11 +188,12 @@ Fetches the AMFI daily NAV feed (`NAVAll.txt`), matches MF holdings by ISIN (gro
 Downloads historical NAV per MF scheme from mfapi.in. Resolves AMFI scheme codes from the NAV feed. Incremental, concurrent (semaphore=4). Writes to `nav_history` table. For MFs, updates `last_price` on the holding; for ETFs, the authoritative price is the exchange LTP from Kite. Supports importing funds by ISIN without trades — creates the instrument from AMFI data and marks it in `nav_tracked_instruments` for ongoing sync.
 
 ### MF Breakdown (`mf_breakdown.py`)
-- **AMFI xlsx parse:** Reads `AverageMarketCapitalization*.xlsx` from `data/mf_portfolio_breakdown/`, extracts company → market-cap classification, pre-computes normalized names. Warns if file >6 months old.
-- **Scheme CSV ingest:** Parses per-scheme CSVs. Classifies each holding: Equity → AMFI lookup (exact then fuzzy ≥85%) → Large/Mid/Small/Unclassified. Bonds → Debt. Cash → Cash. Debt/liquid funds (detected by tradingsymbol) → all Debt. ETF overrides for known index funds.
+- **AMFI xlsx parse + company master:** Reads `AverageMarketCapitalization*.xlsx`. Enriches with sector (ISIN → NSE symbol → name) from `sector_master.csv`. Computes `primary_ticker` and `exchanges` per company. Preserves user-edited `aliases` from `company_master.csv` across syncs. Writes `company_master.csv` (auto-generated; only the `aliases` column is user-editable — pipe-separated alternate names to fix unresolved matches without code changes).
+- **Scheme CSV ingest:** Parses per-scheme CSVs. Classifies each equity holding via: aliases → ISIN lookup → normalized name → fuzzy match (≥85%) → `EquityCategoryOverride` table → Unclassified. Bonds → Debt. Cash → Cash. Sector assigned via same ISIN-first pipeline. Debt/liquid funds forced to Debt.
 - **Chart aggregation:** Weights each holding's category by `holding_value × holdings_pct / 100`. Adds manual assets: FD+PPF → Debt, NPS → 75% Large Cap + 25% Debt, Cash → Cash. SGB bonds → Gold.
-- **Stock holdings table:** Aggregates equity holdings across all MF/ETF schemes, computes per-stock portfolio weight and value, looks up NSE/BSE ticker from AmfiMarketCap. Sortable by name/weight, searchable by name/ticker.
-- **Direct trade breakdown:** Groups all BUY/SELL trades by `(instrument, date, type)`, computes average price and amount per group, looks up current price from holdings → price_history → nav_history. Percentage change is inverted for SELL trades (price rise = loss). Used for the ticker-wise table on the breakdown page.
+- **Stock holdings table:** Aggregates equity holdings across all MF/ETF schemes, computes per-stock portfolio weight and value, looks up NSE/BSE ticker from AmfiMarketCap.
+- **Sector breakdown:** Groups all equity holdings by SEBI sector. Per-sector tables show underlying stocks aggregated across funds and direct positions, with % of sector and % of equity.
+- **Direct trade breakdown:** Groups all BUY/SELL trades by `(instrument, date, type)`, computes average price and amount per group, looks up current price from holdings → price_history → nav_history. Percentage change is inverted for SELL trades.
 
 ### Manual Assets (`manual_assets.py`)
 FD current value via quarterly compounding: `FV = P × (1 + r/400)^(4t)`. Summary returns totals for FDs, PPF, NPS, Cash, plus emergency fund subtotal. Feeds into both dashboard summary and breakdown chart.
@@ -278,6 +282,9 @@ CSV upload for delisted or renamed stocks. Permissive parser: accepts various da
 | `GET /allocation-comparison` | Current vs target equity cap allocation with value deltas |
 | `GET /allocation-targets` | Saved per-category target percentages |
 | `POST /allocation-targets` | Save per-category target percentages |
+| `GET /category-composition` | Per-category breakdown by contributing source (fund/stock/manual) |
+| `GET /sector-composition` | Per-sector breakdown (equity-only) by contributing source |
+| `GET /sector-stock-breakdown` | Per-sector aggregated stock holdings across all funds + direct positions |
 | `GET /direct-trades` | Ticker-wise BUY/SELL breakdown with current value and % change |
 | `GET /schemes` | List scheme ISINs with fund names that have breakdown data |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list with category classification |
@@ -318,7 +325,7 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Click "Sync price history (Kite)" → opens EventSource to SSE endpoint → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert into `price_history` → stream progress per instrument → send final result. UI shows scrollable log panel with spinner, disables button during sync.
 
 ### MF Breakdown
-Load AMFI xlsx (company → cap classification) → parse scheme CSVs from `data/mf_portfolio_breakdown/` → classify holdings (equity via AMFI fuzzy match, bonds → Debt, cash → Cash) → upsert breakdown rows. Chart: weight by `holding_value × pct` across all funds + manual assets.
+Sync AMFI xlsx → enrich with sector from `sector_master.csv` → write `company_master.csv`. Parse scheme CSVs → classify each equity holding (alias → ISIN → name match → fuzzy → `EquityCategoryOverride`) → upsert breakdown rows. Unmatched holdings shown in post-ingest form; user selections saved to `equity_category_override` table and applied automatically on future ingests.
 
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.
@@ -381,3 +388,5 @@ venv/bin/alembic downgrade -1
 | mfapi.in | Historical MF NAVs | REST per scheme (`mfapi_nav.py`) |
 | AMFI xlsx (local) | Company → market-cap classification | Manual download into `data/mf_portfolio_breakdown/` |
 | Scheme CSVs (local) | Per-fund holding breakdown | Manual download into `data/mf_portfolio_breakdown/<ISIN>.csv` |
+| sector_master.csv (local) | Company → SEBI sector mapping | NSE index CSV (e.g. Nifty 500); place in `data/mf_portfolio_breakdown/sector_master.csv` |
+| company_master.csv (auto) | ISIN master with tickers, exchanges, sector, aliases | Auto-generated on each AMFI sync; edit only the `aliases` column |

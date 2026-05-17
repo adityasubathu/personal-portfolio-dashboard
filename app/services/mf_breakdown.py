@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.allocation_target import AllocationTarget
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, MfSchemeBreakdown
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
@@ -44,11 +44,10 @@ ETF_CAP_OVERRIDE: dict[str, str] = {
 _BRACKET_RE = re.compile(r"[\[(].*?[\])]")
 _GLUED_DOT = re.compile(r"\.(?=[a-z])")
 _ABBREV_MAP = [
-    (re.compile(r"\bltd\.?\b", re.IGNORECASE), "limited"),
-    (re.compile(r"\bcorpn\.?\b", re.IGNORECASE), "corporation"),
-    (re.compile(r"\bcorp\.?\b", re.IGNORECASE), "corporation"),
-    (re.compile(r"\bpvt\.?\b", re.IGNORECASE), "private"),
-    (re.compile(r"\bco\.?\b", re.IGNORECASE), "company"),
+    (re.compile(r"\bltd\.?(?=\W|$)", re.IGNORECASE), "limited"),
+    (re.compile(r"\bcorpn?\.?(?=\W|$)", re.IGNORECASE), "corporation"),
+    (re.compile(r"\bpvt\.?(?=\W|$)", re.IGNORECASE), "private"),
+    (re.compile(r"\bco\.?(?=\W|$)", re.IGNORECASE), "company"),
 ]
 _SUFFIX_RE = re.compile(
     r"\b(limited|limted|company|corporation|ordinary\s+shares|private)\b",
@@ -60,7 +59,6 @@ _MULTI_SPACE = re.compile(r"\s+")
 _NAME_ALIASES: dict[str, str] = {
     "m.r.f.": "mrf",
     "m r f": "mrf",
-    "ltm": "ltimindtree"
 }
 
 
@@ -100,32 +98,63 @@ def _parse_amfi_date(filename: str) -> date | None:
     return date(year, month, day)
 
 
-def _load_sector_master() -> tuple[dict[str, str], dict[str, str]]:
-    """Returns ({isin: sector}, {normalized_name: sector}) from sector_master.csv if present."""
+def _load_sector_master() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Returns ({isin: sector}, {normalized_name: sector}, {nse_symbol: sector})."""
     path = BREAKDOWN_DIR / "sector_master.csv"
     if not path.exists():
-        return {}, {}
+        return {}, {}, {}
     try:
         text = path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
         text = path.read_text(encoding="latin-1")
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
-        return {}, {}
+        return {}, {}, {}
     reader.fieldnames = [f.strip() for f in reader.fieldnames]
     isin_sector: dict[str, str] = {}
     name_sector: dict[str, str] = {}
+    symbol_sector: dict[str, str] = {}
     for row in reader:
         isin = (row.get("ISIN Code") or "").strip()
         sector = (row.get("Industry") or "").strip()
         company = (row.get("Company Name") or "").strip()
+        symbol = (row.get("Symbol") or "").strip()
         if not sector:
             continue
         if isin:
             isin_sector[isin] = sector
         if company:
             name_sector[normalize_company_name(company)] = sector
-    return isin_sector, name_sector
+        if symbol:
+            symbol_sector[symbol] = sector
+    return isin_sector, name_sector, symbol_sector
+
+
+def _write_company_master(rows: list[dict]) -> None:
+    master_path = BREAKDOWN_DIR / "company_master.csv"
+    BREAKDOWN_DIR.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "isin", "canonical_name", "primary_ticker", "nse_symbol", "bse_symbol",
+        "msei_symbol", "exchanges", "mcap_category", "sector", "aliases",
+    ]
+    cat_order = {"Large Cap": 0, "Mid Cap": 1, "Small Cap": 2}
+    sorted_rows = sorted(rows, key=lambda r: (cat_order.get(r["categorization"], 9), r["name_normalized"]))
+    with master_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in sorted_rows:
+            writer.writerow({
+                "isin": r.get("isin") or "",
+                "canonical_name": r.get("company_name") or "",
+                "primary_ticker": r.get("primary_ticker") or "",
+                "nse_symbol": r.get("nse_symbol") or "",
+                "bse_symbol": r.get("bse_symbol") or "",
+                "msei_symbol": r.get("msei_symbol") or "",
+                "exchanges": r.get("exchanges") or "",
+                "mcap_category": r.get("categorization") or "",
+                "sector": r.get("sector") or "",
+                "aliases": r.get("aliases") or "",
+            })
 
 
 async def sync_amfi_market_cap(db: AsyncSession) -> dict:
@@ -140,26 +169,64 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
         if age_days > 180:
             stale_warning = f"Classification file is {age_days} days old ({file_date:%d %b %Y}). Consider updating from AMFI website."
 
+    # Preserve user-edited aliases from existing company_master.csv
+    master_path = BREAKDOWN_DIR / "company_master.csv"
+    preserved_aliases: dict[str, str] = {}
+    if master_path.exists():
+        try:
+            text = master_path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            text = master_path.read_text(encoding="latin-1")
+        r = csv.DictReader(io.StringIO(text))
+        for mrow in r:
+            isin_key = (mrow.get("isin") or "").strip()
+            alias_val = (mrow.get("aliases") or "").strip()
+            if isin_key and alias_val:
+                preserved_aliases[isin_key] = alias_val
+
     wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
 
     rows_to_insert: list[dict] = []
     counts = {"Large Cap": 0, "Mid Cap": 0, "Small Cap": 0}
 
-    for i, row in enumerate(ws.iter_rows(min_row=3, values_only=True)):
+    _DASH = {"-", "–", "—"}
+
+    for row in ws.iter_rows(min_row=3, values_only=True):
         company = str(row[1] or "").strip()
         isin = str(row[2] or "").strip() or None
-        bse_sym = str(row[3] or "").strip() or None
-        nse_sym = str(row[5] or "").strip() or None
+        bse_raw = str(row[3] or "").strip()
+        nse_raw = str(row[5] or "").strip()
+        msei_raw = str(row[7] or "").strip()
         cat = str(row[10] or "").strip()
         if not company or cat not in counts:
             continue
+
+        bse_sym = bse_raw if bse_raw and bse_raw not in _DASH else None
+        nse_sym = nse_raw if nse_raw and nse_raw not in _DASH else None
+        msei_sym = msei_raw if msei_raw and msei_raw not in _DASH else None
+
+        primary_ticker = nse_sym or bse_sym or msei_sym
+
+        exchanges_parts: list[str] = []
+        if nse_sym:
+            exchanges_parts.append("NSE")
+        if bse_sym:
+            exchanges_parts.append("BSE")
+        if msei_sym:
+            exchanges_parts.append("MSEI")
+        exchanges = ",".join(exchanges_parts) or None
+
         counts[cat] += 1
         rows_to_insert.append({
             "company_name": company,
             "isin": isin,
             "bse_symbol": bse_sym,
             "nse_symbol": nse_sym,
+            "msei_symbol": msei_sym,
+            "primary_ticker": primary_ticker,
+            "exchanges": exchanges,
+            "aliases": preserved_aliases.get(isin or "") or None,
             "categorization": cat,
             "sector": None,
             "name_normalized": normalize_company_name(company),
@@ -168,13 +235,16 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
 
     wb.close()
 
-    # Enrich with sector from sector_master.csv (ISIN match, fallback to normalized name)
-    isin_sector, name_sector = _load_sector_master()
+    # Enrich with sector: ISIN → NSE symbol → normalized name
+    isin_sector, name_sector, symbol_sector = _load_sector_master()
     sectors_loaded = len(isin_sector)
-    if isin_sector or name_sector:
+    if isin_sector or name_sector or symbol_sector:
         for row in rows_to_insert:
-            sec = (isin_sector.get(row["isin"] or "")
-                   or name_sector.get(row["name_normalized"] or ""))
+            sec = isin_sector.get(row["isin"] or "")
+            if not sec and row["nse_symbol"]:
+                sec = symbol_sector.get(row["nse_symbol"])
+            if not sec:
+                sec = name_sector.get(row["name_normalized"] or "")
             if sec:
                 row["sector"] = sec
 
@@ -182,6 +252,8 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
     if rows_to_insert:
         await db.execute(AmfiMarketCap.__table__.insert(), rows_to_insert)
     await db.flush()
+
+    _write_company_master(rows_to_insert)
 
     result = {
         "rows_loaded": len(rows_to_insert),
@@ -198,41 +270,58 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
     return result
 
 
-def _classify_equity(
+def _resolve_equity_category(
     name: str,
+    alias_to_isin: dict[str, str],
+    name_to_isin: dict[str, str],
+    isin_to_mcap: dict[str, str],
     amfi_by_name: dict[str, str],
-    amfi_names: list[str],
 ) -> str:
     norm = normalize_company_name(name)
+    for lookup in (alias_to_isin, name_to_isin):
+        isin = lookup.get(norm)
+        if isin and isin in isin_to_mcap:
+            return isin_to_mcap[isin]
     cat = amfi_by_name.get(norm)
     if cat:
         return cat
-
-    best_ratio = 0.0
-    best_cat = None
+    best_r, best_cat = 0.0, None
     for amfi_norm, amfi_cat in amfi_by_name.items():
         r = SequenceMatcher(None, norm, amfi_norm).ratio()
-        if r > best_ratio:
-            best_ratio = r
-            best_cat = amfi_cat
-    if best_ratio >= 0.85 and best_cat:
+        if r > best_r:
+            best_r, best_cat = r, amfi_cat
+    if best_r >= 0.85 and best_cat:
         return best_cat
-
     return "Unclassified Equity"
 
 
-def _classify_type(
-    holding_type: str,
+def _resolve_equity_sector(
     name: str,
-    amfi_by_name: dict[str, str],
-    amfi_names: list[str],
-    equity_override: str | None = None,
-) -> str:
+    alias_to_isin: dict[str, str],
+    name_to_isin: dict[str, str],
+    isin_to_sector: dict[str, str],
+    name_to_sector: dict[str, str],
+) -> str | None:
+    norm = normalize_company_name(name)
+    for lookup in (alias_to_isin, name_to_isin):
+        isin = lookup.get(norm)
+        if isin and isin in isin_to_sector:
+            return isin_to_sector[isin]
+    sec = name_to_sector.get(norm)
+    if sec:
+        return sec
+    best_r, best_s = 0.0, None
+    for amfi_norm, amfi_sec in name_to_sector.items():
+        r = SequenceMatcher(None, norm, amfi_norm).ratio()
+        if r > best_r:
+            best_r, best_s = r, amfi_sec
+    if best_r >= 0.85:
+        return best_s
+    return None
+
+
+def _classify_type(holding_type: str, name: str) -> str:
     t = holding_type.strip()
-    if t == "Equity":
-        if equity_override:
-            return equity_override
-        return _classify_equity(name, amfi_by_name, amfi_names)
     if t.startswith("Bond"):
         return "Debt"
     if t.startswith("Cash") or t == "Cash":
@@ -263,11 +352,33 @@ def _sector_for_type(holding_type: str, name: str) -> str | None:
 
 async def ingest_scheme_csvs(db: AsyncSession) -> dict:
     amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
-    amfi_by_name: dict[str, str] = {a.name_normalized: a.categorization for a in amfi_all}
-    amfi_names = list(amfi_by_name.keys())
-    # Sector lookups: by ISIN (exact) and by normalized name
-    amfi_isin_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
-    amfi_name_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
+
+    alias_to_isin: dict[str, str] = {}
+    name_to_isin: dict[str, str] = {}
+    isin_to_mcap: dict[str, str] = {}
+    isin_to_sector: dict[str, str] = {}
+    amfi_by_name: dict[str, str] = {}
+    amfi_name_sector: dict[str, str] = {}
+
+    for a in amfi_all:
+        amfi_by_name[a.name_normalized] = a.categorization
+        if a.sector:
+            amfi_name_sector[a.name_normalized] = a.sector
+        if a.isin:
+            isin_to_mcap[a.isin] = a.categorization
+            name_to_isin[a.name_normalized] = a.isin
+            if a.sector:
+                isin_to_sector[a.isin] = a.sector
+            if a.aliases:
+                for alias in a.aliases.split("|"):
+                    alias_norm = normalize_company_name(alias.strip())
+                    if alias_norm:
+                        alias_to_isin[alias_norm] = a.isin
+
+    overrides: dict[str, str] = {
+        o.name_normalized: o.category
+        for o in (await db.execute(select(EquityCategoryOverride))).scalars().all()
+    }
 
     held_funds = (await db.execute(
         select(Instrument)
@@ -335,25 +446,22 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
             else:
                 if is_debt_fund:
                     category = "Debt"
+                elif htype.strip() == "Equity":
+                    if equity_override:
+                        category = equity_override
+                    else:
+                        category = _resolve_equity_category(name, alias_to_isin, name_to_isin, isin_to_mcap, amfi_by_name)
+                        if category == "Unclassified Equity":
+                            category = overrides.get(normalize_company_name(name), "Unclassified Equity")
                 else:
-                    category = _classify_type(htype, name, amfi_by_name, amfi_names, equity_override)
+                    category = _classify_type(htype, name)
                 if category == "Unclassified Equity":
                     unmatched.append({"name": name, "scheme_isin": scheme_isin})
 
                 # Sector classification
                 sector: str | None = _sector_for_type(htype, name)
                 if sector is None and htype.strip() == "Equity":
-                    norm = normalize_company_name(name)
-                    sector = amfi_name_sector.get(norm)
-                    if sector is None:
-                        # Fuzzy fallback — same threshold as category matching
-                        best_r, best_s = 0.0, None
-                        for amfi_norm, amfi_sec in amfi_name_sector.items():
-                            r = SequenceMatcher(None, norm, amfi_norm).ratio()
-                            if r > best_r:
-                                best_r, best_s = r, amfi_sec
-                        if best_r >= 0.85:
-                            sector = best_s
+                    sector = _resolve_equity_sector(name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector)
 
                 dedup[key] = {
                     "scheme_isin": scheme_isin,
