@@ -98,6 +98,28 @@ def _parse_amfi_date(filename: str) -> date | None:
     return date(year, month, day)
 
 
+def _load_sector_master() -> dict[str, str]:
+    """Returns {isin: sector} from sector_master.csv if present, else {}."""
+    path = BREAKDOWN_DIR / "sector_master.csv"
+    if not path.exists():
+        return {}
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="latin-1")
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        return {}
+    reader.fieldnames = [f.strip() for f in reader.fieldnames]
+    result: dict[str, str] = {}
+    for row in reader:
+        isin = (row.get("ISIN Code") or "").strip()
+        sector = (row.get("Industry") or "").strip()
+        if isin and sector:
+            result[isin] = sector
+    return result
+
+
 async def sync_amfi_market_cap(db: AsyncSession) -> dict:
     xlsx_path = _find_amfi_xlsx()
     if not xlsx_path:
@@ -131,11 +153,20 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
             "bse_symbol": bse_sym,
             "nse_symbol": nse_sym,
             "categorization": cat,
+            "sector": None,
             "name_normalized": normalize_company_name(company),
             "updated_at": now_ist(),
         })
 
     wb.close()
+
+    # Enrich with sector from sector_master.csv
+    isin_sector = _load_sector_master()
+    sectors_loaded = len(isin_sector)
+    if isin_sector:
+        for row in rows_to_insert:
+            if row["isin"] and row["isin"] in isin_sector:
+                row["sector"] = isin_sector[row["isin"]]
 
     await db.execute(delete(AmfiMarketCap))
     if rows_to_insert:
@@ -147,6 +178,7 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
         "large": counts["Large Cap"],
         "mid": counts["Mid Cap"],
         "small": counts["Small Cap"],
+        "sectors_loaded": sectors_loaded,
         "file": xlsx_path.name,
     }
     if file_date:
@@ -195,6 +227,8 @@ def _classify_type(
         return "Debt"
     if t.startswith("Cash") or t == "Cash":
         return "Cash"
+    if t.startswith("Mutual Fund") and re.search(r"\bliquid", name, re.IGNORECASE):
+        return "Debt"
     return "Other"
 
 
@@ -206,12 +240,24 @@ def _parse_holdings_pct(s: str) -> float | None:
         return None
 
 
+def _sector_for_type(holding_type: str, name: str) -> str | None:
+    t = holding_type.strip()
+    if t.startswith("Bond"):
+        return "Fixed Income"
+    if t.startswith("Cash") or t == "Cash":
+        return "Liquid / Money Market"
+    if t.startswith("Mutual Fund") and re.search(r"\bliquid", name, re.IGNORECASE):
+        return "Liquid / Money Market"
+    return None
+
+
 async def ingest_scheme_csvs(db: AsyncSession) -> dict:
-    amfi_rows = (await db.execute(
-        select(AmfiMarketCap.name_normalized, AmfiMarketCap.categorization)
-    )).all()
-    amfi_by_name: dict[str, str] = {n: c for n, c in amfi_rows}
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    amfi_by_name: dict[str, str] = {a.name_normalized: a.categorization for a in amfi_all}
     amfi_names = list(amfi_by_name.keys())
+    # Sector lookups: by ISIN (exact) and by normalized name
+    amfi_isin_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
+    amfi_name_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
 
     held_funds = (await db.execute(
         select(Instrument)
@@ -220,10 +266,12 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
     )).scalars().all()
     held_isins = {i.isin for i in held_funds if i.isin}
 
-    _DEBT_KEYWORDS = re.compile(r"\b(debt|liquid)\b", re.IGNORECASE)
+    # Match "liquid" at a word start (no trailing boundary — catches LIQUIDCASE, LIQUIDBEES, etc.)
+    _DEBT_KEYWORDS = re.compile(r"\b(debt|liquid)", re.IGNORECASE)
     debt_fund_isins: set[str] = set()
     for i in held_funds:
-        if i.isin and i.tradingsymbol and _DEBT_KEYWORDS.search(i.tradingsymbol):
+        name_to_check = " ".join(filter(None, [i.tradingsymbol, i.name]))
+        if i.isin and _DEBT_KEYWORDS.search(name_to_check):
             debt_fund_isins.add(i.isin)
 
     if not BREAKDOWN_DIR.exists():
@@ -281,12 +329,29 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
                     category = _classify_type(htype, name, amfi_by_name, amfi_names, equity_override)
                 if category == "Unclassified Equity":
                     unmatched.append({"name": name, "scheme_isin": scheme_isin})
+
+                # Sector classification
+                sector: str | None = _sector_for_type(htype, name)
+                if sector is None and htype.strip() == "Equity":
+                    norm = normalize_company_name(name)
+                    sector = amfi_name_sector.get(norm)
+                    if sector is None:
+                        # Fuzzy fallback — same threshold as category matching
+                        best_r, best_s = 0.0, None
+                        for amfi_norm, amfi_sec in amfi_name_sector.items():
+                            r = SequenceMatcher(None, norm, amfi_norm).ratio()
+                            if r > best_r:
+                                best_r, best_s = r, amfi_sec
+                        if best_r >= 0.85:
+                            sector = best_s
+
                 dedup[key] = {
                     "scheme_isin": scheme_isin,
                     "name": key[0],
                     "holding_type": key[1],
                     "holdings_pct": pct,
                     "category": category,
+                    "sector": sector,
                     "updated_at": now_ist(),
                 }
 
@@ -298,6 +363,7 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
                 set_={
                     "holdings_pct": stmt.excluded.holdings_pct,
                     "category": stmt.excluded.category,
+                    "sector": stmt.excluded.sector,
                     "updated_at": stmt.excluded.updated_at,
                 },
             )
@@ -677,6 +743,281 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
             category_summary.append({"category": cat, "pct": round(v, 2)})
 
     return {"holdings": holdings, "category_summary": category_summary}
+
+
+_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Gold", "Debt", "Cash", "Other"]
+
+
+async def get_category_composition(db: AsyncSession) -> list[dict]:
+    """Returns per-category breakdown showing each contributing source and its value."""
+    from app.services.manual_assets import get_manual_assets_summary
+
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    all_holdings = result.all()
+
+    isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
+
+    # cat -> list of {name, source_type, fund_pct, contribution}
+    composition: dict[str, list[dict]] = {}
+
+    def _add(cat: str, entry: dict):
+        composition.setdefault(cat, []).append(entry)
+
+    # MF/ETF: group breakdown rows by (scheme_isin, category)
+    fund_values: dict[str, tuple[float, str]] = {}
+    for h, i in all_holdings:
+        if i.instrument_type in ("MF", "ETF") and i.isin:
+            ltp = float(h.last_price) if h.last_price else None
+            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
+
+    if fund_values:
+        breakdown_rows = (await db.execute(
+            select(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())))
+        )).scalars().all()
+
+        scheme_cat: dict[tuple, float] = defaultdict(float)
+        for row in breakdown_rows:
+            scheme_cat[(row.scheme_isin, row.category)] += float(row.holdings_pct)
+
+        for (isin, cat), pct in scheme_cat.items():
+            fund_val, fund_name = fund_values[isin]
+            contribution = fund_val * pct / 100
+            if contribution <= 0:
+                continue
+            _add(cat, {"name": fund_name, "isin": isin, "source_type": "fund", "fund_pct": round(pct, 2), "contribution": round(contribution, 2), "fund_value": round(fund_val, 2)})
+
+    # Direct stocks
+    for h, i in all_holdings:
+        if i.instrument_type == "STOCK":
+            ltp = float(h.last_price) if h.last_price else None
+            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            if val <= 0:
+                continue
+            cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
+            _add(cat, {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
+
+    # SGB bonds
+    for h, i in all_holdings:
+        if i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+            ltp = float(h.last_price) if h.last_price else None
+            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            if val <= 0:
+                continue
+            _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+
+    # Manual assets
+    manual = await get_manual_assets_summary(db)
+    if manual["total_fd"] > 0:
+        _add("Debt", {"name": "Fixed Deposits", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_fd"], 2)})
+    if manual["total_ppf"] > 0:
+        _add("Debt", {"name": "PPF", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_ppf"], 2)})
+    if manual.get("nps"):
+        nps_val = manual["nps"]["current_value"]
+        if nps_val > 0:
+            _add("Large Cap", {"name": "NPS (equity portion)", "source_type": "manual", "fund_pct": 75.0, "contribution": round(nps_val * 0.75, 2)})
+            _add("Debt", {"name": "NPS (debt portion)", "source_type": "manual", "fund_pct": 25.0, "contribution": round(nps_val * 0.25, 2)})
+    if manual.get("total_cash", 0) > 0:
+        _add("Cash", {"name": "Savings / Cash", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_cash"], 2)})
+
+    # Build ordered list with totals and per-source share_pct
+    out = []
+    for cat in _CAT_ORDER:
+        sources = composition.get(cat)
+        if not sources:
+            continue
+        sources.sort(key=lambda x: x["contribution"], reverse=True)
+        total = sum(s["contribution"] for s in sources)
+        for s in sources:
+            s["share_pct"] = round(s["contribution"] / total * 100, 1) if total else 0
+        out.append({"category": cat, "total": round(total, 2), "sources": sources})
+
+    return out
+
+
+_NON_EQUITY_SECTORS = {"Fixed Income", "Liquid / Money Market", "Gold"}
+
+
+async def get_sector_composition(db: AsyncSession, equity_only: bool = False) -> list[dict]:
+    """Returns per-sector breakdown showing each contributing source and its value."""
+    from app.services.manual_assets import get_manual_assets_summary
+
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    all_holdings = result.all()
+
+    # Sector lookups for direct stocks
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    isin_to_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
+    name_to_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
+
+    composition: dict[str, list[dict]] = {}
+
+    def _add(sector: str, entry: dict):
+        composition.setdefault(sector, []).append(entry)
+
+    # MF/ETF: group breakdown rows by (scheme_isin, sector)
+    fund_values: dict[str, tuple[float, str]] = {}
+    for h, i in all_holdings:
+        if i.instrument_type in ("MF", "ETF") and i.isin:
+            ltp = float(h.last_price) if h.last_price else None
+            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
+
+    if fund_values:
+        breakdown_rows = (await db.execute(
+            select(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())))
+        )).scalars().all()
+
+        scheme_sector: dict[tuple, float] = defaultdict(float)
+        for row in breakdown_rows:
+            sec = row.sector or "Unknown"
+            scheme_sector[(row.scheme_isin, sec)] += float(row.holdings_pct)
+
+        for (isin, sec), pct in scheme_sector.items():
+            fund_val, fund_name = fund_values[isin]
+            contribution = fund_val * pct / 100
+            if contribution <= 0:
+                continue
+            _add(sec, {"name": fund_name, "isin": isin, "source_type": "fund", "fund_pct": round(pct, 2), "contribution": round(contribution, 2), "fund_value": round(fund_val, 2)})
+
+    # Direct stocks
+    for h, i in all_holdings:
+        if i.instrument_type == "STOCK":
+            ltp = float(h.last_price) if h.last_price else None
+            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            if val <= 0:
+                continue
+            sec = isin_to_sector.get(i.isin or "")
+            if sec is None and (i.name or i.tradingsymbol):
+                norm = normalize_company_name(i.name or i.tradingsymbol or "")
+                sec = name_to_sector.get(norm)
+                if sec is None:
+                    best_r, best_s = 0.0, None
+                    for amfi_norm, amfi_sec in name_to_sector.items():
+                        r = SequenceMatcher(None, norm, amfi_norm).ratio()
+                        if r > best_r:
+                            best_r, best_s = r, amfi_sec
+                    if best_r >= 0.85:
+                        sec = best_s
+            _add(sec or "Unknown", {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
+
+    if not equity_only:
+        # SGB bonds → Gold sector
+        for h, i in all_holdings:
+            if i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+                ltp = float(h.last_price) if h.last_price else None
+                val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+                if val <= 0:
+                    continue
+                _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+
+        # Manual assets
+        manual = await get_manual_assets_summary(db)
+        if manual["total_fd"] > 0:
+            _add("Fixed Income", {"name": "Fixed Deposits", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_fd"], 2)})
+        if manual["total_ppf"] > 0:
+            _add("Fixed Income", {"name": "PPF", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_ppf"], 2)})
+        if manual.get("nps"):
+            nps_val = manual["nps"]["current_value"]
+            if nps_val > 0:
+                _add("Fixed Income", {"name": "NPS (debt portion)", "source_type": "manual", "fund_pct": 25.0, "contribution": round(nps_val * 0.25, 2)})
+        if manual.get("total_cash", 0) > 0:
+            _add("Liquid / Money Market", {"name": "Savings / Cash", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_cash"], 2)})
+
+    # Sort by total descending, excluding non-equity sectors when equity_only
+    out = []
+    for sec, sources in sorted(composition.items(), key=lambda x: sum(s["contribution"] for s in x[1]), reverse=True):
+        if equity_only and sec in _NON_EQUITY_SECTORS:
+            continue
+        sources.sort(key=lambda x: x["contribution"], reverse=True)
+        total = sum(s["contribution"] for s in sources)
+        for s in sources:
+            s["share_pct"] = round(s["contribution"] / total * 100, 1) if total else 0
+        out.append({"sector": sec, "total": round(total, 2), "sources": sources})
+
+    return out
+
+
+async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
+    """Per-sector breakdown listing underlying stock holdings aggregated across all funds and direct positions."""
+    fund_result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF")), Instrument.isin.isnot(None))
+    )
+    fund_values: dict[str, float] = {}
+    for h, i in fund_result.all():
+        ltp = float(h.last_price) if h.last_price else None
+        val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        if val > 0:
+            fund_values[i.isin] = val
+
+    sector_stocks: dict[str, dict[str, float]] = {}
+
+    if fund_values:
+        rows = (await db.execute(
+            select(MfSchemeBreakdown).where(
+                MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
+                MfSchemeBreakdown.sector.isnot(None),
+                ~MfSchemeBreakdown.sector.in_(list(_NON_EQUITY_SECTORS)),
+            )
+        )).scalars().all()
+        for row in rows:
+            contrib = fund_values[row.scheme_isin] * float(row.holdings_pct) / 100
+            if contrib <= 0:
+                continue
+            bucket = sector_stocks.setdefault(row.sector, {})
+            bucket[row.name] = bucket.get(row.name, 0) + contrib
+
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    isin_to_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
+    name_to_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
+
+    stock_result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type == "STOCK")
+    )
+    for h, i in stock_result.all():
+        ltp = float(h.last_price) if h.last_price else None
+        val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        if val <= 0:
+            continue
+        sec = isin_to_sector.get(i.isin or "")
+        if sec is None:
+            norm = normalize_company_name(i.name or i.tradingsymbol or "")
+            sec = name_to_sector.get(norm)
+            if sec is None:
+                best_r, best_s = 0.0, None
+                for amfi_norm, amfi_sec in name_to_sector.items():
+                    r = SequenceMatcher(None, norm, amfi_norm).ratio()
+                    if r > best_r:
+                        best_r, best_s = r, amfi_sec
+                if best_r >= 0.85:
+                    sec = best_s
+        if not sec or sec in _NON_EQUITY_SECTORS:
+            continue
+        name = i.name or i.tradingsymbol or "Unknown"
+        bucket = sector_stocks.setdefault(sec, {})
+        bucket[name] = bucket.get(name, 0) + val
+
+    out = []
+    for sec, stocks in sorted(sector_stocks.items(), key=lambda x: sum(x[1].values()), reverse=True):
+        total = sum(stocks.values())
+        holdings = sorted(
+            [{"name": n, "value": round(v, 2), "pct": round(v / total * 100, 1)} for n, v in stocks.items()],
+            key=lambda x: x["value"], reverse=True,
+        )
+        out.append({"sector": sec, "total": round(total, 2), "holdings": holdings})
+    return out
 
 
 async def get_direct_trade_breakdown(db: AsyncSession) -> list[dict]:

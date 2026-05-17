@@ -15,7 +15,7 @@
           hx-target="#ingest-status"
           hx-swap="innerHTML"
           hx-indicator="#ingest-spinner"
-          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades()">
+          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades(); compLoaded=false; sectorTabLoaded=false; if(document.getElementById('tab-panel-sector').style.display!=='none') loadSectorTab(); if(document.getElementById('tab-panel-composition').style.display!=='none') loadComposition()">
     Ingest Portfolios
   </button>
   <span id="ingest-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Working…</span>
@@ -24,57 +24,93 @@
 
 <article>
   <header>Market Cap Breakdown</header>
-  <div class="grid" style="align-items:start;">
-    <div style="position:relative; height:420px;">
-      <canvas id="breakdown-chart"></canvas>
-    </div>
-    <div>
-      <div style="display:flex; align-items:center; gap:1rem; margin-bottom:0.75rem;">
-        <strong>Ideal vs Actual</strong>
-        <label style="margin:0; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem;">
-          <input type="checkbox" id="alloc-toggle" onchange="renderAllocTable()" style="margin:0;">
-          Show invested
-        </label>
-        <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
-                onclick="toggleAllocEdit()">Edit Targets</button>
-      </div>
-      <div id="alloc-edit" style="display:none; margin-bottom:0.75rem;">
-        <form id="alloc-targets-form"
-              hx-post="/api/v1/mf-breakdown/allocation-targets"
-              hx-target="#alloc-save-status"
-              hx-swap="innerHTML"
-              hx-on::after-request="loadAllocData()">
-          <div id="alloc-edit-fields"></div>
-          <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-            <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
-            <button type="button" class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
-                    onclick="toggleAllocEdit()">Cancel</button>
-            <span id="alloc-save-status"></span>
-          </div>
-        </form>
-      </div>
-      <table id="alloc-table" style="font-size:0.85rem;">
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th style="text-align:right;">Target</th>
-            <th style="text-align:right;">Actual</th>
-            <th style="text-align:right;">Value</th>
-            <th style="text-align:right;">Diff</th>
-            <th style="text-align:right;">Ideal (vs LC)</th>
-            <th style="text-align:right;">Gap</th>
-          </tr>
-        </thead>
-        <tbody id="alloc-body"></tbody>
-      </table>
-      <p id="alloc-empty" style="text-align:center; display:none;">
-        <small>No data yet.</small>
-      </p>
-    </div>
+
+  <div style="display:flex; gap:0; border-bottom:2px solid var(--pico-table-border-color); margin-bottom:1rem;">
+    <button id="tab-overview" onclick="switchTab('overview')"
+            style="background:none; border:none; border-bottom:2px solid var(--pico-primary); margin-bottom:-2px; padding:0.4rem 1rem; font-size:0.9rem; font-weight:600; cursor:pointer; color:var(--pico-primary);">
+      Overview
+    </button>
+    <button id="tab-sector" onclick="switchTab('sector')"
+            style="background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; padding:0.4rem 1rem; font-size:0.9rem; cursor:pointer; color:var(--pico-muted-color);">
+      Sector
+    </button>
+    <button id="tab-composition" onclick="switchTab('composition')"
+            style="background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; padding:0.4rem 1rem; font-size:0.9rem; cursor:pointer; color:var(--pico-muted-color);">
+      Composition
+    </button>
   </div>
-  <p id="chart-empty" style="text-align:center; display:none;">
-    <small>No breakdown data yet. Click <strong>Ingest Portfolios</strong> above.</small>
-  </p>
+
+  <div id="tab-panel-overview">
+    <div class="grid" style="align-items:start;">
+      <div style="position:relative; height:420px;">
+        <canvas id="breakdown-chart"></canvas>
+      </div>
+      <div>
+        <div style="display:flex; align-items:center; gap:1rem; margin-bottom:0.75rem;">
+          <strong>Ideal vs Actual</strong>
+          <label style="margin:0; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem;">
+            <input type="checkbox" id="alloc-toggle" onchange="renderAllocTable()" style="margin:0;">
+            Show invested
+          </label>
+          <button class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                  onclick="toggleAllocEdit()">Edit Targets</button>
+        </div>
+        <div id="alloc-edit" style="display:none; margin-bottom:0.75rem;">
+          <form id="alloc-targets-form"
+                hx-post="/api/v1/mf-breakdown/allocation-targets"
+                hx-target="#alloc-save-status"
+                hx-swap="innerHTML"
+                hx-on::after-request="loadAllocData()">
+            <div id="alloc-edit-fields"></div>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+              <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Save</button>
+              <button type="button" class="outline secondary" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                      onclick="toggleAllocEdit()">Cancel</button>
+              <span id="alloc-save-status"></span>
+            </div>
+          </form>
+        </div>
+        <table id="alloc-table" style="font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th style="text-align:right;">Target</th>
+              <th style="text-align:right;">Actual</th>
+              <th style="text-align:right;">Value</th>
+              <th style="text-align:right;">Diff</th>
+              <th style="text-align:right;">Ideal (vs LC)</th>
+              <th style="text-align:right;">Gap</th>
+            </tr>
+          </thead>
+          <tbody id="alloc-body"></tbody>
+        </table>
+        <p id="alloc-empty" style="text-align:center; display:none;">
+          <small>No data yet.</small>
+        </p>
+      </div>
+    </div>
+    <p id="chart-empty" style="text-align:center; display:none;">
+      <small>No breakdown data yet. Click <strong>Ingest Portfolios</strong> above.</small>
+    </p>
+  </div>
+
+  <div id="tab-panel-sector" style="display:none;">
+    <p id="sector-empty" style="text-align:center; display:none;">
+      <small>No sector data. Add <code>sector_master.csv</code> to <code>data/mf_portfolio_breakdown/</code> and re-ingest.</small>
+    </p>
+    <div style="position:relative; height:420px; margin-bottom:1.5rem;">
+      <canvas id="sector-chart"></canvas>
+    </div>
+    <div id="sector-body"></div>
+  </div>
+
+  <div id="tab-panel-composition" style="display:none;">
+    <p id="comp-empty" style="text-align:center; display:none;">
+      <small>No breakdown data yet. Click <strong>Ingest Portfolios</strong> above.</small>
+    </p>
+    <div id="comp-body"></div>
+  </div>
+
 </article>
 
 <article>
@@ -404,6 +440,278 @@ function renderDirectTable() {
     }
   }
   tbody.innerHTML = rows.join('');
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  ['overview', 'sector', 'composition'].forEach(t => {
+    const panel = document.getElementById('tab-panel-' + t);
+    const btn   = document.getElementById('tab-' + t);
+    const active = t === name;
+    panel.style.display = active ? '' : 'none';
+    btn.style.borderBottomColor  = active ? 'var(--pico-primary)' : 'transparent';
+    btn.style.color              = active ? 'var(--pico-primary)' : 'var(--pico-muted-color)';
+    btn.style.fontWeight         = active ? '600' : 'normal';
+  });
+  if (name === 'sector'      && !sectorTabLoaded) loadSectorTab();
+  if (name === 'composition' && !compLoaded)      loadComposition();
+}
+
+// ── Composition tab ──────────────────────────────────────────────────────────
+
+let compLoaded = false;
+
+const SOURCE_BADGE = {
+  fund:   ['#1d4ed8', '#dbeafe', 'Fund'],
+  stock:  ['#065f46', '#d1fae5', 'Stock'],
+  bond:   ['#78350f', '#fef3c7', 'Bond'],
+  manual: ['#6b21a8', '#f3e8ff', 'Manual'],
+};
+
+async function loadComposition() {
+  const empty = document.getElementById('comp-empty');
+  const body  = document.getElementById('comp-body');
+  try {
+    const r = await fetch('/api/v1/mf-breakdown/category-composition');
+    const data = await r.json();
+    if (!data.length) { empty.style.display = ''; body.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    renderComposition(data);
+    compLoaded = true;
+  } catch (e) { console.error('Composition load failed:', e); }
+}
+
+function renderComposition(data) {
+  const grandTotal = data.reduce((s, c) => s + c.total, 0);
+  const body = document.getElementById('comp-body');
+
+  body.innerHTML = data.map(cat => {
+    const color = COLORS[cat.category] || '#616161';
+    const catPct = grandTotal > 0 ? (cat.total / grandTotal * 100).toFixed(1) : '0.0';
+
+    const rows = cat.sources.map((s, si) => {
+      const [bc, bg, label] = SOURCE_BADGE[s.source_type] || SOURCE_BADGE.fund;
+      const badge = `<span style="font-size:0.7rem;padding:0.1rem 0.35rem;border-radius:3px;background:${bg};color:${bc};font-weight:600;">${label}</span>`;
+      const barW  = Math.round(s.share_pct);
+      const bar   = `<div style="height:3px;background:${color};opacity:0.5;width:${barW}%;min-width:2px;border-radius:2px;margin-top:3px;"></div>`;
+
+      const expandId = `exp-${cat.category.replace(/\s+/g,'-')}-${si}`;
+
+      if (s.source_type === 'fund') {
+        const dataAttrs = `data-isin="${s.isin}" data-category="${cat.category}" data-fund-value="${s.fund_value}"`;
+        return `<tr style="cursor:pointer;" onclick="toggleFundExpand(this)" ${dataAttrs}>
+          <td><span class="expand-toggle" style="display:inline-block;width:1rem;color:var(--pico-muted-color);font-size:0.75rem;">▶</span>${s.name} ${badge}</td>
+          <td style="text-align:right;color:var(--pico-muted-color);">${s.fund_pct.toFixed(1)}%</td>
+          <td style="text-align:right;">${inrCompact(s.contribution)}</td>
+          <td style="text-align:right;">${s.share_pct.toFixed(1)}%${bar}</td>
+        </tr>
+        <tr class="fund-expand-row" style="display:none;">
+          <td colspan="4" style="padding:0 0.5rem 0.5rem 1.5rem; background:var(--pico-card-sectioning-background-color);">
+            <div class="expand-content"><small style="color:var(--pico-muted-color);">Loading…</small></div>
+          </td>
+        </tr>`;
+      }
+
+      return `<tr>
+        <td><span style="display:inline-block;width:1rem;"></span>${s.name} ${badge}</td>
+        <td style="text-align:right;color:var(--pico-muted-color);">${s.fund_pct.toFixed(1)}%</td>
+        <td style="text-align:right;">${inrCompact(s.contribution)}</td>
+        <td style="text-align:right;">${s.share_pct.toFixed(1)}%${bar}</td>
+      </tr>`;
+    }).join('');
+
+    return `<details open style="margin-bottom:0.75rem;">
+      <summary style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:0.6rem;
+                      padding:0.45rem 0.6rem; border-radius:4px; background:var(--pico-card-sectioning-background-color);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${color};flex-shrink:0;"></span>
+        <strong style="flex:1;">${cat.category}</strong>
+        <span style="font-size:0.85rem;color:var(--pico-muted-color);">${cat.sources.length} source${cat.sources.length > 1 ? 's' : ''}</span>
+        <span style="font-weight:600;">${inrCompact(cat.total)}</span>
+        <span style="font-size:0.85rem;color:var(--pico-muted-color);min-width:3.5rem;text-align:right;">${catPct}% of total</span>
+      </summary>
+      <table style="font-size:0.85rem;margin-top:0.4rem;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th style="text-align:right;">% of Source</th>
+            <th style="text-align:right;">Contribution</th>
+            <th style="text-align:right;">% of Category</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr style="font-weight:600;border-top:1px solid var(--pico-table-border-color);">
+            <td></td><td></td>
+            <td style="text-align:right;">${inrCompact(cat.total)}</td>
+            <td style="text-align:right;">100%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </details>`;
+  }).join('');
+}
+
+const _schemeCache = {};
+
+async function toggleFundExpand(row) {
+  const expandRow = row.nextElementSibling;
+  const toggle    = row.querySelector('.expand-toggle');
+  const content   = expandRow.querySelector('.expand-content');
+  const open      = expandRow.style.display !== 'none';
+
+  if (open) {
+    expandRow.style.display = 'none';
+    toggle.textContent = '▶';
+    return;
+  }
+
+  expandRow.style.display = '';
+  toggle.textContent = '▼';
+
+  const isin        = row.dataset.isin;
+  const filterField = row.dataset.filterField || 'category';
+  const filterValue = row.dataset.filterValue || row.dataset.category;
+  const fundValue   = parseFloat(row.dataset.fundValue);
+
+  const cacheKey = `${isin}`;
+  if (!_schemeCache[cacheKey]) {
+    try {
+      const r = await fetch(`/api/v1/mf-breakdown/scheme/${isin}`);
+      _schemeCache[cacheKey] = await r.json();
+    } catch (e) {
+      content.innerHTML = '<small style="color:red;">Failed to load holdings.</small>';
+      return;
+    }
+  }
+
+  const holdings = (_schemeCache[cacheKey].holdings || []).filter(h => h[filterField] === filterValue);
+  if (!holdings.length) {
+    content.innerHTML = '<small style="color:var(--pico-muted-color);">No individual holdings data for this category.</small>';
+    return;
+  }
+
+  const innerRows = holdings.map(h => {
+    const contrib = fundValue * h.pct / 100;
+    return `<tr>
+      <td style="padding-left:0;">${h.name}</td>
+      <td style="text-align:right;">${h.pct.toFixed(2)}%</td>
+      <td style="text-align:right;">${inrCompact(contrib)}</td>
+    </tr>`;
+  }).join('');
+
+  content.innerHTML = `<table style="font-size:0.8rem;margin:0.3rem 0 0.1rem;">
+    <thead><tr>
+      <th>Holding</th>
+      <th style="text-align:right;">% of Fund</th>
+      <th style="text-align:right;">Value</th>
+    </tr></thead>
+    <tbody>${innerRows}</tbody>
+  </table>`;
+}
+
+// ── Sector tab ───────────────────────────────────────────────────────────────
+
+let sectorTabLoaded = false;
+let sectorChart = null;
+
+function sectorColor(i, n) { return `hsl(${Math.round((n - 1 - i) * 360 / n)}, 85%, 52%)`; }
+
+async function loadSectorTab() {
+  const empty = document.getElementById('sector-empty');
+  const body  = document.getElementById('sector-body');
+  try {
+    const r = await fetch('/api/v1/mf-breakdown/sector-stock-breakdown');
+    const data = await r.json();
+    if (!data.length) {
+      if (sectorChart) { sectorChart.destroy(); sectorChart = null; }
+      empty.style.display = '';
+      body.innerHTML = '';
+      return;
+    }
+    empty.style.display = 'none';
+    renderSectorDonut(data);
+    renderSectorTable(data);
+    sectorTabLoaded = true;
+  } catch (e) { console.error('Sector tab load failed:', e); }
+}
+
+function renderSectorDonut(data) {
+  const labels = data.map(d => d.sector);
+  const values = data.map(d => d.total);
+  const bg     = labels.map((_, i) => sectorColor(i, labels.length));
+
+  if (sectorChart) sectorChart.destroy();
+  const ctx = document.getElementById('sector-chart').getContext('2d');
+  sectorChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: bg, borderWidth: 1, cutout: '70%' }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            generateLabels: function(chart) {
+              const ds = chart.data.datasets[0];
+              const total = ds.data.reduce((a, b) => a + b, 0);
+              return chart.data.labels.map((label, i) => ({
+                text: `${label} — ${inrCompact(ds.data[i])} (${(ds.data[i]/total*100).toFixed(1)}%)`,
+                fillStyle: ds.backgroundColor[i],
+                hidden: !chart.getDataVisibility(i),
+                index: i,
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const val = ctx.parsed;
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              return `${ctx.label}: ${inrCompact(val)} (${(val/total*100).toFixed(1)}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderSectorTable(data) {
+  const grandTotal = data.reduce((s, d) => s + d.total, 0);
+  document.getElementById('sector-body').innerHTML = data.map((sec, i) => {
+    const color  = sectorColor(i, data.length);
+    const secPct = grandTotal > 0 ? (sec.total / grandTotal * 100).toFixed(1) : '0.0';
+    const rows   = sec.holdings.map(h =>
+      `<tr>
+        <td>${h.name}</td>
+        <td style="text-align:right;">${h.pct.toFixed(1)}%</td>
+        <td style="text-align:right;color:var(--pico-muted-color);">${grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '—'}%</td>
+        <td style="text-align:right;">${inrCompact(h.value)}</td>
+      </tr>`
+    ).join('');
+    return `<details style="margin-bottom:0.75rem;">
+      <summary style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:0.6rem;
+                      padding:0.45rem 0.6rem; border-radius:4px; background:var(--pico-card-sectioning-background-color);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${color};flex-shrink:0;"></span>
+        <strong style="flex:1;">${sec.sector}</strong>
+        <span style="font-size:0.85rem;color:var(--pico-muted-color);">${sec.holdings.length} stock${sec.holdings.length !== 1 ? 's' : ''}</span>
+        <span style="font-weight:600;">${inrCompact(sec.total)}</span>
+        <span style="font-size:0.85rem;color:var(--pico-muted-color);min-width:3.5rem;text-align:right;">${secPct}% of equity</span>
+      </summary>
+      <table style="font-size:0.85rem;margin-top:0.4rem;">
+        <thead><tr>
+          <th>Stock</th>
+          <th style="text-align:right;">% of Sector</th>
+          <th style="text-align:right;">% of Equity</th>
+          <th style="text-align:right;">Value</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </details>`;
+  }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades(); });

@@ -10,8 +10,11 @@ from app.services.mf_breakdown import (
     get_allocation_targets,
     get_available_schemes,
     get_breakdown_chart_data,
+    get_category_composition,
     get_direct_trade_breakdown,
     get_scheme_breakdown,
+    get_sector_composition,
+    get_sector_stock_breakdown,
     get_stock_holdings_table,
     ingest_scheme_csvs,
     save_allocation_targets,
@@ -106,6 +109,24 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
                 continue
     await save_allocation_targets(db, targets)
     return HTMLResponse("<small style='color:green'>Targets saved.</small>")
+
+
+@router.get("/category-composition")
+async def category_composition(db: AsyncSession = Depends(get_db)):
+    data = await get_category_composition(db)
+    return JSONResponse(data)
+
+
+@router.get("/sector-composition")
+async def sector_composition(db: AsyncSession = Depends(get_db)):
+    data = await get_sector_composition(db, equity_only=True)
+    return JSONResponse(data)
+
+
+@router.get("/sector-stock-breakdown")
+async def sector_stock_breakdown(db: AsyncSession = Depends(get_db)):
+    data = await get_sector_stock_breakdown(db)
+    return JSONResponse(data)
 
 
 @router.get("/direct-trades")

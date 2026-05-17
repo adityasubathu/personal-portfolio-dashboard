@@ -16,6 +16,7 @@ class AmfiMarketCap(Base):
     bse_symbol: Mapped[str | None] = mapped_column(String(20))
     nse_symbol: Mapped[str | None] = mapped_column(String(20))
     categorization: Mapped[str] = mapped_column(String(20))
+    sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
     name_normalized: Mapped[str] = mapped_column(String(255), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)
 
@@ -33,4 +34,5 @@ class MfSchemeBreakdown(Base):
     holding_type: Mapped[str] = mapped_column(String(50))
     holdings_pct: Mapped[float] = mapped_column(Numeric(8, 4))
     category: Mapped[str] = mapped_column(String(30))
+    sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
