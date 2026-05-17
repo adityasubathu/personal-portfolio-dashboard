@@ -615,7 +615,10 @@ async function toggleFundExpand(row) {
 let sectorTabLoaded = false;
 let sectorChart = null;
 
-function sectorColor(i, n) { return `hsl(${Math.round((n - 1 - i) * 360 / n)}, 85%, 52%)`; }
+function sectorColor(label, i, n) {
+  if (label === 'Unknown') return '#616161';
+  return `hsl(${Math.round((n - 1 - i) * 360 / n)}, 85%, 52%)`;
+}
 
 async function loadSectorTab() {
   const empty = document.getElementById('sector-empty');
@@ -639,7 +642,7 @@ async function loadSectorTab() {
 function renderSectorDonut(data) {
   const labels = data.map(d => d.sector);
   const values = data.map(d => d.total);
-  const bg     = labels.map((_, i) => sectorColor(i, labels.length));
+  const bg     = labels.map((l, i) => sectorColor(l, i, labels.length));
 
   if (sectorChart) sectorChart.destroy();
   const ctx = document.getElementById('sector-chart').getContext('2d');
@@ -682,7 +685,7 @@ function renderSectorDonut(data) {
 function renderSectorTable(data) {
   const grandTotal = data.reduce((s, d) => s + d.total, 0);
   document.getElementById('sector-body').innerHTML = data.map((sec, i) => {
-    const color  = sectorColor(i, data.length);
+    const color  = sectorColor(sec.sector, i, data.length);
     const secPct = grandTotal > 0 ? (sec.total / grandTotal * 100).toFixed(1) : '0.0';
     const rows   = sec.holdings.map(h =>
       `<tr>

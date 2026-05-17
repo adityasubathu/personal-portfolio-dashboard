@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 import openpyxl
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,10 +41,11 @@ ETF_CAP_OVERRIDE: dict[str, str] = {
     "INF0R8F01141": "Small Cap",   # SML100CASE
 }
 
-_BRACKET_RE = re.compile(r"\[.*?\]")
+_BRACKET_RE = re.compile(r"[\[(].*?[\])]")
 _GLUED_DOT = re.compile(r"\.(?=[a-z])")
 _ABBREV_MAP = [
     (re.compile(r"\bltd\.?\b", re.IGNORECASE), "limited"),
+    (re.compile(r"\bcorpn\.?\b", re.IGNORECASE), "corporation"),
     (re.compile(r"\bcorp\.?\b", re.IGNORECASE), "corporation"),
     (re.compile(r"\bpvt\.?\b", re.IGNORECASE), "private"),
     (re.compile(r"\bco\.?\b", re.IGNORECASE), "company"),
@@ -59,6 +60,7 @@ _MULTI_SPACE = re.compile(r"\s+")
 _NAME_ALIASES: dict[str, str] = {
     "m.r.f.": "mrf",
     "m r f": "mrf",
+    "ltm": "ltimindtree"
 }
 
 
@@ -98,26 +100,32 @@ def _parse_amfi_date(filename: str) -> date | None:
     return date(year, month, day)
 
 
-def _load_sector_master() -> dict[str, str]:
-    """Returns {isin: sector} from sector_master.csv if present, else {}."""
+def _load_sector_master() -> tuple[dict[str, str], dict[str, str]]:
+    """Returns ({isin: sector}, {normalized_name: sector}) from sector_master.csv if present."""
     path = BREAKDOWN_DIR / "sector_master.csv"
     if not path.exists():
-        return {}
+        return {}, {}
     try:
         text = path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
         text = path.read_text(encoding="latin-1")
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
-        return {}
+        return {}, {}
     reader.fieldnames = [f.strip() for f in reader.fieldnames]
-    result: dict[str, str] = {}
+    isin_sector: dict[str, str] = {}
+    name_sector: dict[str, str] = {}
     for row in reader:
         isin = (row.get("ISIN Code") or "").strip()
         sector = (row.get("Industry") or "").strip()
-        if isin and sector:
-            result[isin] = sector
-    return result
+        company = (row.get("Company Name") or "").strip()
+        if not sector:
+            continue
+        if isin:
+            isin_sector[isin] = sector
+        if company:
+            name_sector[normalize_company_name(company)] = sector
+    return isin_sector, name_sector
 
 
 async def sync_amfi_market_cap(db: AsyncSession) -> dict:
@@ -160,13 +168,15 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
 
     wb.close()
 
-    # Enrich with sector from sector_master.csv
-    isin_sector = _load_sector_master()
+    # Enrich with sector from sector_master.csv (ISIN match, fallback to normalized name)
+    isin_sector, name_sector = _load_sector_master()
     sectors_loaded = len(isin_sector)
-    if isin_sector:
+    if isin_sector or name_sector:
         for row in rows_to_insert:
-            if row["isin"] and row["isin"] in isin_sector:
-                row["sector"] = isin_sector[row["isin"]]
+            sec = (isin_sector.get(row["isin"] or "")
+                   or name_sector.get(row["name_normalized"] or ""))
+            if sec:
+                row["sector"] = sec
 
     await db.execute(delete(AmfiMarketCap))
     if rows_to_insert:
@@ -966,15 +976,18 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
         rows = (await db.execute(
             select(MfSchemeBreakdown).where(
                 MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
-                MfSchemeBreakdown.sector.isnot(None),
-                ~MfSchemeBreakdown.sector.in_(list(_NON_EQUITY_SECTORS)),
+                or_(
+                    MfSchemeBreakdown.sector.is_(None),
+                    ~MfSchemeBreakdown.sector.in_(list(_NON_EQUITY_SECTORS)),
+                ),
             )
         )).scalars().all()
         for row in rows:
             contrib = fund_values[row.scheme_isin] * float(row.holdings_pct) / 100
             if contrib <= 0:
                 continue
-            bucket = sector_stocks.setdefault(row.sector, {})
+            sec = row.sector or "Unknown"
+            bucket = sector_stocks.setdefault(sec, {})
             bucket[row.name] = bucket.get(row.name, 0) + contrib
 
     amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
@@ -1003,8 +1016,9 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
                         best_r, best_s = r, amfi_sec
                 if best_r >= 0.85:
                     sec = best_s
-        if not sec or sec in _NON_EQUITY_SECTORS:
+        if sec in _NON_EQUITY_SECTORS:
             continue
+        sec = sec or "Unknown"
         name = i.name or i.tradingsymbol or "Unknown"
         bucket = sector_stocks.setdefault(sec, {})
         bucket[name] = bucket.get(name, 0) + val
