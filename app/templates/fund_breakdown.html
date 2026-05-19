@@ -16,15 +16,9 @@
 <div id="fund-detail" style="display:none;">
   <article>
     <header>Market Cap Summary</header>
-    <table style="font-size:0.85rem;">
-      <thead>
-        <tr>
-          <th>Category</th>
-          <th style="text-align:right;">Allocation %</th>
-        </tr>
-      </thead>
-      <tbody id="cat-summary-body"></tbody>
-    </table>
+    <div style="position:relative; height:300px;">
+      <canvas id="cat-donut"></canvas>
+    </div>
   </article>
 
   <article>
@@ -58,6 +52,18 @@ let schemes = [];
 let holdingsData = [];
 let holdingSortKey = 'pct';
 let holdingSortAsc = false;
+let catDonutChart = null;
+
+const COLORS = {
+  'Large Cap':            '#2e7d32',
+  'Mid Cap':              '#0e93f1',
+  'Small Cap':            '#ff7c00',
+  'Unclassified Equity':  '#ff9800',
+  'Gold':                 '#fcba03',
+  'Debt':                 '#d926a7',
+  'Cash':                 '#9e9e9e',
+  'Other':                '#e0291f',
+};
 
 async function loadSchemes() {
   const r = await fetch('/api/v1/mf-breakdown/schemes');
@@ -78,9 +84,41 @@ async function loadFund(isin) {
   document.getElementById('fund-empty').style.display = 'none';
   document.getElementById('fund-detail').style.display = '';
 
-  document.getElementById('cat-summary-body').innerHTML = data.category_summary.map(c =>
-    `<tr><td>${c.category}</td><td style="text-align:right">${c.pct.toFixed(2)}%</td></tr>`
-  ).join('');
+  const labels = data.category_summary.map(c => c.category);
+  const values = data.category_summary.map(c => c.pct);
+  const bg = labels.map(l => COLORS[l] || '#616161');
+
+  if (catDonutChart) catDonutChart.destroy();
+  const ctx = document.getElementById('cat-donut').getContext('2d');
+  catDonutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: bg, borderWidth: 1, cutout: '70%' }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            generateLabels: function(chart) {
+              const ds = chart.data.datasets[0];
+              return chart.data.labels.map((label, i) => ({
+                text: `${label} — ${ds.data[i].toFixed(1)}%`,
+                fillStyle: ds.backgroundColor[i],
+                hidden: !chart.getDataVisibility(i),
+                index: i,
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+          }
+        }
+      }
+    }
+  });
 
   holdingsData = data.holdings;
   holdingSortKey = 'pct';
