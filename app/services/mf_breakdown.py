@@ -8,7 +8,6 @@ from pathlib import Path
 
 import openpyxl
 from sqlalchemy import and_, delete, func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.allocation_target import AllocationTarget
@@ -320,13 +319,17 @@ def _resolve_equity_sector(
     return None
 
 
+_MF_DEBT_RE = re.compile(r"\b(liquid|money\s+market|savings\s+fund|low\s+duration)\b", re.IGNORECASE)
+_REIT_RE = re.compile(r"\b(reit|real\s+estate\s+trust)\b", re.IGNORECASE)
+
+
 def _classify_type(holding_type: str, name: str) -> str:
     t = holding_type.strip()
     if t.startswith("Bond"):
         return "Debt"
     if t.startswith("Cash") or t == "Cash":
         return "Cash"
-    if t.startswith("Mutual Fund") and re.search(r"\bliquid", name, re.IGNORECASE):
+    if t.startswith("Mutual Fund") and (_MF_DEBT_RE.search(t) or _MF_DEBT_RE.search(name)):
         return "Debt"
     return "Other"
 
@@ -345,7 +348,7 @@ def _sector_for_type(holding_type: str, name: str) -> str | None:
         return "Fixed Income"
     if t.startswith("Cash") or t == "Cash":
         return "Liquid / Money Market"
-    if t.startswith("Mutual Fund") and re.search(r"\bliquid", name, re.IGNORECASE):
+    if t.startswith("Mutual Fund") and (_MF_DEBT_RE.search(t) or _MF_DEBT_RE.search(name)):
         return "Liquid / Money Market"
     return None
 
@@ -389,11 +392,15 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
 
     # Match "liquid" at a word start (no trailing boundary — catches LIQUIDCASE, LIQUIDBEES, etc.)
     _DEBT_KEYWORDS = re.compile(r"\b(debt|liquid)", re.IGNORECASE)
+    _ARBITRAGE_RE = re.compile(r"\barbitrage\b", re.IGNORECASE)
     debt_fund_isins: set[str] = set()
+    arbitrage_fund_isins: set[str] = set()
     for i in held_funds:
         name_to_check = " ".join(filter(None, [i.tradingsymbol, i.name]))
         if i.isin and _DEBT_KEYWORDS.search(name_to_check):
             debt_fund_isins.add(i.isin)
+        if i.isin and _ARBITRAGE_RE.search(name_to_check):
+            arbitrage_fund_isins.add(i.isin)
 
     if not BREAKDOWN_DIR.exists():
         return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
@@ -444,8 +451,14 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
             if key in dedup:
                 dedup[key]["holdings_pct"] += pct
             else:
-                if is_debt_fund:
+                is_arb_holding = scheme_isin in arbitrage_fund_isins and htype.strip() in ("Equity", "Equity - Future")
+                is_reit = bool(_REIT_RE.search(name) or _REIT_RE.search(htype))
+                if is_reit:
+                    category = "Real Estate Trust"
+                elif is_debt_fund:
                     category = "Debt"
+                elif is_arb_holding:
+                    category = "Equity - Arbitrage"
                 elif htype.strip() == "Equity":
                     if equity_override:
                         category = equity_override
@@ -459,9 +472,12 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
                     unmatched.append({"name": name, "scheme_isin": scheme_isin})
 
                 # Sector classification
-                sector: str | None = _sector_for_type(htype, name)
-                if sector is None and htype.strip() == "Equity":
-                    sector = _resolve_equity_sector(name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector)
+                if is_reit:
+                    sector: str | None = "Real Estate Trust"
+                else:
+                    sector = _sector_for_type(htype, name)
+                    if sector is None and htype.strip() == "Equity":
+                        sector = _resolve_equity_sector(name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector)
 
                 dedup[key] = {
                     "scheme_isin": scheme_isin,
@@ -474,18 +490,9 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
                 }
 
         values = list(dedup.values())
+        await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin == scheme_isin))
         if values:
-            stmt = pg_insert(MfSchemeBreakdown).values(values)
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_mf_breakdown_scheme_name_type",
-                set_={
-                    "holdings_pct": stmt.excluded.holdings_pct,
-                    "category": stmt.excluded.category,
-                    "sector": stmt.excluded.sector,
-                    "updated_at": stmt.excluded.updated_at,
-                },
-            )
-            await db.execute(stmt)
+            await db.execute(MfSchemeBreakdown.__table__.insert(), values)
             rows_upserted += len(values)
 
         schemes_processed += 1
@@ -700,7 +707,7 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Gold", "Debt", "Cash", "Other",
+        "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
     ]
     labels = []
     values = []
@@ -852,7 +859,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Gold", "Debt", "Cash", "Other",
+        "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
     ]
     category_summary = []
     for cat in order:
@@ -863,7 +870,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     return {"holdings": holdings, "category_summary": category_summary}
 
 
-_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Gold", "Debt", "Cash", "Other"]
+_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other"]
 
 
 async def get_category_composition(db: AsyncSession) -> list[dict]:
@@ -991,7 +998,10 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
 
     if fund_values:
         breakdown_rows = (await db.execute(
-            select(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())))
+            select(MfSchemeBreakdown).where(
+                MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
+                MfSchemeBreakdown.category != "Equity - Arbitrage",
+            )
         )).scalars().all()
 
         scheme_sector: dict[tuple, float] = defaultdict(float)
@@ -1084,6 +1094,7 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
         rows = (await db.execute(
             select(MfSchemeBreakdown).where(
                 MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
+                MfSchemeBreakdown.category != "Equity - Arbitrage",
                 or_(
                     MfSchemeBreakdown.sector.is_(None),
                     ~MfSchemeBreakdown.sector.in_(list(_NON_EQUITY_SECTORS)),
