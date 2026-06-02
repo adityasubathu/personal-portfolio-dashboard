@@ -447,11 +447,14 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
                 errors.append(f"{csv_path.name} row {row_num}: bad Holdings '{pct_raw}'")
                 continue
 
+            if scheme_isin in arbitrage_fund_isins and htype.strip() in ("Equity - Future", "Cash - General Offset"):
+                continue
+
             key = (name[:255], htype[:50])
             if key in dedup:
                 dedup[key]["holdings_pct"] += pct
             else:
-                is_arb_holding = scheme_isin in arbitrage_fund_isins and htype.strip() in ("Equity", "Equity - Future")
+                is_arb_holding = scheme_isin in arbitrage_fund_isins and htype.strip() == "Equity"
                 is_reit = bool(_REIT_RE.search(name) or _REIT_RE.search(htype))
                 if is_reit:
                     category = "Real Estate Trust"
