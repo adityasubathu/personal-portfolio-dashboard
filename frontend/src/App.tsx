@@ -1,34 +1,28 @@
-import { useQuery } from '@tanstack/react-query'
-import { Container, Title, Text, Loader, Stack, Code, Badge } from '@mantine/core'
+import { Routes, Route } from 'react-router-dom'
+import { AppLayout } from './components/AppLayout'
+import { Text } from '@mantine/core'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// Stub pages — will be replaced in Phase 3
+function Stub({ name }: { name: string }) {
+  return <Text c="dimmed" p="md">{name} — coming in Phase 3</Text>
+}
 
 function App() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['summary-smoke-test'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/v1/portfolio/summary-cards`)
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-      return res.json()
-    },
-  })
-
   return (
-    <Container size="sm" mt="xl">
-      <Stack gap="md">
-        <Title order={2}>Portfolio Tracker — Phase 0 smoke test</Title>
-        <Text c="dimmed">Calling <Code>{API_BASE}/api/v1/portfolio/summary-cards</Code></Text>
-
-        {isLoading && <Loader />}
-        {error && <Badge color="red">Error: {String(error)}</Badge>}
-        {data && (
-          <>
-            <Badge color="green">API reachable ✓</Badge>
-            <Code block>{JSON.stringify(data, null, 2)}</Code>
-          </>
-        )}
-      </Stack>
-    </Container>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Stub name="Dashboard" />} />
+        <Route path="/portfolio/nav-history" element={<Stub name="NAV History" />} />
+        <Route path="/portfolio/breakdown" element={<Stub name="Breakdown" />} />
+        <Route path="/portfolio/fund-breakdown" element={<Stub name="Fund Detail" />} />
+        <Route path="/charts/price" element={<Stub name="Price Chart" />} />
+        <Route path="/charts/nav" element={<Stub name="Fund NAV Chart" />} />
+        <Route path="/trades" element={<Stub name="Trades" />} />
+        <Route path="/import" element={<Stub name="Import" />} />
+        <Route path="/kite" element={<Stub name="Kite" />} />
+        <Route path="/settings" element={<Stub name="Settings" />} />
+      </Route>
+    </Routes>
   )
 }
 
