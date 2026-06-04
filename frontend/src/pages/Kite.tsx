@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Alert, Badge, Box, Button, Group, PasswordInput,
-  Stack, Text, TextInput, Title,
+  ActionIcon, Alert, Badge, Box, Button, Group, Paper, PasswordInput,
+  Stack, Table, Text, TextInput, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconRefresh, IconLogin, IconTrash } from '@tabler/icons-react'
+import { IconRefresh, IconLogin, IconTrash, IconX } from '@tabler/icons-react'
 import {
   useKiteStatus,
   useSaveKiteConfigMutation,
@@ -64,17 +64,8 @@ export function Kite() {
     }
   }
 
-  async function handleSync() {
-    try {
-      const r = await syncMut.mutateAsync()
-      if (r.status === 'SUCCESS') {
-        notifications.show({ color: 'green', message: `Synced ${r.holdings_count} holdings, ${r.positions_count} positions.` })
-      } else {
-        notifications.show({ color: 'orange', message: r.error_message ?? r.status })
-      }
-    } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
-    }
+  function handleSync() {
+    syncMut.mutate()
   }
 
   return (
@@ -183,13 +174,76 @@ export function Kite() {
         <Box>
           <Text fw={600} mb="xs">Sync Holdings</Text>
           <Button
-            size="xs"
-            leftSection={<IconRefresh size={12} />}
+            size="sm"
+            leftSection={<IconRefresh size={14} />}
             loading={syncMut.isPending}
             onClick={handleSync}
           >
             Sync now
           </Button>
+
+          {(syncMut.isSuccess || syncMut.isError) && (
+            <Paper withBorder p="sm" mt="sm">
+              <Group justify="space-between" mb="xs">
+                <Text fw={600} size="sm">
+                  {syncMut.isSuccess && syncMut.data.status === 'SUCCESS' ? 'Sync complete' : 'Sync failed'}
+                </Text>
+                <ActionIcon variant="subtle" size="sm" onClick={() => syncMut.reset()}>
+                  <IconX size={14} />
+                </ActionIcon>
+              </Group>
+
+              {syncMut.isSuccess && syncMut.data.status === 'SUCCESS' && (
+                <Alert color="green" variant="light">
+                  <Text size="sm">
+                    Synced {syncMut.data.holdings_count} holdings, {syncMut.data.positions_count} positions.
+                  </Text>
+                </Alert>
+              )}
+
+              {syncMut.isSuccess && syncMut.data.status !== 'SUCCESS' && (
+                <Stack gap="xs">
+                  <Alert color="red" variant="filled">
+                    <Text size="sm">{syncMut.data.error_message ?? syncMut.data.status}</Text>
+                  </Alert>
+                  {syncMut.data.discrepancies && syncMut.data.discrepancies.length > 0 && (
+                    <Table fz="sm" withColumnBorders={false} withTableBorder>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Symbol</Table.Th>
+                          <Table.Th>ISIN</Table.Th>
+                          <Table.Th>Issue</Table.Th>
+                          <Table.Th style={{ textAlign: 'right' }}>Kite qty</Table.Th>
+                          <Table.Th style={{ textAlign: 'right' }}>Local qty</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {syncMut.data.discrepancies.map((d) => (
+                          <Table.Tr key={d.isin}>
+                            <Table.Td fw={500}>{d.symbol}</Table.Td>
+                            <Table.Td c="dimmed">{d.isin}</Table.Td>
+                            <Table.Td>
+                              <Badge size="sm" color={d.kind === 'new_on_kite' ? 'blue' : d.kind === 'missing_from_kite' ? 'orange' : 'red'} variant="light">
+                                {d.kind === 'new_on_kite' ? 'New on Kite' : d.kind === 'missing_from_kite' ? 'Missing from Kite' : 'Qty mismatch'}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td style={{ textAlign: 'right' }}>{d.kite_qty ?? '—'}</Table.Td>
+                            <Table.Td style={{ textAlign: 'right' }}>{d.local_qty ?? '—'}</Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  )}
+                </Stack>
+              )}
+
+              {syncMut.isError && (
+                <Alert color="red" variant="filled" title="Error">
+                  <Text size="sm">{String(syncMut.error)}</Text>
+                </Alert>
+              )}
+            </Paper>
+          )}
         </Box>
       )}
     </Stack>

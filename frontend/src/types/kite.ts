@@ -23,10 +23,19 @@ export interface KiteConfig {
   token_expiry?: string | null
 }
 
+export interface KiteDiscrepancy {
+  kind: 'new_on_kite' | 'missing_from_kite' | 'quantity_mismatch'
+  symbol: string
+  isin: string
+  kite_qty: string | null
+  local_qty: string | null
+}
+
 export interface KiteSyncResult {
   synced_at: string
   status: string
   holdings_count: number
   positions_count: number
   error_message: string | null
+  discrepancies?: KiteDiscrepancy[]
 }

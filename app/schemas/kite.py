@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel
 
 
@@ -19,9 +19,18 @@ class KiteStatus(BaseModel):
     login_url: Optional[str] = None
 
 
+class KiteDiscrepancy(BaseModel):
+    kind: Literal["new_on_kite", "missing_from_kite", "quantity_mismatch"]
+    symbol: str
+    isin: str
+    kite_qty: Optional[str] = None
+    local_qty: Optional[str] = None
+
+
 class KiteSyncResult(BaseModel):
     synced_at: str
     status: str
     holdings_count: int
     positions_count: int
     error_message: Optional[str] = None
+    discrepancies: list[KiteDiscrepancy] = []

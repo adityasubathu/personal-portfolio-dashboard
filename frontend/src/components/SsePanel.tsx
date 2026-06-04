@@ -6,11 +6,14 @@ import type { SseState } from '../hooks/useSse'
 interface SsePanelProps<T> {
   sse: SseState<T>
   heading?: string
+  doneHeading?: string
+  errorHeading?: string
+  maw?: number | string
   onClose?: () => void
   resultRenderer?: (result: T) => React.ReactNode
 }
 
-export function SsePanel<T>({ sse, heading, onClose, resultRenderer }: SsePanelProps<T>) {
+export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onClose, resultRenderer }: SsePanelProps<T>) {
   const logRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -23,13 +26,19 @@ export function SsePanel<T>({ sse, heading, onClose, resultRenderer }: SsePanelP
 
   const isDone = sse.status === 'done' || sse.status === 'error'
 
+  const resolvedHeading = sse.status === 'error'
+    ? (errorHeading ?? heading ?? 'Done')
+    : sse.status === 'done'
+      ? (doneHeading ?? heading ?? 'Done')
+      : (heading ?? 'Running…')
+
   return (
-    <Paper withBorder p="sm" mt="sm">
+    <Paper withBorder p="sm" mt="sm" maw={maw}>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
           {!isDone && <Loader size="xs" />}
           <Text fw={600} size="sm">
-            {heading ?? (isDone ? 'Done' : 'Running…')}
+            {resolvedHeading}
           </Text>
         </Group>
         {isDone && (
@@ -52,8 +61,8 @@ export function SsePanel<T>({ sse, heading, onClose, resultRenderer }: SsePanelP
             overflowY: 'auto',
             fontSize: '0.78rem',
             lineHeight: 1.5,
-            background: 'var(--mantine-color-dark-8)',
-            color: 'var(--mantine-color-gray-3)',
+            background: 'var(--mantine-color-gray-1)',
+            color: 'var(--mantine-color-gray-8)',
             padding: '0.5rem',
             borderRadius: 4,
             margin: 0,

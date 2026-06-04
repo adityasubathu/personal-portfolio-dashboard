@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   createChart,
+  createSeriesMarkers,
+  AreaSeries,
+  CandlestickSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type SeriesMarker,
   type Time,
   type CandlestickData,
@@ -11,7 +16,7 @@ import {
   CrosshairMode,
   LineStyle,
 } from 'lightweight-charts'
-import { ActionIcon, Box, Button, Group } from '@mantine/core'
+import { Box, Button, Group } from '@mantine/core'
 import { IconRefresh } from '@tabler/icons-react'
 import { usePersistentState } from '../hooks/usePersistentState'
 import type { Candle, NavPoint, TradeMarker } from '../types/charts'
@@ -26,7 +31,7 @@ interface LwChartProps {
   markers?: TradeMarker[]
   persistKey: string
   defaultHeight?: number
-  onVisibleRangeChange?: (from: Time, to: Time) => void
+  priceFormatter?: (price: number) => string
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -47,11 +52,16 @@ export function LwChart({
   markers,
   persistKey,
   defaultHeight = 520,
+  priceFormatter,
 }: LwChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Area'> | ISeriesApi<'Line'> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mainSeriesRef = useRef<ISeriesApi<any> | null>(null)
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const [height, setHeight] = usePersistentState<number>(persistKey, defaultHeight)
+  const heightRef = useRef(height)
+  heightRef.current = height  // always current — avoids stale closure in ResizeObserver
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
   const dragStartH = useRef(0)
@@ -65,42 +75,45 @@ export function LwChart({
       height,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#9ca3af',
+        textColor: '#374151',
       },
       grid: {
-        vertLines: { color: '#374151', style: LineStyle.Dotted },
-        horzLines: { color: '#374151', style: LineStyle.Dotted },
+        vertLines: { color: '#e5e7eb', style: LineStyle.Dotted },
+        horzLines: { color: '#e5e7eb', style: LineStyle.Dotted },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#374151' },
-      timeScale: { borderColor: '#374151', timeVisible: true },
+      rightPriceScale: { borderColor: '#d1d5db' },
+      timeScale: { borderColor: '#d1d5db', timeVisible: true },
+      ...(priceFormatter ? { localization: { priceFormatter } } : {}),
     })
     chartRef.current = chart
 
     if (seriesType === 'candlestick') {
-      const s = chart.addCandlestickSeries({
+      mainSeriesRef.current = chart.addSeries(CandlestickSeries, {
         upColor: '#16a34a',
         downColor: '#dc2626',
         borderVisible: false,
         wickUpColor: '#16a34a',
         wickDownColor: '#dc2626',
       })
-      mainSeriesRef.current = s as unknown as typeof mainSeriesRef.current
     } else if (seriesType === 'area') {
-      const s = chart.addAreaSeries({ lineColor: '#3b82f6', topColor: 'rgba(59,130,246,0.3)', bottomColor: 'rgba(59,130,246,0.0)' })
-      mainSeriesRef.current = s as unknown as typeof mainSeriesRef.current
+      mainSeriesRef.current = chart.addSeries(AreaSeries, {
+        lineColor: '#3b82f6',
+        topColor: 'rgba(59,130,246,0.3)',
+        bottomColor: 'rgba(59,130,246,0.0)',
+      })
     } else {
-      const s = chart.addLineSeries({ color: '#3b82f6' })
-      mainSeriesRef.current = s as unknown as typeof mainSeriesRef.current
+      mainSeriesRef.current = chart.addSeries(LineSeries, { color: '#3b82f6' })
     }
 
     const ro = new ResizeObserver(() => {
-      if (containerRef.current) chart.resize(containerRef.current.clientWidth, height)
+      if (containerRef.current) chart.resize(containerRef.current.clientWidth, heightRef.current)
     })
-    if (containerRef.current) ro.observe(containerRef.current)
+    ro.observe(containerRef.current)
 
     return () => {
       ro.disconnect()
+      markersPluginRef.current = null
       chart.remove()
       chartRef.current = null
       mainSeriesRef.current = null
@@ -108,22 +121,22 @@ export function LwChart({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesType])
 
-  // Update data
+  // Update data + markers
   useEffect(() => {
     const s = mainSeriesRef.current
     if (!s) return
+
     if (seriesType === 'candlestick' && candles) {
-      ;(s as ISeriesApi<'Candlestick'>).setData(
-        candles.map((c) => ({ ...c, time: c.time as Time })) as CandlestickData<Time>[],
-      )
-      if (markers) {
-        ;(s as ISeriesApi<'Candlestick'>).setMarkers(toMarkers(markers))
-      }
+      s.setData(candles.map((c) => ({ ...c, time: c.time as Time })) as CandlestickData<Time>[])
     } else if (line) {
-      const lineData = line.map((p) => ({ time: p.time as Time, value: p.value })) as (LineData<Time> | AreaData<Time>)[]
-      ;(s as ISeriesApi<'Area'>).setData(lineData)
-      if (markers) {
-        ;(s as ISeriesApi<'Area'>).setMarkers(toMarkers(markers))
+      s.setData(line.map((p) => ({ time: p.time as Time, value: p.value })) as (LineData<Time> | AreaData<Time>)[])
+    }
+
+    if (markers?.length) {
+      if (markersPluginRef.current) {
+        markersPluginRef.current.setMarkers(toMarkers(markers))
+      } else {
+        markersPluginRef.current = createSeriesMarkers(s, toMarkers(markers))
       }
     }
   }, [candles, line, markers, seriesType])
@@ -133,11 +146,16 @@ export function LwChart({
     const chart = chartRef.current
     if (!chart || !compareLines) return
     const series = compareLines.map(({ data, color }) => {
-      const s = chart.addLineSeries({ color, lineWidth: 2 })
+      const s = chart.addSeries(LineSeries, { color, lineWidth: 2 })
       s.setData(data.map((p) => ({ time: p.time as Time, value: p.value })) as LineData<Time>[])
       return s
     })
-    return () => series.forEach((s) => chart.removeSeries(s))
+    return () => {
+      // Guard: only remove if the chart hasn't been destroyed and recreated
+      if (chartRef.current === chart) {
+        series.forEach((s) => chart.removeSeries(s))
+      }
+    }
   }, [compareLines])
 
   // Sync height
@@ -169,12 +187,7 @@ export function LwChart({
   return (
     <Box>
       <Group justify="flex-end" mb={4} gap="xs">
-        <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<IconRefresh size={12} />}
-          onClick={() => setHeight(defaultHeight)}
-        >
+        <Button size="xs" variant="subtle" leftSection={<IconRefresh size={12} />} onClick={() => setHeight(defaultHeight)}>
           Reset size
         </Button>
       </Group>
@@ -184,7 +197,7 @@ export function LwChart({
           height,
           borderRadius: '4px 4px 0 0',
           overflow: 'hidden',
-          border: '1px solid var(--mantine-color-dark-4)',
+          border: '1px solid var(--mantine-color-gray-3)',
           borderBottom: 'none',
         }}
       />
@@ -193,9 +206,7 @@ export function LwChart({
         style={{
           height: 7,
           cursor: 'ns-resize',
-          background: isDragging
-            ? 'var(--mantine-color-blue-8)'
-            : 'var(--mantine-color-dark-4)',
+          background: isDragging ? 'var(--mantine-color-blue-8)' : 'var(--mantine-color-gray-3)',
           borderRadius: '0 0 4px 4px',
           display: 'flex',
           alignItems: 'center',

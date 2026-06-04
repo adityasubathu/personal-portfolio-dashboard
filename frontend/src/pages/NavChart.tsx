@@ -74,9 +74,9 @@ export function NavChart() {
     return mainData?.nav
   }, [compareMode, mainData, selectedInstr])
 
-  const etfPricesLine = useMemo(() => {
-    if (compareMode || !mainData || selectedInstr?.type !== 'ETF') return undefined
-    return mainData.prices.length ? mainData.prices : undefined
+  const etfCompareLines = useMemo(() => {
+    if (compareMode || !mainData || selectedInstr?.type !== 'ETF' || !mainData.prices.length) return undefined
+    return [{ data: mainData.prices, label: `${selectedInstr?.name ?? 'ETF'} (close price)`, color: '#f59e0b' }]
   }, [compareMode, mainData, selectedInstr])
 
   return (
@@ -135,12 +135,13 @@ export function NavChart() {
                 seriesType="area"
                 line={mainLine}
                 markers={mainData.markers}
+                compareLines={etfCompareLines}
                 persistKey={`nav_chart_h_${selectedId}`}
                 defaultHeight={520}
               />
-              {etfPricesLine && (
+              {etfCompareLines && (
                 <Text size="xs" c="dimmed" mt={4}>
-                  Blue = NAV · ETF price data also available via Price Chart
+                  Blue = NAV · Orange = daily close price (Kite OHLC)
                 </Text>
               )}
             </Box>

@@ -12,7 +12,7 @@ const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider defaultColorScheme="dark" theme={{ components: { AppShell: { defaultProps: { header: { height: 48 } } } } }}>
+    <MantineProvider forceColorScheme="light" theme={{ components: { AppShell: { defaultProps: { header: { height: 48 } } } } }}>
       <Notifications />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>

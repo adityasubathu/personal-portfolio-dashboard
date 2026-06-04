@@ -3,18 +3,28 @@ import { Box, Button, Group, Select, Stack, Text, TextInput, Title } from '@mant
 import { notifications } from '@mantine/notifications'
 import { IconRefresh, IconUpload } from '@tabler/icons-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
-import { useNavTracked, useRemoveNavTrackedMutation } from '../api/mf'
+import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, useSyncNavMutation } from '../api/mf'
 import { LwChart } from '../components/LwChart'
 import { SsePanel } from '../components/SsePanel'
 import { useSse } from '../hooks/useSse'
 import { apiUrl } from '../api/client'
 import type { NavPoint } from '../types/portfolio'
 
+function navPriceFormatter(price: number): string {
+  const abs = Math.abs(price)
+  const sign = price < 0 ? '-' : ''
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(2)}L`
+  if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(2)}K`
+  return `${sign}₹${abs.toFixed(2)}`
+}
+
 export function NavHistory() {
   const { data: navSeries, isLoading: navLoading } = useNavHistory()
   const { data: instruments } = useTradedInstruments()
   const { data: tracked } = useNavTracked()
   const removeTrackedMut = useRemoveNavTrackedMutation()
+  const syncHistoryMut = useSyncNavHistoryMutation()
+  const syncNavMut = useSyncNavMutation()
 
   const priceSyncSse = useSse(`${apiUrl('/api/v1/portfolio/sync-price-history/stream')}`)
 
@@ -65,10 +75,10 @@ export function NavHistory() {
         <Box>
           <Text size="xs" c="dimmed" mb={4}>Blue = market value · Orange = invested cost</Text>
           <LwChart
-            seriesType="area"
-            line={valueData}
+            seriesType="line"
             persistKey="portfolio_nav_h"
             defaultHeight={400}
+            priceFormatter={navPriceFormatter}
             compareLines={[
               { data: valueData, label: 'Value', color: '#3b82f6' },
               { data: investedData, label: 'Invested', color: '#f59e0b' },
@@ -76,6 +86,57 @@ export function NavHistory() {
           />
         </Box>
       )}
+
+      {/* MF NAV sync */}
+      <Box>
+        <Text fw={600} mb="xs">Sync MF NAV</Text>
+        <Group gap="xs" mb="xs">
+          <Button
+            size="xs"
+            leftSection={<IconRefresh size={12} />}
+            loading={syncHistoryMut.isPending}
+            onClick={() =>
+              syncHistoryMut.mutate(undefined, {
+                onError: (e) => notifications.show({ color: 'red', message: String(e) }),
+              })
+            }
+          >
+            Sync NAV History (mfapi.in)
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            loading={syncNavMut.isPending}
+            onClick={() =>
+              syncNavMut.mutate(undefined, {
+                onError: (e) => notifications.show({ color: 'red', message: String(e) }),
+              })
+            }
+          >
+            Latest-only (AMFI fallback)
+          </Button>
+        </Group>
+        {syncHistoryMut.data && !syncHistoryMut.data.error && (
+          <Text size="xs">
+            History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
+            {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
+            latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
+            {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
+              <Text span size="xs" c="orange"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</Text>
+            )}
+          </Text>
+        )}
+        {syncHistoryMut.data?.error && <Text size="xs" c="red">{syncHistoryMut.data.error}</Text>}
+        {syncNavMut.data && !syncNavMut.data.error && (
+          <Text size="xs">
+            AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
+            {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
+              <Text span size="xs" c="orange"> · {(syncNavMut.data.missing as unknown[]).length} missing</Text>
+            )}
+          </Text>
+        )}
+        {syncNavMut.data?.error && <Text size="xs" c="red">{syncNavMut.data.error}</Text>}
+      </Box>
 
       {/* Price sync SSE */}
       <Box>
@@ -91,7 +152,7 @@ export function NavHistory() {
             Sync now
           </Button>
         </Group>
-        <SsePanel sse={priceSyncSse} heading="Syncing price history…" />
+        <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" maw={560} />
       </Box>
 
       {/* OHLC fetch SSE */}

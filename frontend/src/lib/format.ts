@@ -24,20 +24,27 @@ export function heatmapBg(
   value: number | null | undefined,
   min: number | null | undefined,
   max: number | null | undefined,
+  mode: 'rg' | 'rb' = 'rg',
 ): string | undefined {
   if (value == null || value === 0) return undefined
   if (value > 0 && max != null && max > 0) {
     const intensity = Math.min(value / max, 1)
-    return `rgba(34, 197, 94, ${0.12 + intensity * 0.3})`
+    const color = mode === 'rb' ? '59, 130, 246' : '34, 197, 94'
+    return `rgba(${color}, ${0.20 + intensity * 0.45})`
   }
   if (value < 0 && min != null && min < 0) {
     const intensity = Math.min(Math.abs(value) / Math.abs(min), 1)
-    return `rgba(239, 68, 68, ${0.12 + intensity * 0.3})`
+    return `rgba(239, 68, 68, ${0.20 + intensity * 0.45})`
   }
   return undefined
 }
 
 export function gainColor(value: number | null | undefined): string {
   if (value == null || value === 0) return 'inherit'
-  return value > 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)'
+  return value > 0 ? 'var(--mantine-color-green-8)' : 'var(--mantine-color-red-8)'
+}
+
+export function gainColorRb(value: number | null | undefined): string {
+  if (value == null || value === 0) return 'inherit'
+  return value > 0 ? 'var(--mantine-color-blue-8)' : 'var(--mantine-color-red-8)'
 }

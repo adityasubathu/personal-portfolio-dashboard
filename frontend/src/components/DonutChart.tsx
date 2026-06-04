@@ -3,7 +3,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 import { Box, Group, Stack, Text } from '@mantine/core'
 import { categoryColor, sectorColor } from '../lib/colors'
-import { inrCompact } from '../lib/format'
+import { inr, inrCompact } from '../lib/format'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -46,7 +46,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
       tooltip: {
         callbacks: {
           label: (ctx: { label: string; parsed: number }) =>
-            `${ctx.label}: ${ctx.parsed.toFixed(2)}%`,
+            `${ctx.label}: ${inr(ctx.parsed)}`,
         },
       },
     },
@@ -58,7 +58,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   }, [values, totalPct])
 
   return (
-    <Group align="flex-start" gap="lg" wrap="nowrap">
+    <Group align="flex-start" gap="lg" wrap="nowrap" justify="center">
       <Box style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
         <Doughnut data={data} options={options} width={size} height={size} />
         <Box
@@ -77,7 +77,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
         </Box>
       </Box>
 
-      <Stack gap={4} style={{ flexGrow: 1 }}>
+      <Stack gap={4} w={280}>
         {labels.map((label, i) => (
           <Group key={label} gap="xs" wrap="nowrap">
             <Box style={{ width: 10, height: 10, borderRadius: 2, background: colors[i], flexShrink: 0 }} />

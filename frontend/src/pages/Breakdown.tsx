@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box, Button, Group, NumberInput, Paper, ScrollArea, Stack,
   Table, Tabs, Text, Title,
@@ -8,11 +8,12 @@ import { IconRefresh } from '@tabler/icons-react'
 import {
   useBreakdownChart,
   useSectorComposition,
+  useSectorStockBreakdown,
   useCategoryComposition,
   useAllocationComparison,
   useSaveAllocationTargetsMutation,
   useClassifyBatchMutation,
-  useDirectTrades,
+  useSchemeBreakdown,
 } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { SsePanel } from '../components/SsePanel'
@@ -49,7 +50,7 @@ function OverviewTab() {
       {comparison && (
         <Box>
           <Text fw={600} mb="xs">Allocation vs Targets</Text>
-          <Table fz="xs" withColumnBorders={false}>
+          <Table fz="sm" withColumnBorders={false}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Category</Table.Th>
@@ -101,10 +102,27 @@ function OverviewTab() {
 
 function SectorTab() {
   const { data: sectors } = useSectorComposition()
+  const { data: stockBreakdown } = useSectorStockBreakdown()
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
   if (!sectors) return <Text size="sm" c="dimmed">Loading…</Text>
 
+  const totalSum = sectors.reduce((acc, s) => acc + s.total, 0)
+  const grandTotal = stockBreakdown ? stockBreakdown.reduce((acc, s) => acc + s.total, 0) : 0
   const labels = sectors.map((s) => s.sector)
-  const values = sectors.map((s) => s.value)
+  const values = sectors.map((s) => s.total)
+
+  const stocksBySector = stockBreakdown
+    ? Object.fromEntries(stockBreakdown.map((s) => [s.sector, s.holdings]))
+    : {}
+
+  function toggle(sector: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.has(sector) ? next.delete(sector) : next.add(sector)
+      return next
+    })
+  }
 
   return (
     <Stack gap="lg">
@@ -113,26 +131,41 @@ function SectorTab() {
       )}
 
       <Box>
-        <Table fz="xs" withColumnBorders={false} highlightOnHover>
+        <Table fz="sm" withColumnBorders={false}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Sector</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>%</Table.Th>
+              <Table.Th style={{ textAlign: 'right' }}>% of equity</Table.Th>
               <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {sectors.map((s, i) => (
-              <Table.Tr key={s.sector}>
-                <Table.Td>
-                  <Group gap={6}>
-                    <Box style={{ width: 8, height: 8, borderRadius: 2, background: sectorColor(i, sectors.length, s.sector) }} />
-                    {s.sector}
-                  </Group>
-                </Table.Td>
-                <Table.Td style={{ textAlign: 'right' }}>{s.pct.toFixed(2)}%</Table.Td>
-                <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.value} compact /></Table.Td>
-              </Table.Tr>
+              <React.Fragment key={s.sector}>
+                <Table.Tr
+                  style={{ cursor: 'pointer', background: 'var(--mantine-color-gray-1)' }}
+                  onClick={() => toggle(s.sector)}
+                >
+                  <Table.Td fw={600}>
+                    {expanded.has(s.sector) ? '▾' : '▸'}{' '}
+                    <Box component="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Box component="span" style={{ width: 8, height: 8, borderRadius: 2, background: sectorColor(i, sectors.length, s.sector), display: 'inline-block' }} />
+                      {s.sector}
+                    </Box>
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>{totalSum > 0 ? (s.total / totalSum * 100).toFixed(2) : '0.00'}%</Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.total} compact /></Table.Td>
+                </Table.Tr>
+                {expanded.has(s.sector) && (stocksBySector[s.sector] ?? []).map((h, j) => (
+                  <Table.Tr key={`${s.sector}-${j}`}>
+                    <Table.Td pl="xl">{h.name}</Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>
+                      <Text c="dimmed">{h.pct.toFixed(2)}% in sector · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity</Text>
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
+                  </Table.Tr>
+                ))}
+              </React.Fragment>
             ))}
           </Table.Tbody>
         </Table>
@@ -141,9 +174,41 @@ function SectorTab() {
   )
 }
 
+function FundStockRows({ schemeIsin, filterCategory }: { schemeIsin: string; filterCategory: string }) {
+  const { data, isLoading } = useSchemeBreakdown(schemeIsin)
+  if (isLoading) return (
+    <Table.Tr>
+      <Table.Td colSpan={3} style={{ paddingLeft: '4rem' }}>
+        <Text c="dimmed">Loading stocks…</Text>
+      </Table.Td>
+    </Table.Tr>
+  )
+  if (!data?.holdings.length) return null
+  const sorted = [...data.holdings]
+    .filter((h) => h.category === filterCategory)
+    .sort((a, b) => b.value - a.value)
+  if (!sorted.length) return null
+  return (
+    <>
+      {sorted.map((h, i) => (
+        <Table.Tr key={i} style={{ background: 'var(--mantine-color-blue-0)' }}>
+          <Table.Td style={{ paddingLeft: '4rem' }}>{h.name}</Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}>{h.pct.toFixed(2)}%</Table.Td>
+        </Table.Tr>
+      ))}
+    </>
+  )
+}
+
 function CompositionTab() {
   const { data: cats } = useCategoryComposition()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [expandedFunds, setExpandedFunds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (cats) setExpanded(new Set(cats.map((c) => c.category)))
+  }, [cats])
 
   if (!cats) return <Text size="sm" c="dimmed">Loading…</Text>
 
@@ -155,72 +220,69 @@ function CompositionTab() {
     })
   }
 
+  function toggleFund(key: string) {
+    setExpandedFunds((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
   return (
-    <Table fz="xs" withColumnBorders={false}>
+    <Table fz="sm" withColumnBorders={false}>
       <Table.Thead>
         <Table.Tr>
-          <Table.Th>Category / Scheme</Table.Th>
+          <Table.Th>Category / Scheme / Stock</Table.Th>
           <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
           <Table.Th style={{ textAlign: 'right' }}>% of category</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
         {cats.map((cat) => (
-          <>
+          <React.Fragment key={cat.category}>
             <Table.Tr
-              key={cat.category}
-              style={{ cursor: 'pointer', background: 'var(--mantine-color-dark-6)' }}
+              style={{ cursor: 'pointer', background: 'var(--mantine-color-gray-1)' }}
               onClick={() => toggle(cat.category)}
             >
               <Table.Td fw={600}>
                 {expanded.has(cat.category) ? '▾' : '▸'}{' '}
                 <Box component="span" style={{ color: categoryColor(cat.category) }}>{cat.category}</Box>
               </Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={cat.total_value} compact /></Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={cat.total} compact /></Table.Td>
               <Table.Td />
             </Table.Tr>
-            {expanded.has(cat.category) && cat.schemes.map((s) => (
-              <Table.Tr key={s.scheme_isin}>
-                <Table.Td pl="xl"><Text size="xs" c="dimmed">{s.name}</Text></Table.Td>
-                <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.value} compact /></Table.Td>
-                <Table.Td style={{ textAlign: 'right' }}>{s.pct_of_category.toFixed(2)}%</Table.Td>
-              </Table.Tr>
-            ))}
-          </>
+            {expanded.has(cat.category) && cat.sources.map((s, i) => {
+              const fundKey = `${cat.category}||${s.isin ?? i}`
+              const canExpand = !!s.isin
+              const isFundExpanded = expandedFunds.has(fundKey)
+              return (
+                <React.Fragment key={fundKey}>
+                  <Table.Tr
+                    style={{
+                      cursor: canExpand ? 'pointer' : undefined,
+                      background: isFundExpanded ? 'var(--mantine-color-gray-2)' : undefined,
+                      fontWeight: isFundExpanded ? 600 : undefined,
+                    }}
+                    onClick={canExpand ? () => toggleFund(fundKey) : undefined}
+                  >
+                    <Table.Td pl="xl">
+                      {canExpand ? (isFundExpanded ? '▾ ' : '▸ ') : ''}
+                      {s.name}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.contribution} compact /></Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>{s.share_pct.toFixed(1)}%</Table.Td>
+                  </Table.Tr>
+                  {canExpand && isFundExpanded && <FundStockRows schemeIsin={s.isin!} filterCategory={cat.category} />}
+                </React.Fragment>
+              )
+            })}
+          </React.Fragment>
         ))}
       </Table.Tbody>
     </Table>
   )
 }
 
-function DirectTradesTab() {
-  const { data } = useDirectTrades()
-  if (!data) return <Text size="sm" c="dimmed">Loading…</Text>
-  return (
-    <Table fz="xs" withColumnBorders={false} highlightOnHover>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Symbol</Table.Th>
-          <Table.Th>Type</Table.Th>
-          <Table.Th style={{ textAlign: 'right' }}>Total Buy</Table.Th>
-          <Table.Th style={{ textAlign: 'right' }}>Total Sell</Table.Th>
-          <Table.Th style={{ textAlign: 'right' }}>Net</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {data.map((r) => (
-          <Table.Tr key={r.symbol}>
-            <Table.Td>{r.symbol}</Table.Td>
-            <Table.Td>{r.type}</Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.total_buy} compact /></Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.total_sell} compact /></Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.net} compact colorize /></Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
-  )
-}
 
 function IngestResultRenderer(result: IngestDonePayload) {
   const { amfi, ingest } = result
@@ -272,13 +334,11 @@ export function Breakdown() {
           <Tabs.Tab value="overview">Overview</Tabs.Tab>
           <Tabs.Tab value="sector">Sector</Tabs.Tab>
           <Tabs.Tab value="composition">Composition</Tabs.Tab>
-          <Tabs.Tab value="direct">Direct Trades</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="overview" pt="md"><OverviewTab /></Tabs.Panel>
         <Tabs.Panel value="sector" pt="md"><SectorTab /></Tabs.Panel>
         <Tabs.Panel value="composition" pt="md"><CompositionTab /></Tabs.Panel>
-        <Tabs.Panel value="direct" pt="md"><DirectTradesTab /></Tabs.Panel>
       </Tabs>
     </Stack>
   )

@@ -169,7 +169,7 @@ export function Import() {
             <select
               value={splitInstrId}
               onChange={(e) => setSplitInstrId(e.target.value)}
-              style={{ width: '100%', padding: '6px', fontSize: '0.85rem', background: 'var(--mantine-color-dark-6)', color: 'inherit', border: '1px solid var(--mantine-color-dark-4)', borderRadius: 4 }}
+              style={{ width: '100%', padding: '6px', fontSize: '0.85rem', background: 'var(--mantine-color-gray-1)', color: 'inherit', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 4 }}
             >
               <option value="">— select —</option>
               {instruments?.map((i) => (

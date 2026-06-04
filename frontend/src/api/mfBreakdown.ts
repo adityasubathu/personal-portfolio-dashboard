@@ -9,6 +9,7 @@ import type {
   SchemeBreakdown,
   SchemeListItem,
   SectorCompositionItem,
+  SectorStockBreakdownItem,
   StockHolding,
 } from '../types/mfBreakdown'
 
@@ -70,7 +71,7 @@ export function useSectorComposition() {
 export function useSectorStockBreakdown() {
   return useQuery({
     queryKey: breakdownKeys.sectorStockBreakdown,
-    queryFn: () => request<SectorCompositionItem[]>('/api/v1/mf-breakdown/sector-stock-breakdown'),
+    queryFn: () => request<SectorStockBreakdownItem[]>('/api/v1/mf-breakdown/sector-stock-breakdown'),
   })
 }
 

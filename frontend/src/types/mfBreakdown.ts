@@ -28,7 +28,7 @@ export interface AllocationComparison {
 
 export interface SchemeHolding {
   name: string
-  scheme_isin: string
+  type: string
   category: string
   pct: number
   value: number
@@ -46,9 +46,20 @@ export interface SchemeListItem {
 
 export interface SectorCompositionItem {
   sector: string
+  total: number
+  sources: Array<{ name: string; source_type: string; fund_pct: number; contribution: number; share_pct: number }>
+}
+
+export interface SectorStockHolding {
+  name: string
   value: number
   pct: number
-  stocks?: StockHolding[]
+}
+
+export interface SectorStockBreakdownItem {
+  sector: string
+  total: number
+  holdings: SectorStockHolding[]
 }
 
 export interface StockHolding {
@@ -63,13 +74,15 @@ export interface StockHolding {
 
 export interface CategoryCompositionItem {
   category: string
-  schemes: Array<{
-    scheme_isin: string
+  total: number
+  sources: Array<{
     name: string
-    value: number
-    pct_of_category: number
+    isin?: string
+    source_type: string
+    fund_pct: number
+    contribution: number
+    share_pct: number
   }>
-  total_value: number
 }
 
 export interface DirectTradeBreakdown {

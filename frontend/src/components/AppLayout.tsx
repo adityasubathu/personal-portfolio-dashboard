@@ -13,7 +13,7 @@ import {
   IconChartLine,
   IconBuildingBank,
   IconChartDonut,
-  IconCandlestick,
+  IconChartCandle,
   IconChartHistogram,
   IconList,
   IconUpload,
@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { to: '/portfolio/nav-history', label: 'NAV History', icon: IconChartLine },
   { to: '/portfolio/breakdown', label: 'Breakdown', icon: IconChartDonut },
   { to: '/portfolio/fund-breakdown', label: 'Fund Detail', icon: IconBuildingBank },
-  { to: '/charts/price', label: 'Price Chart', icon: IconCandlestick },
+  { to: '/charts/price', label: 'Price Chart', icon: IconChartCandle },
   { to: '/charts/nav', label: 'Fund NAV Chart', icon: IconChartHistogram },
   { to: '/trades', label: 'Trades', icon: IconList },
   { to: '/import', label: 'Import', icon: IconUpload },
@@ -40,6 +40,7 @@ export function AppLayout() {
   return (
     <AppShell
       header={{ height: 48 }}
+      footer={{ height: 40 }}
       navbar={{ width: 200, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
@@ -53,9 +54,10 @@ export function AppLayout() {
       <AppShell.Navbar p="xs">
         <ScrollArea h="100%">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={to === '/'}>
+            <NavLink key={to} to={to} end={to === '/'} style={{ textDecoration: 'none' }}>
               {({ isActive }) => (
                 <MantineNavLink
+                  component="div"
                   label={label}
                   leftSection={<Icon size={16} />}
                   active={isActive}
@@ -70,6 +72,8 @@ export function AppLayout() {
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
+
+      <AppShell.Footer style={{ borderTop: '1px solid var(--mantine-color-gray-3)', background: 'var(--mantine-color-gray-0)', height: 40 }} />
     </AppShell>
   )
 }

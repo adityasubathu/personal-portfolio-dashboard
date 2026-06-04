@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Table, Text, UnstyledButton, Group } from '@mantine/core'
 import { IconChevronUp, IconChevronDown, IconSelector } from '@tabler/icons-react'
 import { heatmapBg } from '../lib/format'
@@ -96,7 +96,7 @@ export function DataTable<T>({
 
   function renderRow(row: T, i: number) {
     return (
-      <Table.Tr key={rowKey(row)} style={striped && i % 2 === 1 ? { background: 'var(--mantine-color-dark-7)' } : {}}>
+      <Table.Tr key={rowKey(row)} style={striped && i % 2 === 1 ? { background: 'var(--mantine-color-gray-1)' } : {}}>
         {columns.map((col) => {
           const heat = col.heatmap?.(row)
           const bg = heat ? heatmapBg(heat.value, heat.min, heat.max) : undefined
@@ -122,13 +122,13 @@ export function DataTable<T>({
       <Table.Tbody>
         {sections && !sort
           ? sections.map((sec) => (
-              <>
+              <React.Fragment key={sec.label ?? '__ungrouped'}>
                 {sec.label && (
-                  <Table.Tr key={`section-${sec.label}`}>
+                  <Table.Tr>
                     <Table.Td
                       colSpan={columns.length}
                       style={{
-                        background: 'var(--mantine-color-dark-6)',
+                        background: 'var(--mantine-color-gray-1)',
                         fontWeight: 600,
                         fontSize: '0.75rem',
                         padding: '4px 8px',
@@ -139,7 +139,7 @@ export function DataTable<T>({
                   </Table.Tr>
                 )}
                 {sec.rows.map((row, i) => renderRow(row, i))}
-              </>
+              </React.Fragment>
             ))
           : flatSorted.map((row, i) => renderRow(row, i))}
       </Table.Tbody>

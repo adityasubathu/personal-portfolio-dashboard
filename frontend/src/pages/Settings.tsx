@@ -36,7 +36,7 @@ function DangerButton({ label, description, mutate }: DangerButtonProps) {
 
   return (
     <>
-      <Group justify="space-between" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+      <Group justify="space-between" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
         <div>
           <Text size="sm" fw={500}>{label}</Text>
           <Text size="xs" c="dimmed">{description}</Text>
