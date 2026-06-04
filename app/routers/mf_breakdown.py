@@ -2,7 +2,7 @@ import asyncio
 import json as jsonlib
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -77,7 +77,7 @@ async def ingest_stream(db: AsyncSession = Depends(get_db)):
 VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}
 
 
-@router.patch("/classify-batch", response_class=HTMLResponse)
+@router.patch("/classify-batch")
 async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
     isins = form.getlist("scheme_isin")
@@ -110,7 +110,7 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
         ))
     await db.commit()
 
-    return HTMLResponse(f"<small style='color:green'>Updated {updated} holding(s).</small>")
+    return {"updated": updated}
 
 
 @router.get("/chart-data")
@@ -137,7 +137,7 @@ async def allocation_targets(db: AsyncSession = Depends(get_db)):
     return JSONResponse(targets)
 
 
-@router.post("/allocation-targets", response_class=HTMLResponse)
+@router.post("/allocation-targets")
 async def update_allocation_targets(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
     targets: dict[str, float] = {}
@@ -149,7 +149,7 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
             except ValueError:
                 continue
     await save_allocation_targets(db, targets)
-    return HTMLResponse("<small style='color:green'>Targets saved.</small>")
+    return {"ok": True}
 
 
 @router.get("/category-composition")

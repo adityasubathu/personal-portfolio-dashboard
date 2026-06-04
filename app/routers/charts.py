@@ -13,6 +13,38 @@ from app.models.trade import Trade
 router = APIRouter(prefix="/api/v1/charts")
 
 
+@router.get("/instruments")
+async def chart_instruments(db: AsyncSession = Depends(get_db)):
+    """Instruments that have OHLC price history (for the price chart dropdown)."""
+    result = await db.execute(
+        select(Instrument)
+        .join(PriceHistory, PriceHistory.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type != "MF")
+        .distinct()
+        .order_by(Instrument.tradingsymbol)
+    )
+    return [
+        {"id": i.id, "symbol": i.tradingsymbol, "isin": i.isin, "name": i.name, "type": i.instrument_type}
+        for i in result.scalars().all()
+    ]
+
+
+@router.get("/nav-instruments")
+async def nav_chart_instruments(db: AsyncSession = Depends(get_db)):
+    """Instruments that have NAV history (for the fund NAV chart dropdown)."""
+    result = await db.execute(
+        select(Instrument)
+        .join(NavHistory, NavHistory.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(["MF", "ETF"]))
+        .distinct()
+        .order_by(Instrument.instrument_type, Instrument.name)
+    )
+    return [
+        {"id": i.id, "symbol": i.tradingsymbol, "isin": i.isin, "name": i.name, "type": i.instrument_type}
+        for i in result.scalars().all()
+    ]
+
+
 @router.get("/price/{instrument_id}")
 async def price_chart_data(instrument_id: int, db: AsyncSession = Depends(get_db)):
     rows = (

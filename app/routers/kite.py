@@ -1,23 +1,19 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.kite import KiteConfig, KiteSyncLog
+from app.schemas.kite import KiteLastSync, KiteStatus, KiteSyncResult
 from app.services import kite_client, kite_sync
-from app.templating import templates
 from app.time_util import now_ist
+
 router = APIRouter(prefix="/api/v1/kite", tags=["kite"])
 
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-@router.put("/config", response_class=HTMLResponse)
+@router.put("/config", response_model=KiteStatus)
 async def save_config(
-    request: Request,
     api_key: str = Form(...),
     api_secret: str = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -38,22 +34,18 @@ async def save_config(
         config.api_key = api_key
         config.api_secret = api_secret
         config.redirect_url = settings.kite_redirect_url
-        # Clear old token when credentials change
         config.access_token = None
         config.access_token_expiry = None
 
     await db.commit()
-    # Return updated status panel
-    return await _status_html(request, db)
+    return await _status_json(db)
 
 
-@router.delete("/config", response_class=HTMLResponse)
-async def delete_config(request: Request, db: AsyncSession = Depends(get_db)):
-    """Wipe saved Kite credentials + access token. Returns the refreshed status
-    panel so the UI re-renders into the unconfigured state."""
+@router.delete("/config", response_model=KiteStatus)
+async def delete_config(db: AsyncSession = Depends(get_db)):
     await db.execute(delete(KiteConfig))
     await db.commit()
-    return await _status_html(request, db)
+    return await _status_json(db)
 
 
 @router.get("/config")
@@ -71,10 +63,6 @@ async def get_config(db: AsyncSession = Depends(get_db)):
     }
 
 
-# ---------------------------------------------------------------------------
-# Auth flow
-# ---------------------------------------------------------------------------
-
 @router.get("/auth/url")
 async def auth_url(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
@@ -86,62 +74,51 @@ async def auth_url(db: AsyncSession = Depends(get_db)):
 
 @router.get("/auth/callback")
 async def auth_callback(
-    request: Request,
     action: str = "",
     type: str = "",
     status: str = "",
     request_token: str = "",
     db: AsyncSession = Depends(get_db),
 ):
+    from app.config import settings
+    frontend = settings.frontend_url
     if status != "success" or not request_token:
-        return RedirectResponse(url="/kite?error=login_failed")
+        return RedirectResponse(url=f"{frontend}/kite?error=login_failed")
 
     result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
     config = result.scalar_one_or_none()
     if not config:
-        return RedirectResponse(url="/kite?error=not_configured")
+        return RedirectResponse(url=f"{frontend}/kite?error=not_configured")
 
     try:
         access_token = await kite_client.exchange_token(
             config.api_key, config.api_secret, request_token
         )
     except Exception as e:
-        return RedirectResponse(url=f"/kite?error={str(e)[:80]}")
+        return RedirectResponse(url=f"{frontend}/kite?error={str(e)[:80]}")
 
     config.access_token = access_token
     config.access_token_expiry = kite_sync.next_token_expiry()
     await db.commit()
 
-    return RedirectResponse(url="/kite?login=success")
+    return RedirectResponse(url=f"{frontend}/kite?login=success")
 
 
-# ---------------------------------------------------------------------------
-# Sync
-# ---------------------------------------------------------------------------
-
-@router.post("/sync", response_class=HTMLResponse)
-async def trigger_sync(request: Request, db: AsyncSession = Depends(get_db)):
+@router.post("/sync", response_model=KiteSyncResult)
+async def trigger_sync(db: AsyncSession = Depends(get_db)):
     try:
         result = await kite_sync.sync(db)
     except Exception as e:
-        result = {"status": "FAILED", "error_message": str(e), "holdings_count": 0, "positions_count": 0}
-
-    return templates.TemplateResponse(
-        "partials/sync_status.html",
-        {"request": request, "result": result},
-    )
+        result = {"synced_at": now_ist().isoformat(), "status": "FAILED", "error_message": str(e), "holdings_count": 0, "positions_count": 0}
+    return KiteSyncResult(**result)
 
 
-@router.get("/status", response_class=HTMLResponse)
-async def kite_status(request: Request, db: AsyncSession = Depends(get_db)):
-    return await _status_html(request, db)
+@router.get("/status", response_model=KiteStatus)
+async def kite_status(db: AsyncSession = Depends(get_db)):
+    return await _status_json(db)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def _status_html(request: Request, db: AsyncSession) -> HTMLResponse:
+async def _status_json(db: AsyncSession) -> KiteStatus:
     result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
     config = result.scalar_one_or_none()
 
@@ -150,17 +127,23 @@ async def _status_html(request: Request, db: AsyncSession) -> HTMLResponse:
         sync_result = await db.execute(
             select(KiteSyncLog).order_by(KiteSyncLog.synced_at.desc()).limit(1)
         )
-        last_sync = sync_result.scalar_one_or_none()
+        log = sync_result.scalar_one_or_none()
+        if log:
+            last_sync = KiteLastSync(
+                synced_at=log.synced_at.isoformat(),
+                status=log.status,
+                holdings_count=log.holdings_count,
+                positions_count=log.positions_count,
+                error_message=log.error_message,
+            )
 
-    return templates.TemplateResponse(
-        "partials/kite_status.html",
-        {
-            "request": request,
-            "config": config,
-            "token_valid": _is_token_valid(config) if config else False,
-            "last_sync": last_sync,
-            "login_url": kite_client.login_url(config.api_key) if config else None,
-        },
+    return KiteStatus(
+        configured=config is not None,
+        api_key=config.api_key if config else None,
+        token_valid=_is_token_valid(config) if config else False,
+        token_expiry=config.access_token_expiry.isoformat() if config and config.access_token_expiry else None,
+        last_sync=last_sync,
+        login_url=kite_client.login_url(config.api_key) if config else None,
     )
 
 

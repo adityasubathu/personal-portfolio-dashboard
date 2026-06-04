@@ -4,7 +4,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -15,11 +15,12 @@ from app.models.instrument import Instrument
 from app.models.kite import KiteSyncLog
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
+from app.schemas.portfolio import DirectHoldingsResponse, HoldingRow, HoldingsSection, InstrumentListItem, SummaryCards
 from app.services.kite_historical import fetch_ohlc_for_ticker, sync_price_history
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
 from app.services.xirr import compute_holdings_xirr, portfolio_xirr
-from app.templating import templates
+from app.models.trade import Trade
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["portfolio"])
 
@@ -33,7 +34,6 @@ SECTION_ORDER = [
 
 
 def _sort_key(row: dict, field: str):
-    """Return (is_none, value) — None rows always sort to the end."""
     v = row.get(field)
     if v is None:
         return (1, 0)
@@ -42,9 +42,14 @@ def _sort_key(row: dict, field: str):
     return (0, v)
 
 
-@router.get("/direct", response_class=HTMLResponse)
+def _isodate(v) -> str | None:
+    if v is None:
+        return None
+    return v.isoformat() if hasattr(v, "isoformat") else str(v)
+
+
+@router.get("/direct", response_model=DirectHoldingsResponse)
 async def direct_holdings(
-    request: Request,
     sort: str = Query("symbol"),
     dir: Literal["asc", "desc"] = Query("asc"),
     sections: Literal["on", "off"] = Query("on"),
@@ -68,7 +73,7 @@ async def direct_holdings(
     mf_id_list = [i for i in instr_ids if i in mf_instr_ids]
     prev_close_map: dict[int, tuple[float, date]] = {}
     today_open_map: dict[int, float] = {}
-    ohlc_ltp_map: dict[int, tuple[float, date]] = {}  # instrument_id -> (close, price_date)
+    ohlc_ltp_map: dict[int, tuple[float, date]] = {}
 
     if non_mf_ids:
         sub = select(
@@ -136,7 +141,6 @@ async def direct_holdings(
         for row in (await db.execute(latest_q)).scalars().all():
             etf_nav[row.instrument_id] = (float(row.nav), row.nav_date)
 
-    # Materialise each row into a flat dict of sortable/derived values + refs to h and instr
     enriched: list[dict] = []
     for h, instr in raw:
         cost = float(h.total_cost or 0)
@@ -166,24 +170,25 @@ async def direct_holdings(
         day_chg_abs = ((ltp - ref_price) * float(h.quantity)) if ltp is not None and ref_price else None
 
         enriched.append({
-            "holding": h,
-            "instrument": instr,
+            "instrument_id": instr.id,
             "symbol": instr.tradingsymbol or "",
             "type": instr.instrument_type or "",
+            "isin": instr.isin,
+            "name": instr.name,
             "qty": float(h.quantity),
             "avg_price": float(h.average_price) if h.average_price else None,
             "cost": cost,
             "ltp": ltp,
-            "as_of": ltp_as_of,
+            "as_of": _isodate(ltp_as_of),
             "value": value,
             "pnl": pnl,
             "pnl_pct": pnl_pct,
             "xirr": xirr_pct,
             "nav": nav,
-            "nav_as_of": nav_as_of,
+            "nav_as_of": _isodate(nav_as_of),
             "nav_premium": nav_premium,
             "prev_close": prev_close,
-            "prev_close_date": prev_close_date,
+            "prev_close_date": _isodate(prev_close_date),
             "day_chg_pct": day_chg_pct,
             "day_chg_abs": day_chg_abs,
         })
@@ -194,7 +199,6 @@ async def direct_holdings(
     prev_total = total_value - total_day_chg
     total_day_chg_pct = (total_day_chg / prev_total * 100) if prev_total else None
 
-    # Heatmap ranges — global across visible rows, regardless of sections toggle
     def _range(vs):
         vs = [v for v in vs if v is not None]
         neg = [v for v in vs if v < 0]
@@ -206,7 +210,6 @@ async def direct_holdings(
     xirr_min, xirr_max = _range([r["xirr"] for r in enriched])
     day_chg_abs_min, day_chg_abs_max = _range([r["day_chg_abs"] for r in enriched])
 
-    # Sort with stable tiebreak on symbol
     reverse = dir == "desc"
     enriched.sort(key=lambda r: r["symbol"].lower())
     enriched.sort(key=lambda r: _sort_key(r, sort), reverse=reverse)
@@ -222,24 +225,20 @@ async def direct_holdings(
     else:
         groups = [{"label": None, "rows": enriched, "day_chg_abs_min": day_chg_abs_min, "day_chg_abs_max": day_chg_abs_max}]
 
-    return templates.TemplateResponse(
-        "partials/holdings_table.html",
-        {
-            "request": request,
-            "groups": groups,
-            "sections_enabled": sections_enabled,
-            "current_sort": sort,
-            "current_dir": dir,
-            "total_cost": total_cost,
-            "total_value": total_value,
-            "total_day_chg": total_day_chg,
-            "total_day_chg_pct": total_day_chg_pct,
-            "compare": compare,
-            "pnl_min": pnl_min, "pnl_max": pnl_max,
-            "pnl_pct_min": pnl_pct_min, "pnl_pct_max": pnl_pct_max,
-            "xirr_min": xirr_min, "xirr_max": xirr_max,
-            "day_chg_abs_min": day_chg_abs_min, "day_chg_abs_max": day_chg_abs_max,
-        },
+    return DirectHoldingsResponse(
+        groups=[HoldingsSection(label=g["label"], rows=[HoldingRow(**r) for r in g["rows"]], day_chg_abs_min=g["day_chg_abs_min"], day_chg_abs_max=g["day_chg_abs_max"]) for g in groups],
+        sections_enabled=sections_enabled,
+        current_sort=sort,
+        current_dir=dir,
+        total_cost=total_cost,
+        total_value=total_value,
+        total_day_chg=total_day_chg,
+        total_day_chg_pct=total_day_chg_pct,
+        compare=compare,
+        pnl_min=pnl_min, pnl_max=pnl_max,
+        pnl_pct_min=pnl_pct_min, pnl_pct_max=pnl_pct_max,
+        xirr_min=xirr_min, xirr_max=xirr_max,
+        day_chg_abs_min=day_chg_abs_min, day_chg_abs_max=day_chg_abs_max,
     )
 
 
@@ -285,8 +284,8 @@ async def portfolio_summary(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.get("/summary-cards", response_class=HTMLResponse)
-async def summary_cards(request: Request, db: AsyncSession = Depends(get_db)):
+@router.get("/summary-cards", response_model=SummaryCards)
+async def summary_cards(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Holding, Instrument).join(Instrument, Holding.instrument_id == Instrument.id)
     )
@@ -326,24 +325,62 @@ async def summary_cards(request: Request, db: AsyncSession = Depends(get_db)):
 
     xirr_value = await portfolio_xirr(db, as_of=date.today())
 
-    return templates.TemplateResponse(
-        "partials/summary_cards.html",
-        {
-            "request": request,
-            "total_cost": total_cost,
-            "total_value": total_value,
-            "total_pnl": total_value - total_cost,
-            "last_sync": last_sync_row.synced_at if last_sync_row else None,
-            "xirr": xirr_value,
-        },
+    return SummaryCards(
+        total_cost=total_cost,
+        total_value=total_value,
+        total_pnl=total_value - total_cost,
+        last_sync=last_sync_row.synced_at.isoformat() if last_sync_row else None,
+        xirr=xirr_value,
     )
+
+
+@router.get("/instruments", response_model=list[InstrumentListItem])
+async def traded_instruments(db: AsyncSession = Depends(get_db)):
+    """Instruments the user has ever traded, with combined price+NAV row counts."""
+    traded_ids = select(Trade.instrument_id).distinct()
+
+    price_count_sub = (
+        select(PriceHistory.instrument_id, func.count(PriceHistory.id).label("n"))
+        .group_by(PriceHistory.instrument_id)
+        .subquery()
+    )
+    nav_count_sub = (
+        select(NavHistory.instrument_id, func.count(NavHistory.id).label("n"))
+        .group_by(NavHistory.instrument_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(
+            Instrument,
+            func.coalesce(price_count_sub.c.n, 0).label("n_prices"),
+            func.coalesce(nav_count_sub.c.n, 0).label("n_navs"),
+        )
+        .outerjoin(price_count_sub, price_count_sub.c.instrument_id == Instrument.id)
+        .outerjoin(nav_count_sub, nav_count_sub.c.instrument_id == Instrument.id)
+        .where(Instrument.id.in_(traded_ids))
+        .order_by(
+            (func.coalesce(price_count_sub.c.n, 0) + func.coalesce(nav_count_sub.c.n, 0)).asc(),
+            Instrument.tradingsymbol,
+        )
+    )
+    return [
+        InstrumentListItem(
+            id=i.id,
+            symbol=i.tradingsymbol,
+            isin=i.isin,
+            name=i.name,
+            type=i.instrument_type,
+            n_prices=n_prices + n_navs,
+        )
+        for i, n_prices, n_navs in result.all()
+    ]
 
 
 _price_sync_lock = asyncio.Lock()
 
 
 @router.get("/sync-price-history/stream")
-async def sync_price_history_stream(request: Request, db: AsyncSession = Depends(get_db)):
+async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
     if _price_sync_lock.locked():
         async def _busy():
             yield {"event": "done", "data": jsonlib.dumps({"ok": False, "error": "A price history sync is already running."})}
@@ -385,24 +422,19 @@ async def nav_history_json(db: AsyncSession = Depends(get_db)):
     return JSONResponse(series)
 
 
-@router.post("/upload-ohlc", response_class=HTMLResponse)
+@router.post("/upload-ohlc")
 async def upload_ohlc(
-    request: Request,
     instrument_id: int = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     content = await file.read()
     result = await ingest_ohlc_csv(db, instrument_id, content)
-    return templates.TemplateResponse(
-        "partials/manual_ohlc_status.html",
-        {"request": request, "result": result},
-    )
+    return JSONResponse(result)
 
 
-@router.post("/fetch-ohlc", response_class=HTMLResponse)
+@router.post("/fetch-ohlc")
 async def fetch_ohlc(
-    request: Request,
     ticker: str = Form(...),
     start_date: str = Form(...),
     end_date: str = Form(""),
@@ -410,31 +442,21 @@ async def fetch_ohlc(
 ):
     start = parse_flexible_date(start_date)
     if start is None:
-        return templates.TemplateResponse(
-            "partials/kite_ohlc_fetch_status.html",
-            {"request": request, "result": {"error": f"Unrecognised start date: '{start_date}'"}},
-        )
+        return JSONResponse({"error": f"Unrecognised start date: '{start_date}'"}, status_code=400)
     end = None
     if end_date.strip():
         end = parse_flexible_date(end_date)
         if end is None:
-            return templates.TemplateResponse(
-                "partials/kite_ohlc_fetch_status.html",
-                {"request": request, "result": {"error": f"Unrecognised end date: '{end_date}'"}},
-            )
+            return JSONResponse({"error": f"Unrecognised end date: '{end_date}'"}, status_code=400)
     try:
         result = await fetch_ohlc_for_ticker(db, ticker=ticker, start_date=start, end_date=end)
     except Exception as e:
         result = {"error": str(e)}
-    return templates.TemplateResponse(
-        "partials/kite_ohlc_fetch_status.html",
-        {"request": request, "result": result},
-    )
+    return JSONResponse(result)
 
 
 @router.get("/fetch-ohlc/stream")
 async def fetch_ohlc_stream(
-    request: Request,
     ticker: str = Query(...),
     start_date: str = Query(...),
     end_date: str = Query(""),
