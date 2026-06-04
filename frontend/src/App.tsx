@@ -1,26 +1,30 @@
 import { Routes, Route } from 'react-router-dom'
 import { AppLayout } from './components/AppLayout'
-import { Text } from '@mantine/core'
-
-// Stub pages — will be replaced in Phase 3
-function Stub({ name }: { name: string }) {
-  return <Text c="dimmed" p="md">{name} — coming in Phase 3</Text>
-}
+import { Dashboard } from './pages/Dashboard'
+import { NavHistory } from './pages/NavHistory'
+import { Breakdown } from './pages/Breakdown'
+import { FundBreakdown } from './pages/FundBreakdown'
+import { PriceChart } from './pages/PriceChart'
+import { NavChart } from './pages/NavChart'
+import { Trades } from './pages/Trades'
+import { Import } from './pages/Import'
+import { Kite } from './pages/Kite'
+import { Settings } from './pages/Settings'
 
 function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Stub name="Dashboard" />} />
-        <Route path="/portfolio/nav-history" element={<Stub name="NAV History" />} />
-        <Route path="/portfolio/breakdown" element={<Stub name="Breakdown" />} />
-        <Route path="/portfolio/fund-breakdown" element={<Stub name="Fund Detail" />} />
-        <Route path="/charts/price" element={<Stub name="Price Chart" />} />
-        <Route path="/charts/nav" element={<Stub name="Fund NAV Chart" />} />
-        <Route path="/trades" element={<Stub name="Trades" />} />
-        <Route path="/import" element={<Stub name="Import" />} />
-        <Route path="/kite" element={<Stub name="Kite" />} />
-        <Route path="/settings" element={<Stub name="Settings" />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/portfolio/nav-history" element={<NavHistory />} />
+        <Route path="/portfolio/breakdown" element={<Breakdown />} />
+        <Route path="/portfolio/fund-breakdown" element={<FundBreakdown />} />
+        <Route path="/charts/price" element={<PriceChart />} />
+        <Route path="/charts/nav" element={<NavChart />} />
+        <Route path="/trades" element={<Trades />} />
+        <Route path="/import" element={<Import />} />
+        <Route path="/kite" element={<Kite />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>
   )

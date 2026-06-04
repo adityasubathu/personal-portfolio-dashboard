@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   AppShell,
@@ -40,6 +39,7 @@ export function AppLayout() {
 
   return (
     <AppShell
+      header={{ height: 48 }}
       navbar={{ width: 200, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
@@ -51,7 +51,7 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        <ScrollArea>
+        <ScrollArea h="100%">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/'}>
               {({ isActive }) => (
