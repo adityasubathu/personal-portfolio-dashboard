@@ -878,17 +878,33 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     if not rows:
         return {"holdings": [], "category_summary": []}
 
+    # Resolve fund market value from the holding record
+    holding_row = (await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.isin == scheme_isin)
+    )).first()
+    fund_value = 0.0
+    if holding_row:
+        h, _ = holding_row
+        ltp = float(h.last_price) if h.last_price else None
+        fund_value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+
     holdings = []
-    cat_totals: dict[str, float] = {}
+    cat_value_totals: dict[str, float] = {}
+    cat_pct_totals: dict[str, float] = {}
     for r in rows:
         pct = float(r.holdings_pct)
+        value = round(fund_value * (pct / 100.0), 2)
         holdings.append({
             "name": r.name,
             "type": r.holding_type,
             "category": r.category,
             "pct": round(pct, 4),
+            "value": value,
         })
-        cat_totals[r.category] = cat_totals.get(r.category, 0) + pct
+        cat_value_totals[r.category] = cat_value_totals.get(r.category, 0) + value
+        cat_pct_totals[r.category] = cat_pct_totals.get(r.category, 0) + pct
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
@@ -896,9 +912,13 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     ]
     category_summary = []
     for cat in order:
-        v = cat_totals.get(cat, 0)
-        if v > 0:
-            category_summary.append({"category": cat, "pct": round(v, 2)})
+        pct_total = cat_pct_totals.get(cat, 0)
+        if pct_total > 0:
+            category_summary.append({
+                "category": cat,
+                "pct": round(pct_total, 2),
+                "value": round(cat_value_totals.get(cat, 0), 2),
+            })
 
     return {"holdings": holdings, "category_summary": category_summary}
 

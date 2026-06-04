@@ -1,22 +1,19 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.manual_asset import ManualAsset
-from app.services.manual_assets import compute_fd_value, get_manual_assets_summary
-from app.templating import templates
-from app.time_util import now_ist
+from app.schemas.manual_assets import ManualAssetsSummary
+from app.services.manual_assets import get_manual_assets_summary
 
 router = APIRouter(prefix="/api/v1/manual-assets", tags=["manual-assets"])
 
 
-@router.post("/fd", response_class=HTMLResponse)
+@router.post("/fd", response_model=ManualAssetsSummary)
 async def add_fd(
-    request: Request,
     label: str = Form(...),
     principal: float = Form(...),
     interest_rate: float = Form(...),
@@ -36,12 +33,11 @@ async def add_fd(
     )
     db.add(asset)
     await db.commit()
-    return await _render_assets_partial(request, db)
+    return await _summary(db)
 
 
-@router.post("/ppf", response_class=HTMLResponse)
+@router.post("/ppf", response_model=ManualAssetsSummary)
 async def add_ppf(
-    request: Request,
     label: str = Form("PPF"),
     current_value: float = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -57,12 +53,11 @@ async def add_ppf(
         db.add(ManualAsset(asset_type="PPF", label=label, current_value=current_value))
 
     await db.commit()
-    return await _render_assets_partial(request, db)
+    return await _summary(db)
 
 
-@router.post("/nps", response_class=HTMLResponse)
+@router.post("/nps", response_model=ManualAssetsSummary)
 async def add_nps(
-    request: Request,
     label: str = Form("NPS"),
     current_value: float = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -78,12 +73,11 @@ async def add_nps(
         db.add(ManualAsset(asset_type="NPS", label=label, current_value=current_value))
 
     await db.commit()
-    return await _render_assets_partial(request, db)
+    return await _summary(db)
 
 
-@router.post("/cash", response_class=HTMLResponse)
+@router.post("/cash", response_model=ManualAssetsSummary)
 async def add_cash(
-    request: Request,
     label: str = Form("Savings / Current"),
     current_value: float = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -99,28 +93,27 @@ async def add_cash(
         db.add(ManualAsset(asset_type="CASH", label=label, current_value=current_value))
 
     await db.commit()
-    return await _render_assets_partial(request, db)
+    return await _summary(db)
 
 
-@router.delete("/{asset_id}", response_class=HTMLResponse)
-async def delete_asset(
-    request: Request,
-    asset_id: int,
-    db: AsyncSession = Depends(get_db),
-):
+@router.delete("/{asset_id}", response_model=ManualAssetsSummary)
+async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db)):
     await db.execute(delete(ManualAsset).where(ManualAsset.id == asset_id))
     await db.commit()
-    return await _render_assets_partial(request, db)
+    return await _summary(db)
 
 
-@router.get("", response_class=HTMLResponse)
-async def list_assets(request: Request, db: AsyncSession = Depends(get_db)):
-    return await _render_assets_partial(request, db)
+@router.get("", response_model=ManualAssetsSummary)
+async def list_assets(db: AsyncSession = Depends(get_db)):
+    return await _summary(db)
 
 
-async def _render_assets_partial(request: Request, db: AsyncSession) -> HTMLResponse:
-    summary = await get_manual_assets_summary(db)
-    return templates.TemplateResponse(
-        "partials/manual_assets.html",
-        {"request": request, **summary},
-    )
+async def _summary(db: AsyncSession) -> ManualAssetsSummary:
+    data = await get_manual_assets_summary(db)
+    # Coerce date objects to strings for Pydantic
+    for fd in data.get("fds", []):
+        if fd.get("start_date") and not isinstance(fd["start_date"], str):
+            fd["start_date"] = fd["start_date"].isoformat()
+        if fd.get("maturity_date") and not isinstance(fd["maturity_date"], str):
+            fd["maturity_date"] = fd["maturity_date"].isoformat()
+    return ManualAssetsSummary(**data)

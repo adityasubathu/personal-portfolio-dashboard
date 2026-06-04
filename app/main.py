@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import *  # noqa: F401, F403 — ensures all models are registered
 
@@ -26,11 +26,14 @@ from app.config import settings  # noqa: E402
 
 app = FastAPI(title="Portfolio Manager", lifespan=lifespan)
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Routers
-from app.routers import pages, trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings, charts  # noqa: E402
-app.include_router(pages.router)
+from app.routers import trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings, charts  # noqa: E402
 app.include_router(trades.router)
 app.include_router(portfolio.router)
 app.include_router(kite.router)
