@@ -15,6 +15,7 @@
     {% endfor %}
   </select>
   <small id="chart-meta" style="color:var(--pico-muted-color);"></small>
+  <button onclick="resetChartSize()" style="margin:0; padding:0.2rem 0.6rem; font-size:0.78rem;" class="secondary outline">Reset size</button>
   <label style="margin:0 0 0 auto; font-size:0.85rem; font-weight:normal; display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
     <input type="checkbox" id="compare-toggle" onchange="toggleCompareMode()" style="width:auto; margin:0;">
     Compare
@@ -63,7 +64,10 @@
   <small style="color:var(--pico-muted-color);">Gap = premium/discount</small>
 </div>
 
-<div id="chart-container" style="position:relative; height:520px; border:1px solid var(--pico-table-border-color); border-radius:4px;"></div>
+<div id="chart-container" style="position:relative; height:520px; border:1px solid var(--pico-table-border-color); border-radius:4px 4px 0 0;"></div>
+<div id="chart-resize-handle" title="Drag to resize" style="height:7px;cursor:ns-resize;background:var(--pico-table-border-color);border-radius:0 0 4px 4px;border:1px solid var(--pico-table-border-color);border-top:none;display:flex;align-items:center;justify-content:center;">
+  <svg width="24" height="4" viewBox="0 0 24 4" style="opacity:0.45;pointer-events:none;"><line x1="2" y1="1.5" x2="22" y2="1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="3.5" x2="22" y2="3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+</div>
 {% endif %}
 {% endblock %}
 
@@ -371,7 +375,46 @@
     btn.removeAttribute('aria-busy');
   }
 
+  const _NAV_DEFAULT_H = 520;
+
+  function _readHeightCookie(key) {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + key + '=([^;]*)'));
+    return m ? parseInt(m[1]) : null;
+  }
+
+  function _saveHeightCookie(key, h) {
+    document.cookie = `${key}=${h};max-age=${10*365*24*3600};path=/;samesite=lax`;
+  }
+
+  function resetChartSize() {
+    document.getElementById('chart-container').style.height = _NAV_DEFAULT_H + 'px';
+    document.cookie = 'nav_chart_h=;max-age=0;path=/';
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('chart-container');
+    const handle = document.getElementById('chart-resize-handle');
+    const saved = _readHeightCookie('nav_chart_h');
+    if (saved && saved >= 200) container.style.height = saved + 'px';
+
+    let startY, startH;
+    handle.addEventListener('mousedown', e => {
+      startY = e.clientY;
+      startH = container.offsetHeight;
+      e.preventDefault();
+      const onMove = e2 => {
+        const h = Math.max(200, Math.min(1400, startH + (e2.clientY - startY)));
+        container.style.height = h + 'px';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        _saveHeightCookie('nav_chart_h', container.offsetHeight);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
     const sel = document.getElementById('instrument-select');
     if (sel && sel.value) loadChart(sel.value);
   });

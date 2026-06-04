@@ -156,7 +156,7 @@ def _write_company_master(rows: list[dict]) -> None:
             })
 
 
-async def sync_amfi_market_cap(db: AsyncSession) -> dict:
+async def sync_amfi_market_cap(db: AsyncSession, on_progress=None) -> dict:
     xlsx_path = _find_amfi_xlsx()
     if not xlsx_path:
         return {"error": "No AverageMarketCapitalization*.xlsx found in data/mf_portfolio_breakdown/"}
@@ -182,6 +182,9 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
             alias_val = (mrow.get("aliases") or "").strip()
             if isin_key and alias_val:
                 preserved_aliases[isin_key] = alias_val
+
+    if on_progress:
+        await on_progress(f"Loading AMFI data from {xlsx_path.name}…")
 
     wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -234,6 +237,12 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
 
     wb.close()
 
+    if on_progress:
+        await on_progress(
+            f"Parsed {len(rows_to_insert)} companies "
+            f"(Large: {counts['Large Cap']}, Mid: {counts['Mid Cap']}, Small: {counts['Small Cap']})"
+        )
+
     # Enrich with sector: ISIN → NSE symbol → normalized name
     isin_sector, name_sector, symbol_sector = _load_sector_master()
     sectors_loaded = len(isin_sector)
@@ -246,6 +255,8 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
                 sec = name_sector.get(row["name_normalized"] or "")
             if sec:
                 row["sector"] = sec
+        if on_progress:
+            await on_progress(f"Sector enrichment: {sectors_loaded} ISIN mappings applied")
 
     await db.execute(delete(AmfiMarketCap))
     if rows_to_insert:
@@ -253,6 +264,8 @@ async def sync_amfi_market_cap(db: AsyncSession) -> dict:
     await db.flush()
 
     _write_company_master(rows_to_insert)
+    if on_progress:
+        await on_progress("Company master CSV updated")
 
     result = {
         "rows_loaded": len(rows_to_insert),
@@ -353,7 +366,7 @@ def _sector_for_type(holding_type: str, name: str) -> str | None:
     return None
 
 
-async def ingest_scheme_csvs(db: AsyncSession) -> dict:
+async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
     amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
 
     alias_to_isin: dict[str, str] = {}
@@ -414,11 +427,22 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
     errors: list[str] = []
     seen_isins: set[str] = set()
 
+    eligible = [p for p in csv_files if p.stem.strip() in held_isins]
+    isin_to_name = {i.isin: (i.tradingsymbol or i.name or i.isin) for i in held_funds if i.isin}
+    if on_progress:
+        await on_progress(f"Found {len(csv_files)} CSV file(s), {len(eligible)} match held funds")
+
     for csv_path in csv_files:
         scheme_isin = csv_path.stem.strip()
         if scheme_isin not in held_isins:
             skipped_isins.append(scheme_isin)
+            if on_progress:
+                await on_progress(f"  Skip {scheme_isin} (not in holdings)")
             continue
+
+        fund_name = isin_to_name.get(scheme_isin, scheme_isin)
+        if on_progress:
+            await on_progress(f"[{schemes_processed + 1}/{len(eligible)}] {fund_name}")
 
         seen_isins.add(scheme_isin)
         is_debt_fund = scheme_isin in debt_fund_isins
@@ -499,6 +523,12 @@ async def ingest_scheme_csvs(db: AsyncSession) -> dict:
             rows_upserted += len(values)
 
         schemes_processed += 1
+        if on_progress:
+            unmatched_here = sum(1 for u in unmatched if u["scheme_isin"] == scheme_isin)
+            msg = f"  → {len(values)} rows"
+            if unmatched_here:
+                msg += f", {unmatched_here} unmatched"
+            await on_progress(msg)
 
     # Remove rows for schemes whose CSV was deleted.
     if seen_isins:

@@ -105,7 +105,7 @@ async function loadFund(isin) {
             generateLabels: function(chart) {
               const ds = chart.data.datasets[0];
               return chart.data.labels.map((label, i) => ({
-                text: `${label} — ${ds.data[i].toFixed(1)}%`,
+                text: `${label} — ${ds.data[i].toFixed(2)}%`,
                 fillStyle: ds.backgroundColor[i],
                 hidden: !chart.getDataVisibility(i),
                 index: i,
@@ -115,7 +115,7 @@ async function loadFund(isin) {
         },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+            label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(2)}%`
           }
         }
       }

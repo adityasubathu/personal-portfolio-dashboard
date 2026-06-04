@@ -11,15 +11,19 @@
     into <code>data/mf_portfolio_breakdown/</code>, then click Ingest.
     Equity holdings are classified by market cap using AMFI data.
   </small></p>
-  <button hx-post="/api/v1/mf-breakdown/ingest"
-          hx-target="#ingest-status"
-          hx-swap="innerHTML"
-          hx-indicator="#ingest-spinner"
-          hx-on::after-request="loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades(); compLoaded=false; sectorTabLoaded=false; if(document.getElementById('tab-panel-sector').style.display!=='none') loadSectorTab(); if(document.getElementById('tab-panel-composition').style.display!=='none') loadComposition()">
-    Ingest Portfolios
-  </button>
-  <span id="ingest-spinner" class="htmx-indicator" aria-busy="true" style="display:none"> Working…</span>
-  <div id="ingest-status"></div>
+  <button id="btn-ingest" onclick="startIngest()">Ingest Portfolios</button>
+
+  <div id="ingest-panel" style="display:none; margin-top:0.75rem;">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+      <span id="ingest-spinner" aria-busy="true" style="display:inline-block; width:1.25rem; height:1.25rem;"></span>
+      <strong id="ingest-heading" style="flex:1;">Ingesting portfolios…</strong>
+      <button id="btn-ingest-close" class="secondary outline" disabled
+              onclick="document.getElementById('ingest-panel').style.display='none'"
+              style="padding:0.2rem 0.6rem; font-size:0.8rem; margin:0;">✕ Close</button>
+    </div>
+    <pre id="ingest-log" style="max-height:16rem; overflow-y:auto; font-size:0.78rem; margin:0; padding:0.5rem; background:var(--pico-code-background-color); border-radius:4px; white-space:pre-wrap;"></pre>
+    <div id="ingest-result" style="margin-top:0.5rem;"></div>
+  </div>
 </article>
 
 <article>
@@ -225,7 +229,7 @@ async function loadBreakdownChart() {
                 const ds = chart.data.datasets[0];
                 const total = ds.data.reduce((a, b) => a + b, 0);
                 return chart.data.labels.map((label, i) => {
-                  const pct = total > 0 ? (ds.data[i] / total * 100).toFixed(1) : 0;
+                  const pct = total > 0 ? (ds.data[i] / total * 100).toFixed(2) : 0;
                   return {
                     text: `${label} — ${inrCompact(ds.data[i])} (${pct}%)`,
                     fillStyle: ds.backgroundColor[i],
@@ -241,7 +245,7 @@ async function loadBreakdownChart() {
               label: function(ctx) {
                 const val = ctx.parsed;
                 const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                const pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
+                const pct = total > 0 ? (val / total * 100).toFixed(2) : 0;
                 return `${ctx.label}: ${inrCompact(val)} (${pct}%)`;
               }
             }
@@ -662,7 +666,7 @@ function renderSectorDonut(data) {
               const ds = chart.data.datasets[0];
               const total = ds.data.reduce((a, b) => a + b, 0);
               return chart.data.labels.map((label, i) => ({
-                text: `${label} — ${inrCompact(ds.data[i])} (${(ds.data[i]/total*100).toFixed(1)}%)`,
+                text: `${label} — ${inrCompact(ds.data[i])} (${(ds.data[i]/total*100).toFixed(2)}%)`,
                 fillStyle: ds.backgroundColor[i],
                 hidden: !chart.getDataVisibility(i),
                 index: i,
@@ -675,7 +679,7 @@ function renderSectorDonut(data) {
             label: function(ctx) {
               const val = ctx.parsed;
               const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-              return `${ctx.label}: ${inrCompact(val)} (${(val/total*100).toFixed(1)}%)`;
+              return `${ctx.label}: ${inrCompact(val)} (${(val/total*100).toFixed(2)}%)`;
             }
           }
         }
@@ -717,6 +721,124 @@ function renderSectorTable(data) {
       </table>
     </details>`;
   }).join('');
+}
+
+let _ingestRunning = false;
+
+function startIngest() {
+  if (_ingestRunning) return;
+  _ingestRunning = true;
+
+  const btn = document.getElementById('btn-ingest');
+  const closeBtn = document.getElementById('btn-ingest-close');
+  const panel = document.getElementById('ingest-panel');
+  const log = document.getElementById('ingest-log');
+  const spinner = document.getElementById('ingest-spinner');
+  const heading = document.getElementById('ingest-heading');
+  const resultDiv = document.getElementById('ingest-result');
+
+  btn.setAttribute('disabled', 'true');
+  btn.setAttribute('aria-busy', 'true');
+  closeBtn.setAttribute('disabled', 'true');
+  panel.style.display = 'block';
+  log.textContent = '';
+  resultDiv.innerHTML = '';
+  spinner.style.display = 'inline-block';
+  heading.textContent = 'Ingesting portfolios…';
+
+  const es = new EventSource('/api/v1/mf-breakdown/ingest/stream');
+
+  es.addEventListener('log', e => {
+    log.textContent += e.data + '\n';
+    log.scrollTop = log.scrollHeight;
+  });
+
+  es.addEventListener('done', e => {
+    es.close();
+    _ingestRunning = false;
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('aria-busy');
+    spinner.style.display = 'none';
+    closeBtn.removeAttribute('disabled');
+
+    const d = JSON.parse(e.data);
+    if (!d.ok) {
+      heading.textContent = 'Ingest failed';
+      resultDiv.innerHTML = `<p style="color:red">${d.error}</p>`;
+      return;
+    }
+
+    heading.textContent = 'Ingest complete';
+    resultDiv.innerHTML = _renderIngestResult(d.amfi, d.ingest);
+    htmx.process(resultDiv);
+
+    loadBreakdownChart();
+    loadStockHoldings();
+    loadAllocData();
+    loadDirectTrades();
+    compLoaded = false;
+    sectorTabLoaded = false;
+    if (document.getElementById('tab-panel-sector').style.display !== 'none') loadSectorTab();
+    if (document.getElementById('tab-panel-composition').style.display !== 'none') loadComposition();
+  });
+
+  es.onerror = () => {
+    if (!_ingestRunning) return;
+    es.close();
+    _ingestRunning = false;
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('aria-busy');
+    spinner.style.display = 'none';
+    closeBtn.removeAttribute('disabled');
+    heading.textContent = 'Connection lost';
+  };
+}
+
+function _renderIngestResult(amfi, ingest) {
+  let html = '';
+  if (amfi.error) {
+    html += `<p style="color:red">AMFI: ${amfi.error}</p>`;
+  } else {
+    html += `<p>AMFI: <strong>${amfi.rows_loaded}</strong> stocks loaded `
+          + `(${amfi.large} large, ${amfi.mid} mid, ${amfi.small} small) `
+          + `from <code>${amfi.file}</code>${amfi.file_date ? ' (' + amfi.file_date + ')' : ''}.</p>`;
+    if (amfi.stale_warning)
+      html += `<p style="color:#b85c00">&#9888; ${amfi.stale_warning}</p>`;
+  }
+  if (ingest.error) {
+    html += `<p style="color:red">Ingestion failed: ${ingest.error}</p>`;
+    return html;
+  }
+  html += `<p>Processed <strong>${ingest.schemes_processed}</strong> scheme(s), `
+        + `<strong>${ingest.rows_upserted}</strong> row(s) upserted.</p>`;
+
+  if (ingest.skipped_isins?.length) {
+    html += `<details><summary>${ingest.skipped_isins.length} CSV(s) skipped (ISIN not in holdings)</summary>`
+          + `<ul>${ingest.skipped_isins.map(i => `<li><small>${i}</small></li>`).join('')}</ul></details>`;
+  }
+  if (ingest.unmatched_equities?.length) {
+    const rows = ingest.unmatched_equities.map(eq =>
+      `<tr><td>${eq.name}</td><td><small>${eq.scheme_isin}</small></td><td>
+        <input type="hidden" name="scheme_isin" value="${eq.scheme_isin}">
+        <input type="hidden" name="name" value="${eq.name}">
+        <select name="category" style="margin:0;padding:0.2rem;font-size:0.8rem;min-width:8rem;">
+          <option value="Unclassified Equity" selected>Unclassified</option>
+          <option value="Large Cap">Large Cap</option>
+          <option value="Mid Cap">Mid Cap</option>
+          <option value="Small Cap">Small Cap</option>
+        </select></td></tr>`
+    ).join('');
+    html += `<details open><summary style="color:#b85c00">${ingest.unmatched_equities.length} equity holding(s) not matched in AMFI</summary>`
+          + `<form hx-patch="/api/v1/mf-breakdown/classify-batch" hx-target="#classify-result" hx-swap="innerHTML" style="margin-top:0.5rem;">`
+          + `<table style="font-size:0.85rem;"><thead><tr><th>Name</th><th>Scheme</th><th>Classification</th></tr></thead><tbody>${rows}</tbody></table>`
+          + `<button type="submit" style="margin-top:0.5rem;font-size:0.85rem;">Save Classifications</button>`
+          + `<span id="classify-result" style="margin-left:0.5rem;"></span></form></details>`;
+  }
+  if (ingest.errors?.length) {
+    html += `<details><summary style="color:red">${ingest.errors.length} error(s)</summary>`
+          + `<ul>${ingest.errors.map(e => `<li><small>${e}</small></li>`).join('')}</ul></details>`;
+  }
+  return html;
 }
 
 document.addEventListener('DOMContentLoaded', () => { loadBreakdownChart(); loadStockHoldings(); loadAllocData(); loadDirectTrades(); });
