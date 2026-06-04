@@ -2,13 +2,13 @@
 
 ---
 
-## 2026-06-04 — Fix session
+## 2026-06-04 23:30 — Fix session
 
 - `app/schemas/kite.py` — added `KiteDiscrepancy` model and `discrepancies` field to `KiteSyncResult`; Pydantic was stripping the field from sync responses, so the frontend never received discrepancy details
 
 ---
 
-## 2026-06-05 — Dashboard console errors, totals row, manual assets
+## 2026-06-05 23:25 — Dashboard console errors, totals row, manual assets
 
 - `Dashboard.tsx` — fixed React warning: `Collapse in={open}` → `Collapse opened={open}` (Mantine v9 API); this also restores the broken Edit button
 - `Dashboard.tsx` — fixed missing `key` prop on fragment in `groups.map`; replaced bare `<>` with `React.Fragment key={...}`
