@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Autocomplete, Box, Stack, Table, Title } from '@mantine/core'
+import { Autocomplete, Box, Stack, Table, Text, Title } from '@mantine/core'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'

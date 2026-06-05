@@ -45,6 +45,9 @@ def _sort_key(row: dict, field: str):
 def _isodate(v) -> str | None:
     if v is None:
         return None
+    from datetime import datetime as _datetime
+    if isinstance(v, _datetime):
+        return v.date().isoformat()
     return v.isoformat() if hasattr(v, "isoformat") else str(v)
 
 
