@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-06-06b — Fix session
+
+- `app/services/mf_breakdown.py` — `ingest_scheme_csvs`: now ingests all CSVs whose stem starts with `"IN"` instead of only held-fund ISINs; removed per-file skip gate; computes `missing_funds` (held ISINs with no CSV) and returns them with ISIN + name
+- `frontend/src/types/mfBreakdown.ts` — replaced `skipped_isins` with `missing_funds: Array<{isin, name}>` on the ingest result type
+- `frontend/src/pages/Breakdown.tsx` — `IngestResultRenderer` now shows a red warning listing each missing fund by ISIN and name when `missing_funds` is non-empty
+
+## 2026-06-06 — Fix session
+
+- `frontend/src/pages/Breakdown.tsx` — Added `ClassifyPanel` component: shown after ingest when unmatched equities are returned; table with per-stock `Select` dropdowns (Large/Mid/Small Cap); submits via `useClassifyBatchMutation` (PATCH `/api/v1/mf-breakdown/classify-batch`) which persists overrides in `equity_category_override` and invalidates all breakdown queries
+- Captures `unmatched_equities` from SSE result into local state so the panel stays visible after the SsePanel is dismissed
+
+---
+
 ## 2026-06-04 23:30 — Fix session
 
 - `app/schemas/kite.py` — added `KiteDiscrepancy` model and `discrepancies` field to `KiteSyncResult`; Pydantic was stripping the field from sync responses, so the frontend never received discrepancy details

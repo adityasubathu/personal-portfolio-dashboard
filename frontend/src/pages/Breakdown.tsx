@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Box, Button, Group, NumberInput, Paper, ScrollArea, Stack,
+  Box, Button, Group, NumberInput, Paper, ScrollArea, Select, Stack,
   Table, Tabs, Text, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
@@ -301,12 +301,107 @@ function IngestResultRenderer(result: IngestDonePayload) {
       {ingest?.unmatched_equities?.length ? (
         <Text size="xs" c="orange">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</Text>
       ) : null}
+      {ingest?.missing_funds?.length ? (
+        <Stack gap={2} mt={4}>
+          <Text size="xs" c="red" fw={600}>Missing CSVs for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</Text>
+          {ingest.missing_funds.map((f) => (
+            <Text key={f.isin} size="xs" c="red">• {f.isin} — {f.name}</Text>
+          ))}
+        </Stack>
+      ) : null}
     </Stack>
+  )
+}
+
+const CAP_CATEGORIES = ['Large Cap', 'Mid Cap', 'Small Cap']
+
+interface UnmatchedEquity { name: string; scheme_isin: string }
+
+function ClassifyPanel({
+  equities,
+  onDone,
+}: {
+  equities: UnmatchedEquity[]
+  onDone: () => void
+}) {
+  const [selections, setSelections] = useState<Record<string, string>>({})
+  const classifyMut = useClassifyBatchMutation()
+
+  // Deduplicate by name for display; one override covers all schemes
+  const unique = equities.filter((e, i, arr) => arr.findIndex((x) => x.name === e.name) === i)
+
+  async function handleSave() {
+    const rows = unique
+      .filter((e) => selections[e.name])
+      .map((e) => ({ scheme_isin: e.scheme_isin, name: e.name, category: selections[e.name] }))
+    if (!rows.length) return
+    try {
+      const res = await classifyMut.mutateAsync(rows)
+      notifications.show({ color: 'green', message: `Classified ${res.updated} holding${res.updated === 1 ? '' : 's'}.` })
+      onDone()
+    } catch (e) {
+      notifications.show({ color: 'red', message: String(e) })
+    }
+  }
+
+  const pendingCount = unique.filter((e) => !selections[e.name]).length
+
+  return (
+    <Paper withBorder p="sm">
+      <Text fw={600} size="sm" mb="xs">
+        Classify unmatched equities ({unique.length})
+      </Text>
+      <Table fz="sm" withColumnBorders={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Stock name</Table.Th>
+            <Table.Th style={{ width: 160 }}>Market cap</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {unique.map((e) => (
+            <Table.Tr key={e.name}>
+              <Table.Td>{e.name}</Table.Td>
+              <Table.Td>
+                <Select
+                  size="xs"
+                  placeholder="Select…"
+                  data={CAP_CATEGORIES}
+                  value={selections[e.name] ?? null}
+                  onChange={(v) => setSelections((prev) => ({ ...prev, [e.name]: v ?? '' }))}
+                />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Group mt="xs" gap="xs">
+        <Button
+          size="xs"
+          loading={classifyMut.isPending}
+          disabled={!Object.values(selections).filter(Boolean).length}
+          onClick={handleSave}
+        >
+          Save{pendingCount > 0 ? ` (${unique.length - pendingCount} of ${unique.length})` : ' all'}
+        </Button>
+        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
+          Dismiss
+        </Button>
+      </Group>
+    </Paper>
   )
 }
 
 export function Breakdown() {
   const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
+  const [unmatchedEquities, setUnmatchedEquities] = useState<UnmatchedEquity[]>([])
+
+  useEffect(() => {
+    const equities = ingestSse.result?.ingest?.unmatched_equities
+    if (equities?.length) {
+      setUnmatchedEquities(equities)
+    }
+  }, [ingestSse.result])
 
   return (
     <Stack gap="lg">
@@ -328,6 +423,13 @@ export function Breakdown() {
         heading="Ingesting portfolios…"
         resultRenderer={(r) => IngestResultRenderer(r as IngestDonePayload)}
       />
+
+      {unmatchedEquities.length > 0 && (
+        <ClassifyPanel
+          equities={unmatchedEquities}
+          onDone={() => setUnmatchedEquities([])}
+        />
+      )}
 
       <Tabs defaultValue="overview">
         <Tabs.List>

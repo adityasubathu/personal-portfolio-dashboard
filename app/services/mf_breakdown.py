@@ -417,32 +417,24 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
 
     if not BREAKDOWN_DIR.exists():
         return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
-                "skipped_isins": [], "errors": ["Directory data/mf_portfolio_breakdown/ not found"]}
+                "missing_funds": [], "errors": ["Directory data/mf_portfolio_breakdown/ not found"]}
 
-    csv_files = list(BREAKDOWN_DIR.glob("*.csv"))
+    csv_files = [p for p in BREAKDOWN_DIR.glob("*.csv") if p.stem.strip().startswith("IN")]
     schemes_processed = 0
     rows_upserted = 0
     unmatched: list[dict] = []
-    skipped_isins: list[str] = []
     errors: list[str] = []
     seen_isins: set[str] = set()
 
-    eligible = [p for p in csv_files if p.stem.strip() in held_isins]
     isin_to_name = {i.isin: (i.tradingsymbol or i.name or i.isin) for i in held_funds if i.isin}
     if on_progress:
-        await on_progress(f"Found {len(csv_files)} CSV file(s), {len(eligible)} match held funds")
+        await on_progress(f"Found {len(csv_files)} CSV file(s) starting with IN")
 
     for csv_path in csv_files:
         scheme_isin = csv_path.stem.strip()
-        if scheme_isin not in held_isins:
-            skipped_isins.append(scheme_isin)
-            if on_progress:
-                await on_progress(f"  Skip {scheme_isin} (not in holdings)")
-            continue
-
         fund_name = isin_to_name.get(scheme_isin, scheme_isin)
         if on_progress:
-            await on_progress(f"[{schemes_processed + 1}/{len(eligible)}] {fund_name}")
+            await on_progress(f"[{schemes_processed + 1}/{len(csv_files)}] {fund_name}")
 
         seen_isins.add(scheme_isin)
         is_debt_fund = scheme_isin in debt_fund_isins
@@ -540,11 +532,17 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
 
     await db.commit()
 
+    # Warn about held funds that have no CSV file.
+    missing_funds = [
+        {"isin": isin, "name": isin_to_name.get(isin, isin)}
+        for isin in sorted(held_isins - seen_isins)
+    ]
+
     return {
         "schemes_processed": schemes_processed,
         "rows_upserted": rows_upserted,
         "unmatched_equities": unmatched,
-        "skipped_isins": skipped_isins,
+        "missing_funds": missing_funds,
         "errors": errors[:30],
     }
 
