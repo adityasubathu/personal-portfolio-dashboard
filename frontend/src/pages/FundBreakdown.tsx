@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Autocomplete, Box, Stack, Table, Text, Title } from '@mantine/core'
+import { Autocomplete, Box, Stack, Table, Title } from '@mantine/core'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
-import { inrCompact } from '../lib/format'
 
 export function FundBreakdown() {
   const { data: schemes } = useAvailableSchemes()
@@ -45,7 +44,7 @@ export function FundBreakdown() {
       {breakdown && breakdown.holdings.length > 0 && (
         <Box>
           <Text fw={600} mb="xs">Holdings</Text>
-          <Table fz="xs" withColumnBorders={false} highlightOnHover>
+          <Table fz="sm" withColumnBorders={false} highlightOnHover>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
@@ -58,7 +57,7 @@ export function FundBreakdown() {
               {breakdown.holdings.map((h, i) => (
                 <Table.Tr key={i}>
                   <Table.Td>{h.name}</Table.Td>
-                  <Table.Td><Text size="xs" c="dimmed">{h.category}</Text></Table.Td>
+                  <Table.Td>{h.category}</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>{h.pct.toFixed(2)}%</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
                 </Table.Tr>
