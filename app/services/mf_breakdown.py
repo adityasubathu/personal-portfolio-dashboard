@@ -864,7 +864,7 @@ async def get_available_schemes(db: AsyncSession) -> list[dict]:
 
     result = []
     for isin in sorted(scheme_isins, key=lambda s: isin_to_name.get(s, s)):
-        result.append({"isin": isin, "name": isin_to_name.get(isin, isin)})
+        result.append({"scheme_isin": isin, "name": isin_to_name.get(isin, isin)})
     return result
 
 
