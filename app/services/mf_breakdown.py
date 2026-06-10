@@ -33,11 +33,15 @@ _MONTH_MAP = {
 # ETFs whose entire equity portfolio is a single market-cap category.
 # All equity holdings in these are classified directly without AMFI lookup.
 ETF_CAP_OVERRIDE: dict[str, str] = {
-    "INF247L01AP3": "Large Cap",   # MON100
     "INF204KB14I2": "Large Cap",   # NIFTYBEES
     "INF732E01045": "Large Cap",   # JUNIORBEES (Nifty Next 50)
     "INF769K01IC9": "Mid Cap",     # MIDCAPETF
     "INF0R8F01141": "Small Cap",   # SML100CASE
+}
+
+# Funds whose equity holdings are entirely foreign; bypasses AMFI market-cap lookup.
+FOREIGN_FUND_ISINS: set[str] = {
+    "INF247L01AP3",   # MON100 / Nasdaq 100
 }
 
 _BRACKET_RE = re.compile(r"[\[(].*?[\])]")
@@ -438,6 +442,7 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
 
         seen_isins.add(scheme_isin)
         is_debt_fund = scheme_isin in debt_fund_isins
+        is_foreign_fund = scheme_isin in FOREIGN_FUND_ISINS
         equity_override = ETF_CAP_OVERRIDE.get(scheme_isin)
 
         try:
@@ -479,7 +484,9 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                 elif is_arb_holding:
                     category = "Equity - Arbitrage"
                 elif htype.strip() == "Equity":
-                    if equity_override:
+                    if is_foreign_fund:
+                        category = "Equity - Foreign"
+                    elif equity_override:
                         category = equity_override
                     else:
                         category = _resolve_equity_category(name, alias_to_isin, name_to_isin, isin_to_mcap, amfi_by_name)
@@ -738,7 +745,7 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
     ]
     labels = []
     values = []
@@ -759,6 +766,7 @@ DEFAULT_TARGETS = {
     "Large Cap": 50.0,
     "Mid Cap": 30.0,
     "Small Cap": 20.0,
+    "Equity - Foreign": 0.0,
 }
 
 
@@ -786,7 +794,9 @@ async def save_allocation_targets(db: AsyncSession, targets: dict[str, float]):
     await db.commit()
 
 
-EQUITY_CATS = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}
+DOMESTIC_EQUITY_CATS = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}
+FOREIGN_CAT = "Equity - Foreign"
+EQUITY_CATS = DOMESTIC_EQUITY_CATS | {FOREIGN_CAT}
 
 
 async def get_allocation_comparison(db: AsyncSession) -> dict:
@@ -805,16 +815,25 @@ async def get_allocation_comparison(db: AsyncSession) -> dict:
     current_equity = sum(v for c, v in current_totals.items() if c in EQUITY_CATS)
     invested_equity = sum(v for c, v in invested_totals.items() if c in EQUITY_CATS)
 
+    foreign_cur = current_totals.get(FOREIGN_CAT, 0)
+    foreign_inv = invested_totals.get(FOREIGN_CAT, 0)
+    domestic_cur = current_equity - foreign_cur
+    domestic_inv = invested_equity - foreign_inv
+
+    foreign_target = targets.get(FOREIGN_CAT, 0)
+    domestic_target = 100.0 - foreign_target
+
     large_target = targets.get("Large Cap", 50)
 
-    categories = sorted(targets.keys())
+    # Domestic cap rows only (percentages relative to domestic equity)
+    domestic_categories = sorted(c for c in targets if c in DOMESTIC_EQUITY_CATS)
     rows = []
-    for cat in categories:
+    for cat in domestic_categories:
         target_pct = targets[cat]
         cur_val = current_totals.get(cat, 0)
         inv_val = invested_totals.get(cat, 0)
-        cur_pct = (cur_val / current_equity * 100) if current_equity > 0 else 0
-        inv_pct = (inv_val / invested_equity * 100) if invested_equity > 0 else 0
+        cur_pct = (cur_val / domestic_cur * 100) if domestic_cur > 0 else 0
+        inv_pct = (inv_val / domestic_inv * 100) if domestic_inv > 0 else 0
 
         cur_large = current_totals.get("Large Cap", 0)
         inv_large = invested_totals.get("Large Cap", 0)
@@ -840,11 +859,43 @@ async def get_allocation_comparison(db: AsyncSession) -> dict:
             "invested_value_diff": round(inv_val - inv_ideal_val, 2),
         })
 
+    # Foreign summary (percentage of total equity)
+    foreign_cur_pct = (foreign_cur / current_equity * 100) if current_equity > 0 else 0
+    foreign_inv_pct = (foreign_inv / invested_equity * 100) if invested_equity > 0 else 0
+    foreign_cur_ideal = current_equity * foreign_target / 100
+    foreign_inv_ideal = invested_equity * foreign_target / 100
+    foreign = {
+        "target_pct": foreign_target,
+        "current_pct": round(foreign_cur_pct, 2),
+        "current_value": round(foreign_cur, 2),
+        "current_diff": round(foreign_cur_pct - foreign_target, 2),
+        "current_value_diff": round(foreign_cur - foreign_cur_ideal, 2),
+        "invested_pct": round(foreign_inv_pct, 2),
+        "invested_value": round(foreign_inv, 2),
+    }
+
+    # Domestic summary (percentage of total equity)
+    domestic_cur_pct = (domestic_cur / current_equity * 100) if current_equity > 0 else 0
+    domestic_inv_pct = (domestic_inv / invested_equity * 100) if invested_equity > 0 else 0
+    domestic_cur_ideal = current_equity * domestic_target / 100
+    domestic = {
+        "target_pct": domestic_target,
+        "current_pct": round(domestic_cur_pct, 2),
+        "current_value": round(domestic_cur, 2),
+        "current_diff": round(domestic_cur_pct - domestic_target, 2),
+        "current_value_diff": round(domestic_cur - domestic_cur_ideal, 2),
+        "invested_pct": round(domestic_inv_pct, 2),
+        "invested_value": round(domestic_inv, 2),
+    }
+
     return {
         "rows": rows,
+        "foreign": foreign,
+        "domestic": domestic,
         "targets": targets,
         "current_equity": round(current_equity, 2),
         "invested_equity": round(invested_equity, 2),
+        "domestic_equity": round(domestic_cur, 2),
     }
 
 
@@ -906,7 +957,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
     ]
     category_summary = []
     for cat in order:
@@ -921,7 +972,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     return {"holdings": holdings, "category_summary": category_summary}
 
 
-_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other"]
+_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other"]
 
 
 async def get_category_composition(db: AsyncSession) -> list[dict]:

@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-06-10 — Equity – Foreign category with domestic/foreign split
+
+- `app/services/mf_breakdown.py` — added `FOREIGN_FUND_ISINS` constant; moved MON100 (INF247L01AP3) from `ETF_CAP_OVERRIDE` into it so its equity holdings classify as `Equity - Foreign`
+- `app/services/mf_breakdown.py` — added `DOMESTIC_EQUITY_CATS`, `FOREIGN_CAT` constants; `EQUITY_CATS` now includes `Equity - Foreign`
+- `app/services/mf_breakdown.py` — `_CAT_ORDER` and both `order` lists updated to include `Equity - Foreign` after `Unclassified Equity`
+- `app/services/mf_breakdown.py` — `DEFAULT_TARGETS` seeded with `Equity - Foreign: 0.0`
+- `app/services/mf_breakdown.py` — `get_allocation_comparison` reworked: cap row % are now relative to domestic equity; response extended with `foreign`, `domestic`, `domestic_equity` fields
+- `app/routers/mf_breakdown.py` — `VALID_CATEGORIES` accepts `Equity - Foreign` for classify-batch
+- `frontend/src/lib/colors.ts` — added indigo color for `Equity - Foreign`
+- `frontend/src/types/mfBreakdown.ts` — added `AllocationSplitSummary`; extended `AllocationComparison` with `foreign`, `domestic`, `domestic_equity`
+- `frontend/src/pages/Breakdown.tsx` — Overview tab: domestic/foreign split mini-table above cap table; cap table labelled as % of domestic equity; foreign target editable via NumberInput; `CAP_CATEGORIES` includes `Equity - Foreign`
+- `README.md` — updated AllocationTarget model description and MF Breakdown section to document new category, foreign fund list, and split allocation behaviour
+
+---
+
 ## 2026-06-06b — Fix session
 
 - `app/services/mf_breakdown.py` — `ingest_scheme_csvs`: now ingests all CSVs whose stem starts with `"IN"` instead of only held-fund ISINs; removed per-file skip gate; computes `missing_funds` (held ISINs with no CSV) and returns them with ISIN + name

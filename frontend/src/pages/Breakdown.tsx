@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Box, Button, Group, NumberInput, Paper, ScrollArea, Select, Stack,
+  Box, Button, Group, NumberInput, Paper, Select, Stack,
   Table, Tabs, Text, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
@@ -31,9 +31,10 @@ function OverviewTab() {
 
   async function handleSaveTargets() {
     try {
-      const allTargets = Object.fromEntries(
-        (comparison?.rows ?? []).map((r) => [r.category, targets[r.category] ?? r.target_pct])
-      )
+      const allTargets = Object.fromEntries([
+        ...(comparison?.rows ?? []).map((r) => [r.category, targets[r.category] ?? r.target_pct] as [string, number]),
+        ['Equity - Foreign', targets['Equity - Foreign'] ?? (comparison?.foreign.target_pct ?? 0)],
+      ])
       await saveMut.mutateAsync(allTargets)
       notifications.show({ color: 'green', message: 'Targets saved.' })
       refetchComp()
@@ -52,7 +53,63 @@ function OverviewTab() {
 
       {comparison && (
         <Box>
-          <Text fw={600} mb="xs">Allocation vs Targets</Text>
+          <Text fw={600} mb="xs">Domestic / Foreign split</Text>
+          <Table fz="sm" withColumnBorders={false} mb="md">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Slice</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
+                <Table.Th style={{ textAlign: 'right' }}>Set foreign %</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {[
+                { label: 'Domestic', summary: comparison.domestic, editable: false },
+                { label: 'Foreign', summary: comparison.foreign, editable: true },
+              ].map(({ label, summary, editable }) => (
+                <Table.Tr key={label}>
+                  <Table.Td>
+                    <Group gap={6}>
+                      <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(label === 'Foreign' ? 'Equity - Foreign' : 'Large Cap') }} />
+                      {label}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>{summary.target_pct.toFixed(1)}%</Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>{summary.current_pct.toFixed(2)}%</Table.Td>
+                  <Table.Td style={{ textAlign: 'right', color: summary.current_diff > 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)' }}>
+                    {summary.current_diff > 0 ? '+' : ''}{summary.current_diff.toFixed(2)}%
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>
+                    <MoneyText value={summary.current_value_diff} compact showSign colorize />
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={summary.current_value} compact /></Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>
+                    {editable ? (
+                      <NumberInput
+                        size="xs"
+                        w={80}
+                        value={targets['Equity - Foreign'] ?? comparison.foreign.target_pct}
+                        onChange={(v) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(v) }))}
+                        min={0}
+                        max={100}
+                        step={1}
+                      />
+                    ) : (
+                      <Text size="xs" c="dimmed">
+                        {(100 - (targets['Equity - Foreign'] ?? comparison.foreign.target_pct)).toFixed(0)}%
+                      </Text>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+
+          <Text fw={600} mb={4}>Market-cap targets <Text component="span" size="xs" c="dimmed" fw={400}>(% of domestic equity)</Text></Text>
           <Table fz="sm" withColumnBorders={false}>
             <Table.Thead>
               <Table.Tr>
@@ -327,7 +384,7 @@ function IngestResultRenderer(result: IngestDonePayload) {
   )
 }
 
-const CAP_CATEGORIES = ['Large Cap', 'Mid Cap', 'Small Cap']
+const CAP_CATEGORIES = ['Large Cap', 'Mid Cap', 'Small Cap', 'Equity - Foreign']
 
 interface UnmatchedEquity { name: string; scheme_isin: string }
 

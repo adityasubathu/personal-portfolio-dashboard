@@ -195,7 +195,7 @@ Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `s
 Persists manual market-cap classifications for equity holdings not found in the AMFI list. Keyed by `name_normalized`. Applied automatically on subsequent ingests.
 
 ### AllocationTarget
-Per-category equity allocation targets (e.g. Large Cap 50%, Mid Cap 30%). Used by the allocation comparison view.
+Per-category equity allocation targets. Stores both the domestic market-cap targets (Large Cap, Mid Cap, Small Cap — as % of domestic equity) and the `Equity - Foreign` target (as % of total equity). The domestic target is derived as `100 − foreign%` and is not stored separately.
 
 ### NavTrackedInstrument
 Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures `sync_nav_history` keeps their NAV up to date.
@@ -305,7 +305,10 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert → stream progress → send final result.
 
 ### MF Breakdown
-Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding (alias → ISIN → name match → fuzzy → `EquityCategoryOverride`) → upsert breakdown rows. Unmatched holdings shown in post-ingest form.
+Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
+
+**Equity categories:** `Large Cap`, `Mid Cap`, `Small Cap`, `Unclassified Equity` (domestic), `Equity - Foreign`, `Equity - Arbitrage`.  
+**Allocation comparison:** cap-row percentages are relative to domestic equity; foreign/domestic split percentages are relative to total equity. `Equity - Foreign` target defaults to 0% until set by the user.
 
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.

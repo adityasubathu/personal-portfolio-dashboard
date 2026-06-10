@@ -19,11 +19,24 @@ export interface AllocationRow {
   invested_value_diff: number
 }
 
+export interface AllocationSplitSummary {
+  target_pct: number
+  current_pct: number
+  current_value: number
+  current_diff: number
+  current_value_diff: number
+  invested_pct: number
+  invested_value: number
+}
+
 export interface AllocationComparison {
   rows: AllocationRow[]
+  foreign: AllocationSplitSummary
+  domestic: AllocationSplitSummary
   targets: Record<string, number>
   current_equity: number
   invested_equity: number
+  domestic_equity: number
 }
 
 export interface SchemeHolding {

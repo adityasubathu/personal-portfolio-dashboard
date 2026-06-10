@@ -74,7 +74,7 @@ async def ingest_stream(db: AsyncSession = Depends(get_db)):
     return EventSourceResponse(_generate())
 
 
-VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}
+VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign"}
 
 
 @router.patch("/classify-batch")
