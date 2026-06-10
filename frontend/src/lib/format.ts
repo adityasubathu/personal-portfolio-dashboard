@@ -39,6 +39,25 @@ export function heatmapBg(
   return undefined
 }
 
+// Returns '#000000' or '#ffffff' for readable text on a heatmapBg cell (blended against white).
+export function heatmapTextColor(
+  value: number | null | undefined,
+  min: number | null | undefined,
+  max: number | null | undefined,
+  mode: 'rg' | 'rb' = 'rg',
+): string | undefined {
+  const bg = heatmapBg(value, min, max, mode)
+  if (!bg) return undefined
+  const m = bg.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)
+  if (!m) return undefined
+  const [r, g, b, a] = [+m[1], +m[2], +m[3], +m[4]]
+  const er = r * a + 255 * (1 - a)
+  const eg = g * a + 255 * (1 - a)
+  const eb = b * a + 255 * (1 - a)
+  const brightness = 0.299 * er + 0.587 * eg + 0.114 * eb
+  return brightness > 160 ? '#000000' : '#ffffff'
+}
+
 export function gainColor(value: number | null | undefined): string {
   if (value == null || value === 0) return 'inherit'
   return value > 0 ? 'var(--mantine-color-green-8)' : 'var(--mantine-color-red-8)'

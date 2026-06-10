@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Badge, Box, Button, Collapse, Divider, Grid, Group,
+  Badge, Box, Button, Collapse, Divider, Group,
   NumberInput, Paper, SegmentedControl, Select, SimpleGrid,
   Stack, Table, Text, TextInput, Title,
 } from '@mantine/core'
@@ -16,7 +16,7 @@ import {
   useDeleteAssetMutation,
 } from '../api/manualAssets'
 import { MoneyText, PctText } from '../components/MoneyText'
-import { inr, inrCompact, pct, heatmapBg, gainColorRb } from '../lib/format'
+import { inr, inrCompact, pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { HoldingRow } from '../types/portfolio'
 
 // ── Summary cards ──────────────────────────────────────────────────────────────
@@ -82,37 +82,42 @@ function HoldingsTable() {
 
   const { groups, pnl_min, pnl_max, pnl_pct_min, pnl_pct_max, xirr_min, xirr_max, day_chg_abs_min, day_chg_abs_max } = data
 
-  function row(r: HoldingRow, i: number) {
+  function row(r: HoldingRow) {
+    const dayPctBg = heatmapBg(r.day_chg_pct, -5, 5, 'rg')
+    const dayAbsBg = heatmapBg(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb')
+    const pnlBg = heatmapBg(r.pnl, pnl_min, pnl_max, 'rb')
+    const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg')
+    const xirrBg = heatmapBg(r.xirr, xirr_min, xirr_max, 'rb')
     return (
-      <Table.Tr key={r.instrument_id} style={i % 2 === 1 ? { background: 'var(--mantine-color-gray-1)' } : {}}>
+      <Table.Tr key={r.instrument_id}>
         <Table.Td fw={500}>{r.symbol}</Table.Td>
-        <Table.Td><Badge size="sm" variant="outline">{r.type}</Badge></Table.Td>
+        <Table.Td style={{ color: 'var(--mantine-color-dimmed)' }}>{r.type}</Table.Td>
         <Table.Td style={{ textAlign: 'right' }}>{r.qty}</Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.avg_price} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.cost} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: heatmapBg(r.day_chg_pct, -5, 5, 'rg') }}>
-          <PctText value={r.day_chg_pct} colorize />
+        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, -5, 5, 'rg') }}>
+          <PctText value={r.day_chg_pct} />
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: heatmapBg(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb') }}>
-          <MoneyText value={r.day_chg_abs} showSign style={{ color: gainColorRb(r.day_chg_abs) }} />
+        <Table.Td style={{ textAlign: 'right', background: dayAbsBg, color: heatmapTextColor(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb') }}>
+          <MoneyText value={r.day_chg_abs} showSign />
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}>
+        <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
           <div>{r.prev_close != null ? inr(r.prev_close) : '—'}</div>
-          {r.prev_close_date && <Text c="dimmed">{r.prev_close_date}</Text>}
+          {r.prev_close_date && <Text size="xs" c="dimmed">{r.prev_close_date}</Text>}
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}>
+        <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
           <div>{r.ltp != null ? inr(r.ltp) : '—'}</div>
-          {r.as_of && <Text c="dimmed">{r.as_of}</Text>}
+          {r.as_of && <Text size="xs" c="dimmed">{r.as_of}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.value} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: heatmapBg(r.pnl, pnl_min, pnl_max, 'rb') }}>
-          <MoneyText value={r.pnl} showSign style={{ color: gainColorRb(r.pnl) }} />
+        <Table.Td style={{ textAlign: 'right', background: pnlBg, color: heatmapTextColor(r.pnl, pnl_min, pnl_max, 'rb') }}>
+          <MoneyText value={r.pnl} showSign />
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg') }}>
-          <PctText value={r.pnl_pct} colorize />
+        <Table.Td style={{ textAlign: 'right', background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg') }}>
+          <PctText value={r.pnl_pct} />
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: heatmapBg(r.xirr, xirr_min, xirr_max, 'rb') }}>
-          <PctText value={r.xirr} style={{ color: gainColorRb(r.xirr) }} />
+        <Table.Td style={{ textAlign: 'right', background: xirrBg, color: heatmapTextColor(r.xirr, xirr_min, xirr_max, 'rb') }}>
+          <PctText value={r.xirr} />
         </Table.Td>
       </Table.Tr>
     )
@@ -130,7 +135,7 @@ function HoldingsTable() {
       </Group>
 
       <Box style={{ overflowX: 'auto' }}>
-        <Table fz="sm" withColumnBorders={false} highlightOnHover>
+        <Table fz="sm" withColumnBorders withRowBorders styles={{ th: { background: 'var(--mantine-color-gray-1)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.03em' } }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Symbol</Table.Th>
@@ -153,17 +158,17 @@ function HoldingsTable() {
               <React.Fragment key={g.label ?? '__ungrouped'}>
                 {g.label && sections === 'on' && (
                   <Table.Tr>
-                    <Table.Td colSpan={13} style={{ background: 'var(--mantine-color-gray-1)', fontWeight: 600, fontSize: '0.875rem', padding: '4px 8px' }}>
+                    <Table.Td colSpan={13} style={{ background: 'var(--mantine-color-gray-2)', fontWeight: 600, fontSize: '0.75rem', padding: '2px 8px', color: 'var(--mantine-color-gray-7)' }}>
                       {g.label}
                     </Table.Td>
                   </Table.Tr>
                 )}
-                {g.rows.map((r, i) => row(r, i))}
+                {g.rows.map((r) => row(r))}
               </React.Fragment>
             ))}
           </Table.Tbody>
           <Table.Tfoot>
-            <Table.Tr style={{ fontWeight: 600, borderTop: '2px solid var(--mantine-color-gray-4)', background: 'var(--mantine-color-gray-0)' }}>
+            <Table.Tr style={{ fontWeight: 600, background: 'var(--mantine-color-gray-1)' }}>
               <Table.Td colSpan={4}>Total</Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>{inr(data.total_cost)}</Table.Td>
               <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
