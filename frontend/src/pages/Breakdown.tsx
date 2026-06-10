@@ -31,7 +31,10 @@ function OverviewTab() {
 
   async function handleSaveTargets() {
     try {
-      await saveMut.mutateAsync(targets)
+      const allTargets = Object.fromEntries(
+        (comparison?.rows ?? []).map((r) => [r.category, targets[r.category] ?? r.target_pct])
+      )
+      await saveMut.mutateAsync(allTargets)
       notifications.show({ color: 'green', message: 'Targets saved.' })
       refetchComp()
     } catch (e) {
