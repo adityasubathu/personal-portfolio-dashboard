@@ -15,7 +15,7 @@ export function MoneyText({ value, compact, showSign, colorize, style, ...rest }
   if (value == null) return <Text component="span" {...rest}>—</Text>
 
   if (privacyMode) {
-    return <Text component="span" c="dimmed" {...rest}>₹•••</Text>
+    return <Text component="span" {...rest}>₹•••</Text>
   }
 
   const formatted = compact ? inrCompact(value) : inr(value)
