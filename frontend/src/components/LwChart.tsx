@@ -19,6 +19,7 @@ import {
 import { Box, Button, Group } from '@mantine/core'
 import { IconRefresh } from '@tabler/icons-react'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { usePrivacy } from '../hooks/usePrivacy'
 import type { Candle, NavPoint, TradeMarker } from '../types/charts'
 
 type SeriesType = 'candlestick' | 'area' | 'line'
@@ -54,6 +55,10 @@ export function LwChart({
   defaultHeight = 520,
   priceFormatter,
 }: LwChartProps) {
+  const { privacyMode } = usePrivacy()
+  const privacyModeRef = useRef(privacyMode)
+  privacyModeRef.current = privacyMode
+
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,7 +89,9 @@ export function LwChart({
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: '#d1d5db' },
       timeScale: { borderColor: '#d1d5db', timeVisible: true },
-      ...(priceFormatter ? { localization: { priceFormatter } } : {}),
+      localization: {
+        priceFormatter: privacyModeRef.current ? () => '•••' : (priceFormatter ?? undefined),
+      },
     })
     chartRef.current = chart
 
@@ -162,6 +169,16 @@ export function LwChart({
   useEffect(() => {
     chartRef.current?.resize(containerRef.current?.clientWidth ?? 600, height)
   }, [height])
+
+  // Update price formatter on privacy toggle without recreating the chart
+  useEffect(() => {
+    if (!chartRef.current) return
+    chartRef.current.applyOptions({
+      localization: {
+        priceFormatter: privacyMode ? () => '•••' : (priceFormatter ?? undefined),
+      },
+    })
+  }, [privacyMode, priceFormatter])
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {

@@ -1,11 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
+  ActionIcon,
   AppShell,
   Burger,
   Group,
   NavLink as MantineNavLink,
   Text,
   ScrollArea,
+  Tooltip,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -19,7 +21,10 @@ import {
   IconUpload,
   IconBrandGoogle,
   IconSettings,
+  IconEye,
+  IconEyeOff,
 } from '@tabler/icons-react'
+import { usePrivacy } from '../hooks/usePrivacy'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
@@ -36,6 +41,7 @@ const NAV_ITEMS = [
 
 export function AppLayout() {
   const [opened, { toggle }] = useDisclosure()
+  const { privacyMode, togglePrivacy } = usePrivacy()
 
   return (
     <AppShell
@@ -45,9 +51,16 @@ export function AppLayout() {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md" gap="sm">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-          <Text fw={700} size="sm">Portfolio Tracker</Text>
+        <Group h="100%" px="md" gap="sm" justify="space-between">
+          <Group gap="sm">
+            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+            <Text fw={700} size="sm">Portfolio Tracker</Text>
+          </Group>
+          <Tooltip label={privacyMode ? 'Show values' : 'Hide values'} position="bottom">
+            <ActionIcon variant={privacyMode ? 'filled' : 'subtle'} color={privacyMode ? 'blue' : 'gray'} onClick={togglePrivacy} aria-label="Toggle privacy mode">
+              {privacyMode ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </AppShell.Header>
 

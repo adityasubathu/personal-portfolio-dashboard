@@ -1,5 +1,6 @@
 import { Text, type TextProps } from '@mantine/core'
 import { inr, inrCompact, pct, gainColor } from '../lib/format'
+import { usePrivacy } from '../hooks/usePrivacy'
 
 interface MoneyTextProps extends Omit<TextProps, 'children'> {
   value: number | null | undefined
@@ -9,7 +10,13 @@ interface MoneyTextProps extends Omit<TextProps, 'children'> {
 }
 
 export function MoneyText({ value, compact, showSign, colorize, style, ...rest }: MoneyTextProps) {
+  const { privacyMode } = usePrivacy()
+
   if (value == null) return <Text component="span" {...rest}>—</Text>
+
+  if (privacyMode) {
+    return <Text component="span" c="dimmed" {...rest}>₹•••</Text>
+  }
 
   const formatted = compact ? inrCompact(value) : inr(value)
   const color = colorize ? gainColor(value) : undefined

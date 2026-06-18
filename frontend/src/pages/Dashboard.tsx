@@ -16,7 +16,7 @@ import {
   useDeleteAssetMutation,
 } from '../api/manualAssets'
 import { MoneyText, PctText } from '../components/MoneyText'
-import { inr, inrCompact, pct, heatmapBg, heatmapTextColor } from '../lib/format'
+import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { HoldingRow } from '../types/portfolio'
 
 // ── Summary cards ──────────────────────────────────────────────────────────────
@@ -29,16 +29,16 @@ function SummaryCards() {
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
       <Paper withBorder p="sm">
         <Text size="xs" c="dimmed">Invested</Text>
-        <Text fw={700} size="lg">{inr(data.total_cost)}</Text>
+        <Text fw={700} size="lg"><MoneyText value={data.total_cost} /></Text>
       </Paper>
       <Paper withBorder p="sm">
         <Text size="xs" c="dimmed">Current value</Text>
-        <Text fw={700} size="lg">{inr(data.total_value)}</Text>
+        <Text fw={700} size="lg"><MoneyText value={data.total_value} /></Text>
       </Paper>
       <Paper withBorder p="sm">
         <Text size="xs" c="dimmed">Total P&amp;L</Text>
         <Text fw={700} size="lg" c={pnlPositive ? 'green' : 'red'}>
-          {pnlPositive ? '+' : ''}{inr(data.total_pnl)}
+          <MoneyText value={data.total_pnl} showSign />
           {' '}
           <Text span size="xs">({pct((data.total_pnl / data.total_cost) * 100)})</Text>
         </Text>
@@ -102,11 +102,11 @@ function HoldingsTable() {
           <MoneyText value={r.day_chg_abs} showSign />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <div>{r.prev_close != null ? inr(r.prev_close) : '—'}</div>
+          <div><MoneyText value={r.prev_close} /></div>
           {r.prev_close_date && <Text size="xs" c="dimmed">{r.prev_close_date}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <div>{r.ltp != null ? inr(r.ltp) : '—'}</div>
+          <div><MoneyText value={r.ltp} /></div>
           {r.as_of && <Text size="xs" c="dimmed">{r.as_of}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.value} /></Table.Td>
@@ -170,15 +170,15 @@ function HoldingsTable() {
           <Table.Tfoot>
             <Table.Tr style={{ fontWeight: 600, background: 'var(--mantine-color-gray-1)' }}>
               <Table.Td colSpan={4}>Total</Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>{inr(data.total_cost)}</Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={data.total_cost} /></Table.Td>
               <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
                 <PctText value={data.total_day_chg_pct} colorize />
               </Table.Td>
               <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
-                {data.total_day_chg >= 0 ? '+' : ''}{inr(data.total_day_chg)}
+                <MoneyText value={data.total_day_chg} showSign />
               </Table.Td>
               <Table.Td colSpan={2} />
-              <Table.Td style={{ textAlign: 'right' }}>{inr(data.total_value)}</Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={data.total_value} /></Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>
                 <MoneyText value={data.total_value - data.total_cost} colorize showSign />
               </Table.Td>
@@ -234,7 +234,7 @@ function ManualAssets() {
   return (
     <Box>
       <Group justify="space-between" mb="xs">
-        <Text fw={600}>Manual Assets <Text span size="xs" c="dimmed">({inr(data.total_manual)} total)</Text></Text>
+        <Text fw={600}>Manual Assets <Text span size="xs" c="dimmed">(<MoneyText value={data.total_manual} /> total)</Text></Text>
         <Button size="xs" variant="subtle" rightSection={open ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />} onClick={() => setOpen((o) => !o)}>
           {open ? 'Hide' : 'Edit'}
         </Button>
@@ -242,10 +242,10 @@ function ManualAssets() {
 
       {/* Summary row */}
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
-        {data.total_fd > 0 && <Paper withBorder p="xs"><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm">{inr(data.total_fd)}</Text></Paper>}
-        {data.ppf && <Paper withBorder p="xs"><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm">{inr(data.total_ppf)}</Text></Paper>}
-        {data.nps && <Paper withBorder p="xs"><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm">{inr(data.total_nps)}</Text></Paper>}
-        {data.cash && <Paper withBorder p="xs"><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm">{inr(data.total_cash)}</Text></Paper>}
+        {data.total_fd > 0 && <Paper withBorder p="xs"><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text></Paper>}
+        {data.ppf && <Paper withBorder p="xs"><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text></Paper>}
+        {data.nps && <Paper withBorder p="xs"><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text></Paper>}
+        {data.cash && <Paper withBorder p="xs"><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm"><MoneyText value={data.total_cash} /></Text></Paper>}
       </SimpleGrid>
 
       {/* FD list — always visible */}
@@ -257,10 +257,10 @@ function ManualAssets() {
               {data.fds.map((fd) => (
                 <Table.Tr key={fd.id}>
                   <Table.Td>{fd.label}{fd.is_emergency_fund && <Badge size="sm" color="orange" ml={4}>EF</Badge>}</Table.Td>
-                  <Table.Td>{inr(fd.principal)}</Table.Td>
+                  <Table.Td><MoneyText value={fd.principal} /></Table.Td>
                   <Table.Td>{fd.interest_rate}%</Table.Td>
                   <Table.Td>{fd.maturity_date}</Table.Td>
-                  <Table.Td>{inr(fd.current_value)}</Table.Td>
+                  <Table.Td><MoneyText value={fd.current_value} /></Table.Td>
                   <Table.Td><Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(fd.id)}>Del</Button></Table.Td>
                 </Table.Tr>
               ))}

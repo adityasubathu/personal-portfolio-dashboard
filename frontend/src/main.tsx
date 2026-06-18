@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import App from './App'
+import { PrivacyProvider } from './hooks/usePrivacy'
 
 const queryClient = new QueryClient()
 
@@ -14,11 +15,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider forceColorScheme="light" theme={{ components: { AppShell: { defaultProps: { header: { height: 48 } } } } }}>
       <Notifications />
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </QueryClientProvider>
+      <PrivacyProvider>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </PrivacyProvider>
     </MantineProvider>
   </StrictMode>,
 )

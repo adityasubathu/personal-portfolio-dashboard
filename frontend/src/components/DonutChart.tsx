@@ -4,6 +4,7 @@ import { Doughnut } from 'react-chartjs-2'
 import { Box, Group, Stack, Text } from '@mantine/core'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inr, inrCompact } from '../lib/format'
+import { usePrivacy } from '../hooks/usePrivacy'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -16,6 +17,7 @@ interface DonutChartProps {
 }
 
 export function DonutChart({ labels, values, total, colorMode = 'category', size = 220 }: DonutChartProps) {
+  const { privacyMode } = usePrivacy()
   const colors = useMemo(
     () =>
       labels.map((label, i) =>
@@ -46,7 +48,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
       tooltip: {
         callbacks: {
           label: (ctx: { label: string; parsed: number }) =>
-            `${ctx.label}: ${inr(ctx.parsed)}`,
+            privacyMode ? `${ctx.label}: ₹•••` : `${ctx.label}: ${inr(ctx.parsed)}`,
         },
       },
     },
@@ -60,7 +62,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   return (
     <Group align="flex-start" gap="lg" wrap="nowrap" justify="center">
       <Box style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-        <Doughnut data={data} options={options} width={size} height={size} />
+        <Doughnut key={privacyMode ? 'private' : 'public'} data={data} options={options} width={size} height={size} />
         <Box
           style={{
             position: 'absolute',
@@ -73,7 +75,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
           }}
         >
           <Text size="xs" c="dimmed">Total</Text>
-          <Text size="sm" fw={700}>{inrCompact(totalValue)}</Text>
+          <Text size="sm" fw={700}>{privacyMode ? '₹•••' : inrCompact(totalValue)}</Text>
         </Box>
       </Box>
 
@@ -86,7 +88,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
               {pctValues[i].toFixed(2)}%
             </Text>
             <Text size="xs" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {inrCompact(values[i])}
+              {privacyMode ? '₹•••' : inrCompact(values[i])}
             </Text>
           </Group>
         ))}
