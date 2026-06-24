@@ -16,7 +16,8 @@ import {
   useDeleteAssetMutation,
 } from '../api/manualAssets'
 import { MoneyText, PctText } from '../components/MoneyText'
-import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
+import { inr, pct, heatmapBg, heatmapTextColor } from '../lib/format'
+import { usePrivacy } from '../hooks/usePrivacy'
 import type { HoldingRow } from '../types/portfolio'
 
 // ── Summary cards ──────────────────────────────────────────────────────────────
@@ -93,6 +94,51 @@ function LtpUpdateBar() {
   )
 }
 
+// ── Decimal-aligned numeric cells ──────────────────────────────────────────────
+
+const MONO: React.CSSProperties = {
+  fontFamily: "'Roboto Mono', monospace",
+  fontVariantNumeric: 'tabular-nums',
+  fontSize: 'calc(1em)',
+  whiteSpace: 'nowrap',
+}
+
+// Splits at the decimal point: integer part takes natural width (right edge
+// of the cell aligns it), decimal part occupies a fixed-width slot so the
+// dot lands at the same X position in every row.
+// inline-flex keeps the container only as wide as its content — no cell expansion.
+function DecNum({ text, decWidth }: { text: string; decWidth: string }) {
+  const dotIdx = text.lastIndexOf('.')
+  const hasDecimal = dotIdx !== -1 && /^\d/.test(text[dotIdx + 1] ?? '')
+  return (
+    <span style={{ ...MONO, display: 'inline-flex' }}>
+      <span>{hasDecimal ? text.slice(0, dotIdx) : text}</span>
+      <span style={{ width: decWidth, textAlign: 'left' }}>{hasDecimal ? text.slice(dotIdx) : ''}</span>
+    </span>
+  )
+}
+
+// Currency: INR always emits exactly 2 dp → decimal slot is '.XX' = 3ch
+function NumMoney({ value, showSign }: { value: number | null | undefined; showSign?: boolean }) {
+  const { privacyMode } = usePrivacy()
+  if (privacyMode) return <DecNum text="₹•••" decWidth="3ch" />
+  if (value == null) return <DecNum text="—" decWidth="3ch" />
+  let text = inr(value)
+  if (showSign && value > 0) text = '+' + text
+  return <DecNum text={text} decWidth="3ch" />
+}
+
+// Percentage: pct() always emits 2 dp → decimal slot is '.XX%' = 4ch
+function NumPct({ value }: { value: number | null | undefined }) {
+  return <DecNum text={pct(value)} decWidth="4ch" />
+}
+
+// Quantity: no digit grouping; MF units up to 3 dp → decimal slot is '.XXX' = 4ch
+function NumQty({ value }: { value: number }) {
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(3)
+  return <DecNum text={text} decWidth="4ch" />
+}
+
 // ── Holdings table ──────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS = [
@@ -129,32 +175,32 @@ function HoldingsTable() {
       <Table.Tr key={r.instrument_id}>
         <Table.Td fw={500}>{r.symbol}</Table.Td>
         <Table.Td style={{ color: 'var(--mantine-color-dimmed)' }}>{r.type}</Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}>{r.qty}</Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.avg_price} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.cost} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><NumQty value={r.qty} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.avg_price} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.cost} /></Table.Td>
         <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, -5, 5, 'rg') }}>
-          <PctText value={r.day_chg_pct} />
+          <NumPct value={r.day_chg_pct} />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', background: dayAbsBg, color: heatmapTextColor(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb') }}>
-          <MoneyText value={r.day_chg_abs} showSign />
+          <NumMoney value={r.day_chg_abs} showSign />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <div><MoneyText value={r.prev_close} /></div>
+          <NumMoney value={r.prev_close} />
           {r.prev_close_date && <Text size="xs" c="dimmed">{r.prev_close_date}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <div><MoneyText value={r.ltp} /></div>
+          <NumMoney value={r.ltp} />
           {r.as_of && <Text size="xs" c="dimmed">{r.as_of}</Text>}
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.value} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.value} /></Table.Td>
         <Table.Td style={{ textAlign: 'right', background: pnlBg, color: heatmapTextColor(r.pnl, pnl_min, pnl_max, 'rb') }}>
-          <MoneyText value={r.pnl} showSign />
+          <NumMoney value={r.pnl} showSign />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg') }}>
-          <PctText value={r.pnl_pct} />
+          <NumPct value={r.pnl_pct} />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', background: xirrBg, color: heatmapTextColor(r.xirr, xirr_min, xirr_max, 'rb') }}>
-          <PctText value={r.xirr} />
+          <NumPct value={r.xirr} />
         </Table.Td>
       </Table.Tr>
     )
@@ -207,17 +253,17 @@ function HoldingsTable() {
           <Table.Tfoot>
             <Table.Tr style={{ fontWeight: 600, background: 'var(--mantine-color-gray-1)' }}>
               <Table.Td colSpan={4}>Total</Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={data.total_cost} /></Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><NumMoney value={data.total_cost} /></Table.Td>
               <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
-                <PctText value={data.total_day_chg_pct} colorize />
+                <NumPct value={data.total_day_chg_pct} />
               </Table.Td>
               <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
-                <MoneyText value={data.total_day_chg} showSign />
+                <NumMoney value={data.total_day_chg} showSign />
               </Table.Td>
               <Table.Td colSpan={2} />
-              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={data.total_value} /></Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><NumMoney value={data.total_value} /></Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>
-                <MoneyText value={data.total_value - data.total_cost} colorize showSign />
+                <NumMoney value={data.total_value - data.total_cost} showSign />
               </Table.Td>
               <Table.Td colSpan={2} />
             </Table.Tr>
