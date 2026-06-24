@@ -15,7 +15,7 @@ import {
   useUpsertCashMutation,
   useDeleteAssetMutation,
 } from '../api/manualAssets'
-import { MoneyText, PctText } from '../components/MoneyText'
+import { MoneyText } from '../components/MoneyText'
 import { inr, pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
 import type { HoldingRow } from '../types/portfolio'
@@ -291,7 +291,7 @@ function ManualAssets() {
   const [fdRate, setFdRate] = useState<number | string>('')
   const [fdStart, setFdStart] = useState('')
   const [fdMaturity, setFdMaturity] = useState('')
-  const [fdEmergency, setFdEmergency] = useState(false)
+  const [fdEmergency] = useState(false)
   // Simple asset form state — initialized empty; synced from server when data arrives
   const [ppfValue, setPpfValue] = useState<number | string>('')
   const [npsValue, setNpsValue] = useState<number | string>('')
