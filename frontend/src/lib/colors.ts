@@ -7,7 +7,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Equity - Foreign': '#3949ab',
   'Equity - Arbitrage': '#7b1fa2',
   'Real Estate Trust': '#00838f',
-  'Precious Metals': '#d4af37',
+  'Precious Metals': '#fcba03',
   'Gold': '#fcba03',
   'Silver': '#a8a9ad',
   'Debt': '#d926a7',
