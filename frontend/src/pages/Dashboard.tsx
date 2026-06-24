@@ -5,8 +5,8 @@ import {
   Stack, Table, Text, TextInput, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconChevronUp, IconTrash } from '@tabler/icons-react'
-import { useSummaryCards, useHoldings } from '../api/portfolio'
+import { IconChevronDown, IconChevronUp, IconRefresh, IconTrash } from '@tabler/icons-react'
+import { useSummaryCards, useHoldings, useUpdateLtpMutation } from '../api/portfolio'
 import {
   useManualAssets,
   useAddFdMutation,
@@ -53,6 +53,43 @@ function SummaryCards() {
         )}
       </Paper>
     </SimpleGrid>
+  )
+}
+
+// ── LTP update bar ─────────────────────────────────────────────────────────────
+
+function LtpUpdateBar() {
+  const { data } = useSummaryCards()
+  const mut = useUpdateLtpMutation()
+
+  function handleClick() {
+    mut.mutate(undefined, {
+      onSuccess: (r) => {
+        notifications.show({ color: 'green', message: `LTP updated: ${r.updated} instruments` })
+      },
+      onError: (e) => {
+        notifications.show({ color: 'red', message: String(e) })
+      },
+    })
+  }
+
+  return (
+    <Group justify="flex-end" gap="sm">
+      {data?.last_ltp_update && (
+        <Text size="xs" c="dimmed">
+          LTP as of {new Date(data.last_ltp_update).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      )}
+      <Button
+        size="xs"
+        variant="light"
+        leftSection={<IconRefresh size={12} />}
+        loading={mut.isPending}
+        onClick={handleClick}
+      >
+        Update LTP
+      </Button>
+    </Group>
   )
 }
 
@@ -324,6 +361,7 @@ export function Dashboard() {
     <Stack gap="lg">
       <Title order={3}>Dashboard</Title>
       <SummaryCards />
+      <LtpUpdateBar />
       <Divider />
       <HoldingsTable />
       <Divider />

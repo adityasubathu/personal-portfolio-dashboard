@@ -17,9 +17,10 @@ from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.schemas.portfolio import DirectHoldingsResponse, HoldingRow, HoldingsSection, InstrumentListItem, SummaryCards
 from app.services.kite_historical import fetch_ohlc_for_ticker, sync_price_history
+from app.services import kite_sync
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
-from app.services.xirr import compute_holdings_xirr, portfolio_xirr
+from app.services.xirr import compute_holdings_xirr, portfolio_xirr, recompute_and_store_xirr
 from app.models.trade import Trade
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["portfolio"])
@@ -148,8 +149,17 @@ async def direct_holdings(
     for h, instr in raw:
         cost = float(h.total_cost or 0)
         ohlc_entry = ohlc_ltp_map.get(instr.id)
-        if ohlc_entry and instr.instrument_type != "MF":
-            ltp, ltp_as_of = ohlc_entry
+        if instr.instrument_type != "MF":
+            holding_ltp = float(h.last_price) if h.last_price else None
+            holding_date = h.last_price_at.date() if h.last_price_at else None
+            if ohlc_entry:
+                ohlc_close, ohlc_date = ohlc_entry
+                if holding_ltp is not None and holding_date is not None and holding_date >= ohlc_date:
+                    ltp, ltp_as_of = holding_ltp, h.last_price_at
+                else:
+                    ltp, ltp_as_of = ohlc_close, ohlc_date
+            else:
+                ltp, ltp_as_of = holding_ltp, h.last_price_at
         else:
             ltp = float(h.last_price) if h.last_price else None
             ltp_as_of = h.last_price_at
@@ -254,25 +264,32 @@ async def portfolio_summary(db: AsyncSession = Depends(get_db)):
     rows = result.all()
 
     non_mf_ids = [instr.id for _, instr in rows if instr.instrument_type != "MF"]
-    ohlc_ltp_map: dict[int, float] = {}
+    ohlc_ltp_map: dict[int, tuple[float, date]] = {}
     if non_mf_ids:
         sub = select(
             PriceHistory.instrument_id,
             PriceHistory.close,
+            PriceHistory.price_date,
             func.row_number().over(
                 partition_by=PriceHistory.instrument_id,
                 order_by=PriceHistory.price_date.desc(),
             ).label("rn"),
         ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
         for r in (await db.execute(select(sub).where(sub.c.rn == 1))).all():
-            ohlc_ltp_map[r.instrument_id] = float(r.close)
+            ohlc_ltp_map[r.instrument_id] = (float(r.close), r.price_date)
 
     total_cost = sum(float(h.total_cost or 0) for h, _ in rows)
     total_value = 0.0
     for h, instr in rows:
         cost = float(h.total_cost or 0)
         if instr.instrument_type != "MF" and instr.id in ohlc_ltp_map:
-            ltp = ohlc_ltp_map[instr.id]
+            ohlc_close, ohlc_date = ohlc_ltp_map[instr.id]
+            holding_ltp = float(h.last_price) if h.last_price else None
+            holding_date = h.last_price_at.date() if h.last_price_at else None
+            if holding_ltp is not None and holding_date is not None and holding_date >= ohlc_date:
+                ltp = holding_ltp
+            else:
+                ltp = ohlc_close
         elif h.last_price:
             ltp = float(h.last_price)
         else:
@@ -295,25 +312,32 @@ async def summary_cards(db: AsyncSession = Depends(get_db)):
     rows = result.all()
 
     non_mf_ids = [instr.id for _, instr in rows if instr.instrument_type != "MF"]
-    ohlc_ltp_map: dict[int, float] = {}
+    ohlc_ltp_map: dict[int, tuple[float, date]] = {}
     if non_mf_ids:
         sub = select(
             PriceHistory.instrument_id,
             PriceHistory.close,
+            PriceHistory.price_date,
             func.row_number().over(
                 partition_by=PriceHistory.instrument_id,
                 order_by=PriceHistory.price_date.desc(),
             ).label("rn"),
         ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
         for r in (await db.execute(select(sub).where(sub.c.rn == 1))).all():
-            ohlc_ltp_map[r.instrument_id] = float(r.close)
+            ohlc_ltp_map[r.instrument_id] = (float(r.close), r.price_date)
 
     total_cost = sum(float(h.total_cost or 0) for h, _ in rows)
     total_value = 0.0
     for h, instr in rows:
         cost = float(h.total_cost or 0)
         if instr.instrument_type != "MF" and instr.id in ohlc_ltp_map:
-            ltp = ohlc_ltp_map[instr.id]
+            ohlc_close, ohlc_date = ohlc_ltp_map[instr.id]
+            holding_ltp = float(h.last_price) if h.last_price else None
+            holding_date = h.last_price_at.date() if h.last_price_at else None
+            if holding_ltp is not None and holding_date is not None and holding_date >= ohlc_date:
+                ltp = holding_ltp
+            else:
+                ltp = ohlc_close
         elif h.last_price:
             ltp = float(h.last_price)
         else:
@@ -326,6 +350,12 @@ async def summary_cards(db: AsyncSession = Depends(get_db)):
         )
     ).scalar_one_or_none()
 
+    last_ltp_row = (await db.execute(
+        select(func.max(Holding.last_price_at))
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type != "MF")
+    )).scalar_one_or_none()
+
     xirr_value = await portfolio_xirr(db, as_of=date.today())
 
     return SummaryCards(
@@ -333,8 +363,18 @@ async def summary_cards(db: AsyncSession = Depends(get_db)):
         total_value=total_value,
         total_pnl=total_value - total_cost,
         last_sync=last_sync_row.synced_at.isoformat() if last_sync_row else None,
+        last_ltp_update=last_ltp_row.isoformat() if last_ltp_row else None,
         xirr=xirr_value,
     )
+
+
+@router.post("/update-ltp")
+async def update_ltp(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await kite_sync.update_ltp(db)
+        return JSONResponse(result)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 @router.get("/instruments", response_model=list[InstrumentListItem])
@@ -399,8 +439,17 @@ async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
             async def _run_sync():
                 try:
                     result = await sync_price_history(db, on_progress=_on_progress)
+                    await _on_progress("Updating LTPs from Kite…")
+                    ltp_result = None
+                    try:
+                        ltp_result = await kite_sync.update_ltp(db)
+                        await _on_progress(f"LTP updated: {ltp_result['updated']} instruments")
+                    except Exception as ltp_err:
+                        await _on_progress(f"LTP update skipped: {ltp_err}")
+                        await _on_progress("Recomputing XIRR…")
+                        await recompute_and_store_xirr(db)
                     await queue.put(None)
-                    await queue.put(jsonlib.dumps({"ok": True, "result": result}))
+                    await queue.put(jsonlib.dumps({"ok": True, "result": result, "ltp": ltp_result}))
                 except Exception as e:
                     await queue.put(None)
                     await queue.put(jsonlib.dumps({"ok": False, "error": str(e)}))
@@ -495,8 +544,17 @@ async def fetch_ohlc_stream(
                     skip_token_check=skip_token_check,
                     on_progress=_on_progress,
                 )
+                await _on_progress("Updating LTPs from Kite…")
+                ltp_result = None
+                try:
+                    ltp_result = await kite_sync.update_ltp(db)
+                    await _on_progress(f"LTP updated: {ltp_result['updated']} instruments")
+                except Exception as ltp_err:
+                    await _on_progress(f"LTP update skipped: {ltp_err}")
+                    await _on_progress("Recomputing XIRR…")
+                    await recompute_and_store_xirr(db)
                 await queue.put(None)
-                await queue.put(jsonlib.dumps({"ok": True, "result": result}))
+                await queue.put(jsonlib.dumps({"ok": True, "result": result, "ltp": ltp_result}))
             except Exception as e:
                 await queue.put(None)
                 await queue.put(jsonlib.dumps({"ok": False, "error": str(e)}))

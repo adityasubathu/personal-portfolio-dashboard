@@ -20,7 +20,53 @@ from app.models.kite import KiteConfig, KiteSyncLog
 from app.services import kite_client
 from app.services.instrument_registry import find_or_create
 from app.services.kite_reconcile import compute_discrepancies
+from app.services.xirr import recompute_and_store_xirr
 from app.time_util import now_ist
+
+
+async def update_ltp(db: AsyncSession) -> dict:
+    """Fetch live LTPs from Kite and update Holding.last_price / last_price_at."""
+    config = await _get_config(db)
+    _assert_token_valid(config)
+
+    result = await db.execute(
+        select(Holding, Instrument).join(Instrument, Holding.instrument_id == Instrument.id)
+    )
+    rows = result.all()
+
+    # Only non-MF instruments with both exchange and tradingsymbol set
+    eligible = [
+        (h, instr) for h, instr in rows
+        if instr.instrument_type != "MF"
+        and instr.exchange
+        and instr.tradingsymbol
+    ]
+
+    if not eligible:
+        return {"updated": 0, "timestamp": now_ist().isoformat(), "errors": []}
+
+    instruments = [f"{instr.exchange}:{instr.tradingsymbol}" for _, instr in eligible]
+    key_to_holding = {f"{instr.exchange}:{instr.tradingsymbol}": h for h, instr in eligible}
+
+    errors: list[str] = []
+    ltp_map: dict[str, float] = {}
+    try:
+        ltp_map = await kite_client.get_ltp(config.api_key, config.access_token, instruments)
+    except Exception as e:
+        errors.append(str(e))
+
+    updated = 0
+    ts = now_ist()
+    for key, price in ltp_map.items():
+        holding = key_to_holding.get(key)
+        if holding:
+            holding.last_price = price
+            holding.last_price_at = ts
+            updated += 1
+
+    await db.commit()
+    await recompute_and_store_xirr(db)
+    return {"updated": updated, "timestamp": ts.isoformat(), "errors": errors}
 
 
 async def sync(db: AsyncSession) -> dict:
@@ -82,6 +128,7 @@ async def sync(db: AsyncSession) -> dict:
     )
     db.add(log)
     await db.commit()
+    await recompute_and_store_xirr(db)
 
     return {
         "synced_at": synced_at.isoformat(),

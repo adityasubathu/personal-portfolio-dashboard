@@ -7,6 +7,7 @@ class SummaryCards(BaseModel):
     total_value: float
     total_pnl: float
     last_sync: Optional[str] = None
+    last_ltp_update: Optional[str] = None
     xirr: Optional[float] = None
 
 

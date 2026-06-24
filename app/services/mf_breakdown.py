@@ -44,6 +44,14 @@ FOREIGN_FUND_ISINS: set[str] = {
     "INF247L01AP3",   # MON100 / Nasdaq 100
 }
 
+# Commodity ETFs whose entire value maps to a single non-equity category.
+# These bypass MF breakdown CSV lookup entirely.
+COMMODITY_ETF_CATEGORY: dict[str, str] = {
+    "INF109KC1Y56": "Silver",   # SILVERIETF
+    "INF204KB17I5": "Gold",     # GOLDBEES
+    "INF0R8F01042": "Gold",     # GOLDCASE
+}
+
 _BRACKET_RE = re.compile(r"[\[(].*?[\])]")
 _GLUED_DOT = re.compile(r"\.(?=[a-z])")
 _ABBREV_MAP = [
@@ -410,14 +418,23 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
     # Match "liquid" at a word start (no trailing boundary — catches LIQUIDCASE, LIQUIDBEES, etc.)
     _DEBT_KEYWORDS = re.compile(r"\b(debt|liquid)", re.IGNORECASE)
     _ARBITRAGE_RE = re.compile(r"\barbitrage\b", re.IGNORECASE)
+    # No trailing \b — catches compound names like GoldCase, Silvercase, etc.
+    _GOLD_RE = re.compile(r"\bgold", re.IGNORECASE)
+    _SILVER_RE = re.compile(r"\bsilver", re.IGNORECASE)
     debt_fund_isins: set[str] = set()
     arbitrage_fund_isins: set[str] = set()
+    gold_fund_isins: set[str] = set()
+    silver_fund_isins: set[str] = set()
     for i in held_funds:
         name_to_check = " ".join(filter(None, [i.tradingsymbol, i.name]))
         if i.isin and _DEBT_KEYWORDS.search(name_to_check):
             debt_fund_isins.add(i.isin)
         if i.isin and _ARBITRAGE_RE.search(name_to_check):
             arbitrage_fund_isins.add(i.isin)
+        if i.isin and _GOLD_RE.search(name_to_check):
+            gold_fund_isins.add(i.isin)
+        if i.isin and _SILVER_RE.search(name_to_check):
+            silver_fund_isins.add(i.isin)
 
     if not BREAKDOWN_DIR.exists():
         return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
@@ -442,6 +459,8 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
 
         seen_isins.add(scheme_isin)
         is_debt_fund = scheme_isin in debt_fund_isins
+        is_gold_fund = scheme_isin in gold_fund_isins
+        is_silver_fund = scheme_isin in silver_fund_isins
         is_foreign_fund = scheme_isin in FOREIGN_FUND_ISINS
         equity_override = ETF_CAP_OVERRIDE.get(scheme_isin)
 
@@ -479,6 +498,10 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                 is_reit = bool(_REIT_RE.search(name) or _REIT_RE.search(htype))
                 if is_reit:
                     category = "Real Estate Trust"
+                elif is_gold_fund:
+                    category = "Gold"
+                elif is_silver_fund:
+                    category = "Silver"
                 elif is_debt_fund:
                     category = "Debt"
                 elif is_arb_holding:
@@ -500,6 +523,10 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                 # Sector classification
                 if is_reit:
                     sector: str | None = "Real Estate Trust"
+                elif is_gold_fund:
+                    sector = "Gold"
+                elif is_silver_fund:
+                    sector = "Silver"
                 else:
                     sector = _sector_for_type(htype, name)
                     if sector is None and htype.strip() == "Equity":
@@ -695,8 +722,14 @@ async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: 
             category_totals[cat] = category_totals.get(cat, 0) + value
         elif i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
             category_totals["Gold"] = category_totals.get("Gold", 0) + value
+        elif i.instrument_type == "BOND":
+            category_totals["Debt"] = category_totals.get("Debt", 0) + value
         elif i.instrument_type in ("MF", "ETF") and i.isin:
-            fund_isins.append(i.isin)
+            commodity_cat = COMMODITY_ETF_CATEGORY.get(i.isin)
+            if commodity_cat:
+                category_totals[commodity_cat] = category_totals.get(commodity_cat, 0) + value
+            else:
+                fund_isins.append(i.isin)
 
     hv: dict[str, float] = {}
     for h, i in all_holdings:
@@ -745,7 +778,7 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other",
     ]
     labels = []
     values = []
@@ -957,7 +990,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other",
     ]
     category_summary = []
     for cat in order:
@@ -972,7 +1005,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     return {"holdings": holdings, "category_summary": category_summary}
 
 
-_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Debt", "Cash", "Other"]
+_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other"]
 
 
 async def get_category_composition(db: AsyncSession) -> list[dict]:
@@ -1000,7 +1033,11 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
         if i.instrument_type in ("MF", "ETF") and i.isin:
             ltp = float(h.last_price) if h.last_price else None
             val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
-            fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
+            commodity_cat = COMMODITY_ETF_CATEGORY.get(i.isin)
+            if commodity_cat:
+                _add(commodity_cat, {"name": i.name or i.tradingsymbol or i.isin, "source_type": "etf", "fund_pct": 100.0, "contribution": round(val, 2)})
+            else:
+                fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
 
     if fund_values:
         breakdown_rows = (await db.execute(
@@ -1028,14 +1065,17 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
             cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
             _add(cat, {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
 
-    # SGB bonds
+    # Bonds: SGB → Gold, everything else → Debt
     for h, i in all_holdings:
-        if i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+        if i.instrument_type == "BOND":
             ltp = float(h.last_price) if h.last_price else None
             val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
             if val <= 0:
                 continue
-            _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+            if i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+                _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+            else:
+                _add("Debt", {"name": i.tradingsymbol or i.name or "Govt Bond", "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
 
     # Manual assets
     manual = await get_manual_assets_summary(db)
@@ -1066,7 +1106,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     return out
 
 
-_NON_EQUITY_SECTORS = {"Fixed Income", "Liquid / Money Market", "Gold"}
+_NON_EQUITY_SECTORS = {"Fixed Income", "Liquid / Money Market", "Gold", "Silver"}
 
 
 async def get_sector_composition(db: AsyncSession, equity_only: bool = False) -> list[dict]:
@@ -1096,7 +1136,11 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
         if i.instrument_type in ("MF", "ETF") and i.isin:
             ltp = float(h.last_price) if h.last_price else None
             val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
-            fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
+            commodity_cat = COMMODITY_ETF_CATEGORY.get(i.isin)
+            if commodity_cat:
+                _add(commodity_cat, {"name": i.name or i.tradingsymbol or i.isin, "source_type": "etf", "fund_pct": 100.0, "contribution": round(val, 2)})
+            else:
+                fund_values[i.isin] = (val, i.name or i.tradingsymbol or i.isin)
 
     if fund_values:
         breakdown_rows = (await db.execute(
@@ -1140,14 +1184,17 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
             _add(sec or "Unknown", {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
 
     if not equity_only:
-        # SGB bonds → Gold sector
+        # Bonds: SGB → Gold sector, everything else → Fixed Income
         for h, i in all_holdings:
-            if i.instrument_type == "BOND" and i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+            if i.instrument_type == "BOND":
                 ltp = float(h.last_price) if h.last_price else None
                 val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
                 if val <= 0:
                     continue
-                _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+                if i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
+                    _add("Gold", {"name": i.tradingsymbol, "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
+                else:
+                    _add("Fixed Income", {"name": i.tradingsymbol or i.name or "Govt Bond", "source_type": "bond", "fund_pct": 100.0, "contribution": round(val, 2)})
 
         # Manual assets
         manual = await get_manual_assets_summary(db)

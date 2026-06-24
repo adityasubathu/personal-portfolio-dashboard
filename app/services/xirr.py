@@ -109,15 +109,31 @@ async def holding_cashflows(db: AsyncSession, instrument_id: int, *, as_of: date
     return flows
 
 
+async def recompute_and_store_xirr(db: AsyncSession) -> None:
+    """Recompute XIRR for every holding and persist it. Called after LTP updates, trade imports, and price syncs."""
+    today = date.today()
+    holdings = (await db.execute(select(Holding))).scalars().all()
+    for h in holdings:
+        flows = await holding_cashflows(db, h.instrument_id, as_of=today)
+        r = xirr(flows)
+        h.xirr = r
+        h.xirr_as_of = today
+    await db.commit()
+
+
 async def compute_holdings_xirr(db: AsyncSession, as_of: date) -> dict[int, float]:
-    """Return {instrument_id: annualised XIRR} for every holding with valid cashflows."""
+    """Return {instrument_id: annualised XIRR} for every holding.
+    Uses stored xirr when available; computes on-the-fly for any holding missing a stored value."""
     holdings = (await db.execute(select(Holding))).scalars().all()
     out: dict[int, float] = {}
     for h in holdings:
-        flows = await holding_cashflows(db, h.instrument_id, as_of=as_of)
-        r = xirr(flows)
-        if r is not None:
-            out[h.instrument_id] = r
+        if h.xirr is not None:
+            out[h.instrument_id] = float(h.xirr)
+        else:
+            flows = await holding_cashflows(db, h.instrument_id, as_of=as_of)
+            r = xirr(flows)
+            if r is not None:
+                out[h.instrument_id] = r
     return out
 
 

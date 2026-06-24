@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request, requestForm } from './client'
 import type {
   DirectHoldingsResponse,
@@ -49,6 +49,19 @@ export function useTradedInstruments() {
   return useQuery({
     queryKey: portfolioKeys.instruments,
     queryFn: () => request<InstrumentListItem[]>('/api/v1/portfolio/instruments'),
+  })
+}
+
+export function useUpdateLtpMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => request<{ updated: number; timestamp: string; errors: string[] }>(
+      '/api/v1/portfolio/update-ltp',
+      { method: 'POST' },
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+    },
   })
 }
 

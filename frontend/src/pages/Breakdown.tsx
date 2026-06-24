@@ -45,10 +45,39 @@ function OverviewTab() {
 
   if (!chart) return <Text size="sm" c="dimmed">Loading…</Text>
 
+  // High-level allocation aggregation
+  const valueMap = Object.fromEntries(chart.labels.map((l, i) => [l, chart.values[i]]))
+  const hlGroups: Record<string, string[]> = {
+    'Equity': ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity'],
+    'Equity - Foreign': ['Equity - Foreign'],
+    'Equity - Arbitrage': ['Equity - Arbitrage'],
+    'Real Estate Trust': ['Real Estate Trust'],
+    'Precious Metals': ['Gold', 'Silver'],
+    'Debt': ['Debt'],
+    'Cash': ['Cash'],
+  }
+  const coveredCats = new Set(Object.values(hlGroups).flat())
+  const hlEntries = Object.entries(hlGroups)
+    .map(([group, cats]) => [group, cats.reduce((s, c) => s + (valueMap[c] ?? 0), 0)] as [string, number])
+    .filter(([, v]) => v > 0)
+  const otherSum = chart.labels.reduce((s, l, i) => coveredCats.has(l) ? s : s + chart.values[i], 0)
+  if (otherSum > 0) hlEntries.push(['Other', otherSum])
+  const hlLabels = hlEntries.map(([l]) => l)
+  const hlValues = hlEntries.map(([, v]) => v)
+
   return (
     <Stack gap="lg">
       {chart.labels.length > 0 && (
-        <DonutChart labels={chart.labels} values={chart.values} total={chart.total} />
+        <Group align="flex-start" wrap="wrap" gap="xl" justify="center">
+          <Stack gap={4}>
+            <Text fw={600} size="sm">Asset Allocation</Text>
+            <DonutChart labels={hlLabels} values={hlValues} total={chart.total} />
+          </Stack>
+          <Stack gap={4}>
+            <Text fw={600} size="sm">Category Breakdown</Text>
+            <DonutChart labels={chart.labels} values={chart.values} total={chart.total} />
+          </Stack>
+        </Group>
       )}
 
       {comparison && (

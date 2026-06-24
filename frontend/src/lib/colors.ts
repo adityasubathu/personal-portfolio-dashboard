@@ -3,12 +3,15 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Mid Cap': '#0e93f1',
   'Small Cap': '#ff7c00',
   'Unclassified Equity': '#ff9800',
+  'Equity': '#2e7d32',
   'Equity - Foreign': '#3949ab',
   'Equity - Arbitrage': '#7b1fa2',
   'Real Estate Trust': '#00838f',
+  'Precious Metals': '#d4af37',
   'Gold': '#fcba03',
+  'Silver': '#a8a9ad',
   'Debt': '#d926a7',
-  'Cash': '#9e9e9e',
+  'Cash': '#8cdcae',
   'Other': '#e0291f',
 }
 

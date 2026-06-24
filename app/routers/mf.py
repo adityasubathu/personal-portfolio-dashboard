@@ -11,6 +11,7 @@ from app.services.mfapi_nav import (
     remove_nav_tracked_instrument,
     sync_nav_history,
 )
+from app.services.xirr import recompute_and_store_xirr
 
 router = APIRouter(prefix="/api/v1/mf", tags=["mf"])
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/v1/mf", tags=["mf"])
 async def sync_nav(db: AsyncSession = Depends(get_db)):
     try:
         result = await sync_mf_navs(db)
+        await recompute_and_store_xirr(db)
         return JSONResponse({"mode": "amfi", "error": None, **result})
     except Exception as e:
         return JSONResponse({"mode": "amfi", "error": str(e)}, status_code=500)
@@ -51,6 +53,7 @@ async def delete_nav_tracked(instrument_id: int, db: AsyncSession = Depends(get_
 async def sync_nav_history_route(db: AsyncSession = Depends(get_db)):
     try:
         result = await sync_nav_history(db)
+        await recompute_and_store_xirr(db)
         return JSONResponse({"mode": "history", "error": None, **result})
     except Exception as e:
         return JSONResponse({"mode": "history", "error": str(e)}, status_code=500)

@@ -85,6 +85,29 @@ async def get_positions(api_key: str, access_token: str) -> list[dict]:
     return data["data"].get("net", [])
 
 
+async def get_ltp(api_key: str, access_token: str, instruments: list[str]) -> dict[str, float]:
+    """Fetch last traded prices for up to 1000 instruments.
+    instruments: list of "exchange:tradingsymbol" strings.
+    Returns {instrument_key: last_price}, skipping keys absent from the response."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{KITE_BASE}/quote/ltp",
+            headers=_auth_headers(api_key, access_token),
+            params=[("i", ins) for ins in instruments],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    if data.get("status") != "success":
+        raise ValueError(f"Kite LTP fetch failed: {data.get('message', data)}")
+
+    return {
+        key: float(quote["last_price"])
+        for key, quote in data.get("data", {}).items()
+        if "last_price" in quote
+    }
+
+
 async def get_instruments_dump() -> list[dict]:
     """Fetch Kite's full instruments CSV. ~100k rows, no auth required.
     Columns: instrument_token, exchange_token, tradingsymbol, name, last_price,

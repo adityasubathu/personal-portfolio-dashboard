@@ -12,6 +12,7 @@ from app.models.trade import Trade
 from app.schemas.trades import ImportBatch, ImportResponse, TradeRow, TradesListResponse
 from app.services.csv_importer import import_csv
 from app.services.holdings_engine import recompute_holdings
+from app.services.xirr import recompute_and_store_xirr
 from app.time_util import now_ist
 
 router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
@@ -108,6 +109,7 @@ async def import_trades(
 
     recompute = await recompute_holdings(db)
     await db.commit()
+    await recompute_and_store_xirr(db)
 
     return ImportResponse(
         results=results,
@@ -148,6 +150,7 @@ async def add_split_credit(
 
     recompute = await recompute_holdings(db)
     await db.commit()
+    await recompute_and_store_xirr(db)
 
     return JSONResponse({"violations": recompute["violations"]})
 
