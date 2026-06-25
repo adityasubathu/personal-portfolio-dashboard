@@ -26,6 +26,10 @@ import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
 import type { IngestDonePayload } from '../types/mfBreakdown'
 
+function diffColor(diff: number): string | undefined {
+  return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
+}
+
 function AssetClassTargetsSection() {
   const { data: ac, refetch } = useAssetClassComparison()
   const saveMut = useSaveAssetClassTargetsMutation()
@@ -79,11 +83,11 @@ function AssetClassTargetsSection() {
               </Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>{r.target_pct.toFixed(1)}%</Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
-              <Table.Td style={{ textAlign: 'right', color: r.current_diff >= 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)' }}>
+              <Table.Td style={{ textAlign: 'right', color: diffColor(r.current_diff) }}>
                 {r.current_diff >= 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
               </Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>
-                <MoneyText value={r.shortfall} compact showSign colorize />
+                <MoneyText value={r.shortfall} compact showSign style={{ color: diffColor(r.current_diff) }} />
               </Table.Td>
               <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
               <Table.Td style={{ textAlign: 'right' }}>
@@ -204,11 +208,11 @@ function OverviewTab() {
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>{summary.target_pct.toFixed(1)}%</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>{summary.current_pct.toFixed(2)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', color: summary.current_diff > 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)' }}>
+                  <Table.Td style={{ textAlign: 'right', color: diffColor(summary.current_diff) }}>
                     {summary.current_diff > 0 ? '+' : ''}{summary.current_diff.toFixed(2)}%
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
-                    <MoneyText value={summary.current_value_diff} compact showSign colorize />
+                    <MoneyText value={summary.current_value_diff} compact showSign style={{ color: diffColor(summary.current_diff) }} />
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}><MoneyText value={summary.current_value} compact /></Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
@@ -257,7 +261,7 @@ function OverviewTab() {
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>{r.target_pct.toFixed(1)}%</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', color: r.current_diff > 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)' }}>
+                  <Table.Td style={{ textAlign: 'right', color: diffColor(r.current_diff) }}>
                     {r.current_diff > 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
@@ -266,7 +270,7 @@ function OverviewTab() {
                         value={r.current_value_diff}
                         compact
                         showSign
-                        colorize
+                        style={{ color: diffColor(r.current_diff) }}
                       />
                     )}
                   </Table.Td>
