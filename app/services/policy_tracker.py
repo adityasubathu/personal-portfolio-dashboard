@@ -3,7 +3,6 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.nav_history import NavHistory
 from app.models.policy_trigger import PolicyTriggerEvent, PolicyTriggerState
@@ -67,25 +66,32 @@ def _t(key, label, section, mode, status, summary, detail=None, cta=None, thresh
 
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
-def _eval_mon100_premium(holding, nav, states) -> dict:
+def _eval_mon100_premium(ltp, nav, nav_date, states) -> dict:
     key, label, section = "mon100_premium", "MON100 Premium", "A — Foreign Sleeve"
-    if holding is None or nav is None:
+    if ltp is None or nav is None:
         return _t(key, label, section, "auto", "watch",
-                  "MON100 holding or NAV not found — sync NAV history to enable")
-    ltp = float(holding.last_price or 0)
+                  "MON100 price or NAV not found — sync price and NAV history")
+    ltp_f = float(ltp)
     nav_f = float(nav)
-    premium = (ltp - nav_f) / nav_f * 100 if nav_f else 0
-    detail = {"last_price": ltp, "nav": nav_f, "premium_pct": round(premium, 2)}
+    premium = (ltp_f - nav_f) / nav_f * 100 if nav_f else 0
+    today = date.today()
+    # Flag stale data on Tue–Sat (trading days where yesterday's NAV should be available).
+    stale = (nav_date is not None
+             and today.isoweekday() in range(2, 7)  # Tue=2 … Sat=6
+             and (today - nav_date).days > 1)
+    stale_suffix = f" (data as of {nav_date}, may be stale)" if stale else f" (as of {nav_date})"
+    detail = {"exchange_close": ltp_f, "nav": nav_f, "premium_pct": round(premium, 2),
+              "nav_date": str(nav_date), "stale": stale}
     thresh = {"low": THRESHOLDS["mon100_premium_low"], "high": THRESHOLDS["mon100_premium_high"]}
     if premium <= THRESHOLDS["mon100_premium_low"]:
         return _t(key, label, section, "auto", "ok",
-                  f"Premium {premium:.1f}% — foreign route viable via MON100",
+                  f"Premium {premium:.1f}%{stale_suffix} — foreign route viable via MON100",
                   detail, "Foreign route viable via MON100", thresh)
     if premium <= THRESHOLDS["mon100_premium_high"]:
         return _t(key, label, section, "auto", "watch",
-                  f"Premium {premium:.1f}% — elevated, monitor", detail, threshold=thresh)
+                  f"Premium {premium:.1f}%{stale_suffix} — elevated, monitor", detail, threshold=thresh)
     return _t(key, label, section, "auto", "watch",
-              f"Premium {premium:.1f}% — high, avoid buying", detail, threshold=thresh)
+              f"Premium {premium:.1f}%{stale_suffix} — high, avoid buying", detail, threshold=thresh)
 
 
 def _eval_sp500_inflows(states) -> dict:
@@ -247,22 +253,29 @@ def _eval_nifty_drawdown(peak, current, states) -> dict:
                   "Sync price history to enable Nifty drawdown tracking")
     peak_f, current_f = float(peak), float(current)
     drawdown_pct = (current_f - peak_f) / peak_f * 100
-    detail = {"peak": peak_f, "current": current_f, "drawdown_pct": round(drawdown_pct, 2)}
     rungs = THRESHOLDS["nifty_drawdown_rungs"]
+    rung_levels = [round(peak_f * (1 - r[0] / 100), 2) for r in rungs]
+    detail = {
+        "peak": peak_f,
+        "current": current_f,
+        "drawdown_pct": round(drawdown_pct, 2),
+        "rung_levels": rung_levels,
+        "rung_pcts": [r[0] for r in rungs],
+    }
     active = None
     for threshold, amount, label_text in reversed(rungs):
         if drawdown_pct <= -threshold:
             active = (threshold, amount, label_text)
             break
+    thresh = {"rungs": [[r[0], r[1]] for r in rungs]}
     if active:
         _, _, label_text = active
         return _t(key, label, section, "auto", "action",
                   f"Nifty down {abs(drawdown_pct):.1f}% from peak — deploy {label_text}",
-                  detail, f"Deploy extra {label_text}",
-                  {"rungs": [[r[0], r[1]] for r in rungs]})
+                  detail, f"Deploy extra {label_text}", thresh)
     return _t(key, label, section, "auto", "ok",
               f"Nifty {drawdown_pct:.1f}% from peak — no rung active",
-              detail, threshold={"rungs": [[r[0], r[1]] for r in rungs]})
+              detail, threshold=thresh)
 
 
 def _eval_house_trigger(states) -> dict:
@@ -285,21 +298,29 @@ async def evaluate_all(db: AsyncSession) -> dict:
         s.key: s for s in (await db.execute(select(PolicyTriggerState))).scalars().all()
     }
 
-    # MON100 holding + latest NAV
-    mon100_row = (await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.isin == MON100_ISIN)
-    )).first()
-    mon100_holding = mon100_row[0] if mon100_row else None
-    mon100_nav = None
-    if mon100_holding:
-        mon100_nav = (await db.execute(
-            select(NavHistory.nav)
-            .where(NavHistory.instrument_id == mon100_holding.instrument_id)
+    # MON100: find instrument by ISIN, get NAV and the exchange close for the same date.
+    # Don't go through Holding — the ETF may have been sold out (no active holding row).
+    mon100_instr = (await db.execute(
+        select(Instrument).where(Instrument.isin == MON100_ISIN)
+    )).scalar_one_or_none()
+    mon100_ltp = mon100_nav = mon100_nav_date = None
+    if mon100_instr:
+        nav_row = (await db.execute(
+            select(NavHistory.nav, NavHistory.nav_date)
+            .where(NavHistory.instrument_id == mon100_instr.id)
             .order_by(NavHistory.nav_date.desc())
             .limit(1)
-        )).scalar_one_or_none()
+        )).first()
+        if nav_row:
+            mon100_nav, mon100_nav_date = nav_row
+            # Use the exchange close for the same date as the NAV for a fair comparison.
+            mon100_ltp = (await db.execute(
+                select(PriceHistory.close)
+                .where(
+                    PriceHistory.instrument_id == mon100_instr.id,
+                    PriceHistory.price_date == mon100_nav_date,
+                )
+            )).scalar_one_or_none()
 
     # Allocation comparisons
     alloc = await get_allocation_comparison(db)
@@ -330,7 +351,7 @@ async def evaluate_all(db: AsyncSession) -> dict:
 
     # Evaluate all triggers
     triggers = [
-        _eval_mon100_premium(mon100_holding, mon100_nav, states),
+        _eval_mon100_premium(mon100_ltp, mon100_nav, mon100_nav_date, states),
         _eval_sp500_inflows(states),
         _eval_foreign_sleeve_funded(alloc, states),
         _eval_toplevel_drift(ac, states),

@@ -141,7 +141,7 @@ async def resolve_index_tokens(db: AsyncSession) -> dict:
         seg = (row.get("segment") or "").strip()
         sym = (row.get("tradingsymbol") or "").strip()
         tok = row.get("instrument_token")
-        if seg == "NSE_INDICES" and sym and tok:
+        if seg == "INDICES" and sym and tok:
             try:
                 index_tokens[sym] = int(tok)
             except ValueError:
