@@ -2,6 +2,46 @@
 
 ---
 
+## 2026-06-26 — Allocation modes, Policy Tracker, index OHLC, and UI fixes
+
+### Allocation modes (anchored vs free float)
+- `app/services/mf_breakdown.py` — `get_allocation_comparison` now accepts `mode` parameter; anchored mode (default) anchors mid/small/foreign ideal values to large cap value; free float mode uses total equity × target %; `FOREIGN_ANCHOR_RATIO` replaced with `_foreign_anchor_ratio()` computed dynamically from `foreign_target` and `large_target` (formula: `foreign_frac / (large_frac × domestic_frac)`)
+- `app/services/mf_breakdown.py` — `Equity - Foreign` merged into `rows` list (was a separate response block); `anchor_note` field shows computed ratio (e.g. "50.0% of LC") instead of hardcoded string
+- `app/routers/mf_breakdown.py` — `GET /allocation-comparison` accepts `?mode=anchored|free_float` query param
+- `frontend/src/api/mfBreakdown.ts` — `useAllocationComparison(mode)` accepts mode and includes it in the query key
+- `frontend/src/pages/Breakdown.tsx` — replaced two separate tables (domestic/foreign split + market-cap targets) with a single unified equity allocation table; `SegmentedControl` toggle between modes, persisted via `usePersistentState`; anchored mode shows "X% of LC" note for foreign row and "—" diff for large cap
+
+### Equity – Foreign target in asset class section
+- `app/services/mf_breakdown.py` — `get_asset_class_comparison` loads `Equity - Foreign` target from `allocation_targets` and includes it as `foreign_equity_target` in the response
+- `app/routers/mf_breakdown.py` — `POST /asset-class-targets` intercepts `Equity - Foreign` and saves it to `allocation_targets` table (not `asset_class_targets`)
+- `frontend/src/pages/Breakdown.tsx` — `AssetClassTargetsSection` shows a configurable "Equity - Foreign (% of total equity)" row; saving it updates `allocation_targets`, which drives the anchor ratio calculation
+- `frontend/src/types/mfBreakdown.ts` — `AssetClassComparison` gains `foreign_equity_target`; `AllocationRow` gains `anchor_note`; `AllocationComparison` gains `mode`
+
+### Asset class targets (Equity / Debt / Precious Metals)
+- `app/models/allocation_target.py` — added `AssetClassTarget` model
+- `app/services/mf_breakdown.py` — added `DEFAULT_ASSET_CLASS_TARGETS`, `get_asset_class_targets()`, `save_asset_class_targets()`, `get_asset_class_comparison()`
+- `app/routers/mf_breakdown.py` — added `GET /asset-class-targets`, `POST /asset-class-targets`, `GET /asset-class-comparison`
+- `frontend` — added `useAssetClassComparison`, `useSaveAssetClassTargetsMutation`; `AssetClassTargetsSection` component in Overview tab
+
+### Policy Tracker page
+- `app/models/policy_trigger.py` — new file: `PolicyTriggerState` (key/value store for trigger state) and `PolicyTriggerEvent` (audit log of state changes with JSONB detail)
+- `app/services/policy_tracker.py` — new file: 15 trigger evaluators across 7 sections (Foreign Sleeve, Allocation Drift, Tax, Annual Fund Audit, Cleanup, Emergency Fund, Drawdown Ladder, House Protocol); `evaluate_all(db)` returns structured section/trigger tree
+- `app/routers/policy_tracker.py` — `GET /api/v1/policy-tracker`, `PUT /api/v1/policy-tracker/state/{key}`
+- `frontend/src/pages/PolicyTracker.tsx` — full page: section headings, per-trigger rows with expand/detail, Switch for manual_input triggers, Mark done + audit note for manual_ack triggers; detail rendered as tables (nested-record shape for drift, single-row for MON100 premium and Nifty drawdown)
+- `frontend/src/components/AppLayout.tsx` — Policy nav item with orange indicator dot when `action_count > 0`
+- MON100 premium: queries `Instrument` by ISIN directly (not through `Holding`) so it works when ETF is sold out; uses `PriceHistory` close for the same date as NAV for fair comparison; flags stale data on Tue–Sat
+
+### Index OHLC sync
+- `app/services/kite_historical.py` — `INDEX_INSTRUMENTS` constant (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX); `ensure_index_instruments()`, `resolve_index_tokens()` (segment filter: `"INDICES"`), `sync_index_history()`; `_sync_one` accepts `backfill_start` param with fallback to earliest trade date
+- `app/routers/portfolio.py` — `_run_sync()` calls `sync_index_history` after equity price sync with SSE progress
+
+### UI / style
+- `frontend/src/overrides.css` — new file: overrides `--mantine-color-dimmed` to `#444` globally (readable on white); imported in `main.tsx` after Mantine styles
+- `frontend/src/components/DonutChart.tsx` — replaced chart.js tooltip (overlapped center label) with hover-driven center display; center shows hovered slice name / value / %; falls back to Total when nothing hovered
+- Allocation diff cells coloured red only when deviation ≥ 3% (both % and absolute shortfall/surplus); within tolerance renders without colour
+
+---
+
 ## 2026-06-10 — Equity – Foreign category with domestic/foreign split
 
 - `app/services/mf_breakdown.py` — added `FOREIGN_FUND_ISINS` constant; moved MON100 (INF247L01AP3) from `ETF_CAP_OVERRIDE` into it so its equity holdings classify as `Equity - Foreign`

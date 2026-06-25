@@ -96,6 +96,7 @@ portfolio-mac-arm/
 │       ├── manual_assets.py     # FD FV calc, manual assets summary
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
+│       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
 │       └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── frontend/
 │   ├── Dockerfile               # node:20-alpine, Vite dev server
@@ -104,7 +105,7 @@ portfolio-mac-arm/
 │   ├── tsconfig.json
 │   └── src/
 │       ├── main.tsx             # MantineProvider, QueryClientProvider, BrowserRouter
-│       ├── App.tsx              # Routes (10 pages under AppLayout)
+│       ├── App.tsx              # Routes (11 pages under AppLayout)
 │       ├── api/                 # Typed fetch client + per-domain React Query hooks
 │       │   ├── client.ts        # request<T>() wrapper; VITE_API_BASE_URL
 │       │   ├── portfolio.ts
@@ -117,7 +118,7 @@ portfolio-mac-arm/
 │       │   └── settings.ts
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
 │       ├── components/
-│       │   ├── AppLayout.tsx    # Mantine AppShell + nav (10 routes)
+│       │   ├── AppLayout.tsx    # Mantine AppShell + nav (11 routes); orange dot on Policy when actions pending
 │       │   ├── DonutChart.tsx   # react-chartjs-2 Doughnut, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
@@ -126,8 +127,9 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview, Sector, Composition, Direct Trades
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector, Composition, Direct Trades
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown with autocomplete search
+│       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
 │       │   ├── NavChart.tsx     # Fund NAV area chart + compare mode (normalised % change)
 │       │   ├── Trades.tsx       # Debounced search + paginated trade list
@@ -195,7 +197,16 @@ Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `s
 Persists manual market-cap classifications for equity holdings not found in the AMFI list. Keyed by `name_normalized`. Applied automatically on subsequent ingests.
 
 ### AllocationTarget
-Per-category equity allocation targets. Stores both the domestic market-cap targets (Large Cap, Mid Cap, Small Cap — as % of domestic equity) and the `Equity - Foreign` target (as % of total equity). The domestic target is derived as `100 − foreign%` and is not stored separately.
+Per-category equity allocation targets. Stores the domestic market-cap targets (Large Cap, Mid Cap, Small Cap — as % of domestic equity) and the `Equity - Foreign` target (as % of total equity).
+
+### AssetClassTarget
+Top-level asset class targets: Equity, Debt, Precious Metals — stored as % of invested portfolio. `Equity - Foreign` (% of total equity) is configured here but stored in `AllocationTarget`.
+
+### PolicyTriggerState
+Key/value store for Policy Tracker trigger states. Supports `value_bool` (toggle switches), `value_text` (audit notes), `value_num`. `acknowledged_at` is set when a manual-ack trigger is marked done. `key` is unique.
+
+### PolicyTriggerEvent
+Audit log of Policy Tracker state changes. Each PUT to the state endpoint appends a row: `trigger_key`, `status`, JSONB `detail` (previous + new values), `created_at`.
 
 ### NavTrackedInstrument
 Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures `sync_nav_history` keeps their NAV up to date.
@@ -259,14 +270,25 @@ Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures
 | `GET /ingest/stream` | SSE: load AMFI xlsx + ingest scheme CSVs |
 | `PATCH /classify-batch` | Manual category override for unmatched equities |
 | `GET /chart-data` | Allocation doughnut data |
-| `GET /allocation-comparison` | Current vs target allocation with deltas |
-| `GET /allocation-targets` | Saved per-category targets |
-| `POST /allocation-targets` | Save per-category targets |
+| `GET /allocation-comparison` | Current vs target allocation with deltas (`?mode=anchored\|free_float`) |
+| `GET /allocation-targets` | Saved per-category equity targets |
+| `POST /allocation-targets` | Save per-category equity targets |
+| `GET /asset-class-comparison` | Asset class (Equity/Debt/PM) current vs target |
+| `GET /asset-class-targets` | Saved asset class targets |
+| `POST /asset-class-targets` | Save asset class targets (also saves `Equity - Foreign` to `allocation_targets`) |
+| `GET /stock-holdings` | Flat list of all equity stocks across schemes |
 | `GET /category-composition` | Per-category breakdown by contributing scheme |
 | `GET /sector-composition` | Per-sector breakdown |
+| `GET /sector-stock-breakdown` | Per-sector individual stock holdings |
 | `GET /direct-trades` | Ticker-wise BUY/SELL breakdown |
 | `GET /schemes` | Schemes with breakdown data |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list |
+
+### Policy Tracker (`/api/v1/policy-tracker`)
+| Endpoint | Description |
+|---|---|
+| `GET /` | Evaluate all triggers; returns section → trigger tree with status, detail, action |
+| `PUT /state/{key}` | Update a trigger's persisted state (toggle, ack, text note) |
 
 ### Manual Assets (`/api/v1/manual-assets`)
 | Endpoint | Description |
@@ -302,13 +324,17 @@ OAuth login → exchange token (expires 06:00 IST next day) → fetch holdings +
 AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`.
 
 ### Price History Sync (SSE)
-Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert → stream progress → send final result.
+Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert → stream progress. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
 
 ### MF Breakdown
 Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
 
 **Equity categories:** `Large Cap`, `Mid Cap`, `Small Cap`, `Unclassified Equity` (domestic), `Equity - Foreign`, `Equity - Arbitrage`.  
-**Allocation comparison:** cap-row percentages are relative to domestic equity; foreign/domestic split percentages are relative to total equity. `Equity - Foreign` target defaults to 0% until set by the user.
+**Allocation comparison:** two modes selectable per session:
+- **Anchored (default):** Mid Cap and Small Cap ideal values are anchored to Large Cap (e.g. Mid = 70% of LC). Foreign ideal = `cur_large × anchor_ratio` where `anchor_ratio = foreign_target / (large_target × domestic_share)`. Large Cap shows no diff; it is the anchor.
+- **Free Float:** all ideals computed from total equity × target %; targets are shown as % of total equity.
+
+`Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
 
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.
