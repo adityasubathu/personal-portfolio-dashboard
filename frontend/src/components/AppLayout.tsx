@@ -4,6 +4,7 @@ import {
   AppShell,
   Burger,
   Group,
+  Indicator,
   NavLink as MantineNavLink,
   Text,
   ScrollArea,
@@ -17,6 +18,7 @@ import {
   IconChartDonut,
   IconChartCandle,
   IconChartHistogram,
+  IconChecklist,
   IconList,
   IconUpload,
   IconBrandGoogle,
@@ -25,6 +27,7 @@ import {
   IconEyeOff,
 } from '@tabler/icons-react'
 import { usePrivacy } from '../hooks/usePrivacy'
+import { usePolicyTracker } from '../api/policyTracker'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
@@ -36,12 +39,15 @@ const NAV_ITEMS = [
   { to: '/trades', label: 'Trades', icon: IconList },
   { to: '/import', label: 'Import', icon: IconUpload },
   { to: '/kite', label: 'Kite', icon: IconBrandGoogle },
+  { to: '/policy', label: 'Policy', icon: IconChecklist },
   { to: '/settings', label: 'Settings', icon: IconSettings },
 ]
 
 export function AppLayout() {
   const [opened, { toggle }] = useDisclosure()
   const { privacyMode, togglePrivacy } = usePrivacy()
+  const { data: policyData } = usePolicyTracker()
+  const actionCount = policyData?.action_count ?? 0
 
   return (
     <AppShell
@@ -72,7 +78,15 @@ export function AppLayout() {
                 <MantineNavLink
                   component="div"
                   label={label}
-                  leftSection={<Icon size={16} />}
+                  leftSection={
+                    to === '/policy' && actionCount > 0 ? (
+                      <Indicator color="orange" size={8} offset={2}>
+                        <Icon size={16} />
+                      </Indicator>
+                    ) : (
+                      <Icon size={16} />
+                    )
+                  }
                   active={isActive}
                   styles={{ root: { borderRadius: 6 } }}
                 />

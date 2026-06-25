@@ -10,6 +10,7 @@ import { Trades } from './pages/Trades'
 import { Import } from './pages/Import'
 import { Kite } from './pages/Kite'
 import { Settings } from './pages/Settings'
+import { PolicyTracker } from './pages/PolicyTracker'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
         <Route path="/import" element={<Import />} />
         <Route path="/kite" element={<Kite />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/policy" element={<PolicyTracker />} />
       </Route>
     </Routes>
   )
