@@ -14,6 +14,8 @@ from app.services.mf_breakdown import (
     normalize_company_name,
     get_allocation_comparison,
     get_allocation_targets,
+    get_asset_class_comparison,
+    get_asset_class_targets,
     get_available_schemes,
     get_breakdown_chart_data,
     get_category_composition,
@@ -24,6 +26,7 @@ from app.services.mf_breakdown import (
     get_stock_holdings_table,
     ingest_scheme_csvs,
     save_allocation_targets,
+    save_asset_class_targets,
     sync_amfi_market_cap,
 )
 from app.time_util import now_ist
@@ -149,6 +152,33 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
             except ValueError:
                 continue
     await save_allocation_targets(db, targets)
+    return {"ok": True}
+
+
+@router.get("/asset-class-comparison")
+async def asset_class_comparison(db: AsyncSession = Depends(get_db)):
+    data = await get_asset_class_comparison(db)
+    return JSONResponse(data)
+
+
+@router.get("/asset-class-targets")
+async def get_asset_class_targets_endpoint(db: AsyncSession = Depends(get_db)):
+    targets = await get_asset_class_targets(db)
+    return JSONResponse(targets)
+
+
+@router.post("/asset-class-targets")
+async def update_asset_class_targets(request: Request, db: AsyncSession = Depends(get_db)):
+    form = await request.form()
+    targets: dict[str, float] = {}
+    for key, val in form.items():
+        if key.startswith("target_"):
+            asset_class = key[7:].replace("_", " ")
+            try:
+                targets[asset_class] = float(val)
+            except ValueError:
+                continue
+    await save_asset_class_targets(db, targets)
     return {"ok": True}
 
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request, requestForm } from './client'
 import type {
   AllocationComparison,
+  AssetClassComparison,
   BreakdownChartData,
   CategoryCompositionItem,
   ClassifyResult,
@@ -18,6 +19,7 @@ export const breakdownKeys = {
   stockHoldings: ['mf-breakdown', 'stock-holdings'] as const,
   allocationComparison: ['mf-breakdown', 'allocation-comparison'] as const,
   allocationTargets: ['mf-breakdown', 'allocation-targets'] as const,
+  assetClassComparison: ['mf-breakdown', 'asset-class-comparison'] as const,
   categoryComposition: ['mf-breakdown', 'category-composition'] as const,
   sectorComposition: ['mf-breakdown', 'sector-composition'] as const,
   sectorStockBreakdown: ['mf-breakdown', 'sector-stock-breakdown'] as const,
@@ -94,6 +96,27 @@ export function useSchemeBreakdown(schemeIsin: string | null) {
     queryKey: breakdownKeys.scheme(schemeIsin ?? ''),
     queryFn: () => request<SchemeBreakdown>(`/api/v1/mf-breakdown/scheme/${schemeIsin}`),
     enabled: schemeIsin != null,
+  })
+}
+
+export function useAssetClassComparison() {
+  return useQuery({
+    queryKey: breakdownKeys.assetClassComparison,
+    queryFn: () => request<AssetClassComparison>('/api/v1/mf-breakdown/asset-class-comparison'),
+  })
+}
+
+export function useSaveAssetClassTargetsMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (targets: Record<string, number>) => {
+      const form = new URLSearchParams()
+      Object.entries(targets).forEach(([ac, val]) =>
+        form.append(`target_${ac.replace(/ /g, '_')}`, String(val))
+      )
+      return requestForm<{ ok: boolean }>('/api/v1/mf-breakdown/asset-class-targets', form)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mf-breakdown'] }),
   })
 }
 

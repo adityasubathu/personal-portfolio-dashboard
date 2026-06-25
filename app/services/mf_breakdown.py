@@ -10,7 +10,7 @@ import openpyxl
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.allocation_target import AllocationTarget
+from app.models.allocation_target import AllocationTarget, AssetClassTarget
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, MfSchemeBreakdown
@@ -825,6 +825,105 @@ async def save_allocation_targets(db: AsyncSession, targets: dict[str, float]):
         )
     )
     await db.commit()
+
+
+DEFAULT_ASSET_CLASS_TARGETS: dict[str, float] = {
+    "Equity": 65.0,
+    "Debt": 30.0,
+    "Precious Metals": 5.0,
+}
+
+
+async def get_asset_class_targets(db: AsyncSession) -> dict[str, float]:
+    rows = (await db.execute(select(AssetClassTarget))).scalars().all()
+    if not rows:
+        return dict(DEFAULT_ASSET_CLASS_TARGETS)
+    return {r.asset_class: float(r.target_pct) for r in rows}
+
+
+async def save_asset_class_targets(db: AsyncSession, targets: dict[str, float]):
+    for asset_class, pct in targets.items():
+        existing = (await db.execute(
+            select(AssetClassTarget).where(AssetClassTarget.asset_class == asset_class)
+        )).scalar_one_or_none()
+        if existing:
+            existing.target_pct = pct
+        else:
+            db.add(AssetClassTarget(asset_class=asset_class, target_pct=pct))
+    await db.execute(
+        delete(AssetClassTarget).where(
+            AssetClassTarget.asset_class.notin_(list(targets.keys()))
+        )
+    )
+    await db.commit()
+
+
+_AC_EQUITY = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign"}
+_AC_DEBT = {"Debt", "Equity - Arbitrage"}
+_AC_PRECIOUS_METALS = {"Gold", "Silver"}
+
+
+async def get_asset_class_comparison(db: AsyncSession) -> dict:
+    from app.services.manual_assets import get_manual_assets_summary
+
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    all_holdings = result.all()
+    category_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
+    manual = await get_manual_assets_summary(db)
+
+    savings_cash = manual.get("total_cash", 0)
+    emergency_fund = manual.get("emergency_total", 0)
+    ppf = manual.get("total_ppf", 0)
+
+    # MF internal cash = total "Cash" category minus savings-account-only cash
+    mf_cash = max(0.0, category_totals.get("Cash", 0) - savings_cash)
+
+    equity = sum(category_totals.get(c, 0) for c in _AC_EQUITY)
+    debt = sum(category_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund - ppf
+    debt = max(0.0, debt)
+    precious_metals = sum(category_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
+
+    investable_total = equity + debt + precious_metals
+    grand_total = investable_total + savings_cash + emergency_fund + ppf
+
+    targets = await get_asset_class_targets(db)
+
+    rows = []
+    for asset_class, current_value in [
+        ("Equity", equity),
+        ("Debt", debt),
+        ("Precious Metals", precious_metals),
+    ]:
+        target_pct = targets.get(asset_class, DEFAULT_ASSET_CLASS_TARGETS.get(asset_class, 0.0))
+        current_pct = (current_value / investable_total * 100) if investable_total > 0 else 0.0
+        current_diff = current_pct - target_pct
+        ideal_value = investable_total * target_pct / 100 if investable_total > 0 else 0.0
+        shortfall = current_value - ideal_value
+        rows.append({
+            "asset_class": asset_class,
+            "target_pct": target_pct,
+            "current_pct": round(current_pct, 2),
+            "current_value": round(current_value, 2),
+            "current_diff": round(current_diff, 2),
+            "ideal_value": round(ideal_value, 2),
+            "shortfall": round(shortfall, 2),
+        })
+
+    return {
+        "rows": rows,
+        "investable_total": round(investable_total, 2),
+        "excluded": {
+            "emergency_fund": round(emergency_fund, 2),
+            "ppf": round(ppf, 2),
+            "cash": round(savings_cash, 2),
+            "total_excluded": round(savings_cash + emergency_fund + ppf, 2),
+        },
+        "grand_total": round(grand_total, 2),
+    }
 
 
 DOMESTIC_EQUITY_CATS = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity"}

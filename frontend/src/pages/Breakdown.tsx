@@ -11,7 +11,9 @@ import {
   useSectorStockBreakdown,
   useCategoryComposition,
   useAllocationComparison,
+  useAssetClassComparison,
   useSaveAllocationTargetsMutation,
+  useSaveAssetClassTargetsMutation,
   useClassifyBatchMutation,
   useSchemeBreakdown,
 } from '../api/mfBreakdown'
@@ -21,7 +23,98 @@ import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
+import { inrCompact } from '../lib/format'
 import type { IngestDonePayload } from '../types/mfBreakdown'
+
+function AssetClassTargetsSection() {
+  const { data: ac, refetch } = useAssetClassComparison()
+  const saveMut = useSaveAssetClassTargetsMutation()
+  const [targets, setTargets] = useState<Record<string, number>>({})
+
+  if (!ac) return null
+
+  async function handleSave() {
+    try {
+      const updated = Object.fromEntries(
+        ac!.rows.map((r) => [r.asset_class, targets[r.asset_class] ?? r.target_pct])
+      )
+      await saveMut.mutateAsync(updated)
+      notifications.show({ color: 'green', message: 'Asset class targets saved.' })
+      refetch()
+    } catch (e) {
+      notifications.show({ color: 'red', message: String(e) })
+    }
+  }
+
+  const { emergency_fund, ppf, cash } = ac.excluded
+
+  return (
+    <Box>
+      <Text fw={600} mb="xs">
+        Asset class targets{' '}
+        <Text component="span" size="xs" c="dimmed" fw={400}>
+          (% of invested portfolio · <MoneyText value={ac.investable_total} compact />)
+        </Text>
+      </Text>
+      <Table fz="sm" withColumnBorders={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Asset class</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
+            <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {ac.rows.map((r) => (
+            <Table.Tr key={r.asset_class}>
+              <Table.Td>
+                <Group gap={6}>
+                  <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(r.asset_class) }} />
+                  {r.asset_class}
+                </Group>
+              </Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}>{r.target_pct.toFixed(1)}%</Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
+              <Table.Td style={{ textAlign: 'right', color: r.current_diff >= 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)' }}>
+                {r.current_diff >= 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
+              </Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}>
+                <MoneyText value={r.shortfall} compact showSign colorize />
+              </Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
+              <Table.Td style={{ textAlign: 'right' }}>
+                <NumberInput
+                  size="xs"
+                  w={80}
+                  value={targets[r.asset_class] ?? r.target_pct}
+                  onChange={(v) => setTargets((p) => ({ ...p, [r.asset_class]: Number(v) }))}
+                  min={0}
+                  max={100}
+                  step={1}
+                />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Group gap="lg" mt="xs" align="center">
+        <Button size="xs" loading={saveMut.isPending} onClick={handleSave}>
+          Save targets
+        </Button>
+        <Text size="xs" c="dimmed">
+          Excludes:{' '}
+          {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
+          {ppf > 0 && <>PPF {inrCompact(ppf)}, </>}
+          {cash > 0 && <>Savings {inrCompact(cash)}</>}
+        </Text>
+      </Group>
+    </Box>
+  )
+}
 
 function OverviewTab() {
   const { data: chart } = useBreakdownChart()
@@ -79,6 +172,8 @@ function OverviewTab() {
           </Stack>
         </Group>
       )}
+
+      <AssetClassTargetsSection />
 
       {comparison && (
         <Box>

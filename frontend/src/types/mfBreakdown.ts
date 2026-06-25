@@ -4,6 +4,23 @@ export interface BreakdownChartData {
   total: number
 }
 
+export interface AssetClassRow {
+  asset_class: string
+  target_pct: number
+  current_pct: number
+  current_value: number
+  current_diff: number
+  ideal_value: number
+  shortfall: number
+}
+
+export interface AssetClassComparison {
+  rows: AssetClassRow[]
+  investable_total: number
+  excluded: { emergency_fund: number; ppf: number; cash: number; total_excluded: number }
+  grand_total: number
+}
+
 export interface AllocationRow {
   category: string
   target_pct: number
