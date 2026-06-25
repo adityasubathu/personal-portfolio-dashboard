@@ -16,7 +16,7 @@ from app.models.kite import KiteSyncLog
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.schemas.portfolio import DirectHoldingsResponse, HoldingRow, HoldingsSection, InstrumentListItem, SummaryCards
-from app.services.kite_historical import fetch_ohlc_for_ticker, sync_price_history
+from app.services.kite_historical import fetch_ohlc_for_ticker, sync_index_history, sync_price_history
 from app.services import kite_sync
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
@@ -439,6 +439,12 @@ async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
             async def _run_sync():
                 try:
                     result = await sync_price_history(db, on_progress=_on_progress)
+                    await _on_progress("Syncing index price history…")
+                    try:
+                        index_result = await sync_index_history(db, on_progress=_on_progress)
+                        await _on_progress(f"Indices: {index_result['instruments_synced']} synced, {index_result['rows_added']} rows")
+                    except Exception as idx_err:
+                        await _on_progress(f"Index sync skipped: {idx_err}")
                     await _on_progress("Updating LTPs from Kite…")
                     ltp_result = None
                     try:

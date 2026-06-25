@@ -32,8 +32,17 @@ from app.models.trade import Trade
 from app.services import kite_client
 from app.services.kite_sync import _assert_token_valid, _get_config
 
-EQUITY_TYPES = ("STOCK", "BOND", "ETF")
+EQUITY_TYPES = ("STOCK", "BOND", "ETF", "INDEX")
 KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
+
+INDEX_INSTRUMENTS = [
+    {"tradingsymbol": "NIFTY 50",         "exchange": "NSE", "name": "Nifty 50"},
+    {"tradingsymbol": "NIFTY NEXT 50",    "exchange": "NSE", "name": "Nifty Next 50"},
+    {"tradingsymbol": "NIFTY MIDCAP 150", "exchange": "NSE", "name": "Nifty Midcap 150"},
+    {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250"},
+    {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX"},
+]
+INDEX_BACKFILL_START = date(2020, 1, 1)
 
 
 
@@ -87,6 +96,72 @@ async def resolve_instrument_tokens(db: AsyncSession) -> dict:
     return {"resolved": resolved, "already_had": already_had, "unresolved": unresolved}
 
 
+async def ensure_index_instruments(db: AsyncSession) -> list[Instrument]:
+    """Find-or-create Instrument rows for each entry in INDEX_INSTRUMENTS."""
+    instruments: list[Instrument] = []
+    for entry in INDEX_INSTRUMENTS:
+        result = await db.execute(
+            select(Instrument).where(
+                Instrument.tradingsymbol == entry["tradingsymbol"],
+                Instrument.exchange == entry["exchange"],
+                Instrument.instrument_type == "INDEX",
+            )
+        )
+        instr = result.scalar_one_or_none()
+        if instr is None:
+            instr = Instrument(
+                tradingsymbol=entry["tradingsymbol"],
+                exchange=entry["exchange"],
+                name=entry["name"],
+                instrument_type="INDEX",
+                isin=None,
+            )
+            db.add(instr)
+        instruments.append(instr)
+    await db.commit()
+    # Refresh to get IDs for any newly inserted rows.
+    for instr in instruments:
+        await db.refresh(instr)
+    return instruments
+
+
+async def resolve_index_tokens(db: AsyncSession) -> dict:
+    """Populate kite_instrument_token for INDEX instruments from the Kite dump.
+    Index rows appear in the dump with segment=NSE_INDICES."""
+    instruments = await ensure_index_instruments(db)
+    needed = [i for i in instruments if not i.kite_instrument_token]
+    already_had = len(instruments) - len(needed)
+    if not needed:
+        return {"resolved": 0, "already_had": already_had, "unresolved": []}
+
+    dump = await kite_client.get_instruments_dump()
+    # Index rows use segment=NSE_INDICES; tradingsymbol matches exactly.
+    index_tokens: dict[str, int] = {}
+    for row in dump:
+        seg = (row.get("segment") or "").strip()
+        sym = (row.get("tradingsymbol") or "").strip()
+        tok = row.get("instrument_token")
+        if seg == "NSE_INDICES" and sym and tok:
+            try:
+                index_tokens[sym] = int(tok)
+            except ValueError:
+                continue
+
+    resolved = 0
+    unresolved: list[str] = []
+    for instr in needed:
+        sym = (instr.tradingsymbol or "").strip()
+        tok = index_tokens.get(sym)
+        if tok is None:
+            unresolved.append(sym)
+            continue
+        instr.kite_instrument_token = tok
+        resolved += 1
+
+    await db.commit()
+    return {"resolved": resolved, "already_had": already_had, "unresolved": unresolved}
+
+
 async def _earliest_trade_date(db: AsyncSession, instrument_id: int) -> date | None:
     return (
         await db.execute(
@@ -109,19 +184,26 @@ async def _sync_one(
     db: AsyncSession,
     config: KiteConfig,
     instrument: Instrument,
+    backfill_start: date | None = None,
 ) -> dict:
-    """Sync history for a single STOCK/ETF/BOND instrument. Returns
-    {rows_added, latest_price_date, error?}."""
+    """Sync history for a single instrument. Returns {rows_added, latest_price_date, error?}.
+
+    `backfill_start`: used when no price history exists yet. Defaults to 10 days
+    before the earliest trade date (for traded instruments). Pass an explicit date
+    for instruments with no trades (e.g. indices)."""
     latest_stored = await _latest_stored_price_date(db, instrument.id)
     if latest_stored:
         # Re-fetch the last 5 days so any corrected/late-published candles are overwritten.
         start = latest_stored - timedelta(days=4)
     else:
-        earliest_trade = await _earliest_trade_date(db, instrument.id)
-        if earliest_trade is None:
-            return {"rows_added": 0, "latest_price_date": None}
-        # Buffer 10 days so the chart has room to breathe before the first trade.
-        start = earliest_trade - timedelta(days=10)
+        if backfill_start is not None:
+            start = backfill_start
+        else:
+            earliest_trade = await _earliest_trade_date(db, instrument.id)
+            if earliest_trade is None:
+                return {"rows_added": 0, "latest_price_date": None}
+            # Buffer 10 days so the chart has room to breathe before the first trade.
+            start = earliest_trade - timedelta(days=10)
 
     today = date.today()
     if start > today:
@@ -270,6 +352,49 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
         "no_data": no_data,
         "per_instrument": per_instrument,
     }
+
+
+async def sync_index_history(db: AsyncSession, on_progress=None) -> dict:
+    """Sync daily OHLC history for all INDEX instruments (Nifty 50, etc.).
+    Separate from sync_price_history which only covers traded instruments."""
+    config = await _get_config(db)
+    _assert_token_valid(config)
+
+    token_result = await resolve_index_tokens(db)
+    if on_progress and token_result["resolved"]:
+        await on_progress(f"Index tokens resolved: {token_result['resolved']} new")
+    if on_progress and token_result["unresolved"]:
+        await on_progress(f"Index tokens unresolved: {', '.join(token_result['unresolved'])}")
+
+    instruments = await ensure_index_instruments(db)
+
+    total_rows = 0
+    instruments_synced = 0
+    for idx, instr in enumerate(instruments, 1):
+        sym = instr.tradingsymbol or "?"
+        if not instr.kite_instrument_token:
+            if on_progress:
+                await on_progress(f"[{idx}/{len(instruments)}] {sym} — skipped (no token)")
+            continue
+
+        await asyncio.sleep(0.5)
+        outcome = await _sync_one(db, config, instr, backfill_start=INDEX_BACKFILL_START)
+
+        if outcome.get("error"):
+            if on_progress:
+                await on_progress(f"[{idx}/{len(instruments)}] {sym} — error: {outcome['error']}")
+            continue
+
+        total_rows += outcome["rows_added"]
+        instruments_synced += 1
+        if on_progress:
+            await on_progress(
+                f"[{idx}/{len(instruments)}] {sym} — +{outcome['rows_added']} row(s)"
+                + (f" (latest: {outcome['latest_price_date']})" if outcome.get("latest_price_date") else "")
+            )
+
+    await db.commit()
+    return {"instruments_synced": instruments_synced, "rows_added": total_rows}
 
 
 async def _resolve_ticker_token(
