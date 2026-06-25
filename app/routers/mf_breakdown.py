@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.allocation_target import AllocationTarget
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
 from app.services.mf_breakdown import (
     normalize_company_name,
@@ -129,8 +130,8 @@ async def stock_holdings(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/allocation-comparison")
-async def allocation_comparison(db: AsyncSession = Depends(get_db)):
-    data = await get_allocation_comparison(db)
+async def allocation_comparison(mode: str = "anchored", db: AsyncSession = Depends(get_db)):
+    data = await get_allocation_comparison(db, mode=mode)
     return JSONResponse(data)
 
 
@@ -171,14 +172,26 @@ async def get_asset_class_targets_endpoint(db: AsyncSession = Depends(get_db)):
 async def update_asset_class_targets(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
     targets: dict[str, float] = {}
+    foreign_pct: float | None = None
     for key, val in form.items():
         if key.startswith("target_"):
             asset_class = key[7:].replace("_", " ")
             try:
-                targets[asset_class] = float(val)
+                v = float(val)
             except ValueError:
                 continue
+            if asset_class == "Equity - Foreign":
+                foreign_pct = v
+            else:
+                targets[asset_class] = v
     await save_asset_class_targets(db, targets)
+    if foreign_pct is not None:
+        await db.execute(
+            pg_insert(AllocationTarget)
+            .values(category="Equity - Foreign", target_pct=foreign_pct)
+            .on_conflict_do_update(index_elements=["category"], set_={"target_pct": foreign_pct})
+        )
+        await db.commit()
     return {"ok": True}
 
 

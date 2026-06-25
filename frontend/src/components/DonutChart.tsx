@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 import { Box, Group, Stack, Text } from '@mantine/core'
 import { categoryColor, sectorColor } from '../lib/colors'
-import { inr, inrCompact } from '../lib/format'
+import { inrCompact } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
@@ -18,6 +18,7 @@ interface DonutChartProps {
 
 export function DonutChart({ labels, values, total, colorMode = 'category', size = 220 }: DonutChartProps) {
   const { privacyMode } = usePrivacy()
+  const [hovered, setHovered] = useState<number | null>(null)
   const colors = useMemo(
     () =>
       labels.map((label, i) =>
@@ -43,14 +44,12 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
 
   const options = {
     responsive: false,
+    onHover: (_: unknown, activeElements: { index: number }[]) => {
+      setHovered(activeElements.length > 0 ? activeElements[0].index : null)
+    },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx: { label: string; parsed: number }) =>
-            privacyMode ? `${ctx.label}: ₹•••` : `${ctx.label}: ${inr(ctx.parsed)}`,
-        },
-      },
+      tooltip: { enabled: false },
     },
   }
 
@@ -74,8 +73,18 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
             pointerEvents: 'none',
           }}
         >
-          <Text size="xs" c="dimmed">Total</Text>
-          <Text size="sm" fw={700}>{privacyMode ? '₹•••' : inrCompact(totalValue)}</Text>
+          {hovered !== null ? (
+            <>
+              <Text size="xs" style={{ maxWidth: size * 0.55, textAlign: 'center', lineHeight: 1.2 }}>{labels[hovered]}</Text>
+              <Text size="sm" fw={700}>{privacyMode ? '₹•••' : inrCompact(values[hovered])}</Text>
+              <Text size="xs">{pctValues[hovered].toFixed(1)}%</Text>
+            </>
+          ) : (
+            <>
+              <Text size="xs" c="dimmed">Total</Text>
+              <Text size="sm" fw={700}>{privacyMode ? '₹•••' : inrCompact(totalValue)}</Text>
+            </>
+          )}
         </Box>
       </Box>
 

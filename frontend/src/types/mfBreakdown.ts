@@ -16,6 +16,7 @@ export interface AssetClassRow {
 
 export interface AssetClassComparison {
   rows: AssetClassRow[]
+  foreign_equity_target: number
   investable_total: number
   excluded: { emergency_fund: number; ppf: number; cash: number; total_excluded: number }
   grand_total: number
@@ -24,6 +25,7 @@ export interface AssetClassComparison {
 export interface AllocationRow {
   category: string
   target_pct: number
+  anchor_note: string | null
   current_pct: number
   current_value: number
   current_diff: number
@@ -54,6 +56,7 @@ export interface AllocationComparison {
   current_equity: number
   invested_equity: number
   domestic_equity: number
+  mode: 'anchored' | 'free_float'
 }
 
 export interface SchemeHolding {

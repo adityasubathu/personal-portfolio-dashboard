@@ -42,10 +42,10 @@ export function useStockHoldings() {
   })
 }
 
-export function useAllocationComparison() {
+export function useAllocationComparison(mode: 'anchored' | 'free_float' = 'anchored') {
   return useQuery({
-    queryKey: breakdownKeys.allocationComparison,
-    queryFn: () => request<AllocationComparison>('/api/v1/mf-breakdown/allocation-comparison'),
+    queryKey: [...breakdownKeys.allocationComparison, mode],
+    queryFn: () => request<AllocationComparison>(`/api/v1/mf-breakdown/allocation-comparison?mode=${mode}`),
   })
 }
 

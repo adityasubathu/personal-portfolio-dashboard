@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Box, Button, Group, NumberInput, Paper, Select, Stack,
+  Box, Button, Group, NumberInput, Paper, Select, SegmentedControl, Stack,
   Table, Tabs, Text, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
@@ -21,6 +21,7 @@ import { DonutChart } from '../components/DonutChart'
 import { SsePanel } from '../components/SsePanel'
 import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
@@ -42,6 +43,7 @@ function AssetClassTargetsSection() {
       const updated = Object.fromEntries(
         ac!.rows.map((r) => [r.asset_class, targets[r.asset_class] ?? r.target_pct])
       )
+      updated['Equity - Foreign'] = targets['Equity - Foreign'] ?? ac!.foreign_equity_target
       await saveMut.mutateAsync(updated)
       notifications.show({ color: 'green', message: 'Asset class targets saved.' })
       refetch()
@@ -103,6 +105,27 @@ function AssetClassTargetsSection() {
               </Table.Td>
             </Table.Tr>
           ))}
+          <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
+            <Table.Td>
+              <Group gap={6}>
+                <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor('Equity - Foreign') }} />
+                Equity - Foreign
+                <Text size="xs" c="dimmed">(% of total equity)</Text>
+              </Group>
+            </Table.Td>
+            <Table.Td colSpan={5} />
+            <Table.Td style={{ textAlign: 'right' }}>
+              <NumberInput
+                size="xs"
+                w={80}
+                value={targets['Equity - Foreign'] ?? ac.foreign_equity_target}
+                onChange={(v) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(v) }))}
+                min={0}
+                max={100}
+                step={1}
+              />
+            </Table.Td>
+          </Table.Tr>
         </Table.Tbody>
       </Table>
       <Group gap="lg" mt="xs" align="center">
@@ -122,14 +145,16 @@ function AssetClassTargetsSection() {
 
 function OverviewTab() {
   const { data: chart } = useBreakdownChart()
-  const { data: comparison, refetch: refetchComp } = useAllocationComparison()
+  const [mode, setMode] = usePersistentState<'anchored' | 'free_float'>('allocationMode', 'anchored')
+  const { data: comparison, refetch: refetchComp } = useAllocationComparison(mode)
   const saveMut = useSaveAllocationTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
 
   async function handleSaveTargets() {
     try {
+      const domesticRows = (comparison?.rows ?? []).filter((r) => r.category !== 'Equity - Foreign')
       const allTargets = Object.fromEntries([
-        ...(comparison?.rows ?? []).map((r) => [r.category, targets[r.category] ?? r.target_pct] as [string, number]),
+        ...domesticRows.map((r) => [r.category, targets[r.category] ?? r.target_pct] as [string, number]),
         ['Equity - Foreign', targets['Equity - Foreign'] ?? (comparison?.foreign.target_pct ?? 0)],
       ])
       await saveMut.mutateAsync(allTargets)
@@ -162,6 +187,9 @@ function OverviewTab() {
   const hlLabels = hlEntries.map(([l]) => l)
   const hlValues = hlEntries.map(([, v]) => v)
 
+  const isAnchored = mode === 'anchored'
+  const targetPctLabel = isAnchored ? '% of domestic equity' : '% of total equity'
+
   return (
     <Stack gap="lg">
       {chart.labels.length > 0 && (
@@ -181,63 +209,22 @@ function OverviewTab() {
 
       {comparison && (
         <Box>
-          <Text fw={600} mb="xs">Domestic / Foreign split</Text>
-          <Table fz="sm" withColumnBorders={false} mb="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Slice</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Set foreign %</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {[
-                { label: 'Domestic', summary: comparison.domestic, editable: false },
-                { label: 'Foreign', summary: comparison.foreign, editable: true },
-              ].map(({ label, summary, editable }) => (
-                <Table.Tr key={label}>
-                  <Table.Td>
-                    <Group gap={6}>
-                      <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(label === 'Foreign' ? 'Equity - Foreign' : 'Large Cap') }} />
-                      {label}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{summary.target_pct.toFixed(1)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{summary.current_pct.toFixed(2)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', color: diffColor(summary.current_diff) }}>
-                    {summary.current_diff > 0 ? '+' : ''}{summary.current_diff.toFixed(2)}%
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>
-                    <MoneyText value={summary.current_value_diff} compact showSign style={{ color: diffColor(summary.current_diff) }} />
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={summary.current_value} compact /></Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>
-                    {editable ? (
-                      <NumberInput
-                        size="xs"
-                        w={80}
-                        value={targets['Equity - Foreign'] ?? comparison.foreign.target_pct}
-                        onChange={(v) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(v) }))}
-                        min={0}
-                        max={100}
-                        step={1}
-                      />
-                    ) : (
-                      <Text size="xs" c="dimmed">
-                        {(100 - (targets['Equity - Foreign'] ?? comparison.foreign.target_pct)).toFixed(0)}%
-                      </Text>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Group justify="space-between" align="center" mb="xs">
+            <Text fw={600}>
+              Equity allocation targets{' '}
+              <Text component="span" size="xs" fw={400}>({targetPctLabel})</Text>
+            </Text>
+            <SegmentedControl
+              size="xs"
+              value={mode}
+              onChange={(v) => setMode(v as 'anchored' | 'free_float')}
+              data={[
+                { label: 'Large Cap Anchored', value: 'anchored' },
+                { label: 'Free Float', value: 'free_float' },
+              ]}
+            />
+          </Group>
 
-          <Text fw={600} mb={4}>Market-cap targets <Text component="span" size="xs" c="dimmed" fw={400}>(% of domestic equity)</Text></Text>
           <Table fz="sm" withColumnBorders={false}>
             <Table.Thead>
               <Table.Tr>
@@ -251,43 +238,54 @@ function OverviewTab() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {comparison.rows.map((r) => (
-                <Table.Tr key={r.category}>
-                  <Table.Td>
-                    <Group gap={6}>
-                      <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(r.category) }} />
-                      {r.category}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{r.target_pct.toFixed(1)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', color: diffColor(r.current_diff) }}>
-                    {r.current_diff > 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>
-                    {(r.category === 'Mid Cap' || r.category === 'Small Cap') && (
-                      <MoneyText
-                        value={r.current_value_diff}
-                        compact
-                        showSign
-                        style={{ color: diffColor(r.current_diff) }}
-                      />
-                    )}
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>
-                    <NumberInput
-                      size="xs"
-                      w={80}
-                      value={targets[r.category] ?? r.target_pct}
-                      onChange={(v) => setTargets((p) => ({ ...p, [r.category]: Number(v) }))}
-                      min={0}
-                      max={100}
-                      step={1}
-                    />
-                  </Table.Td>
-                </Table.Tr>
-              ))}
+              {comparison.rows.map((r) => {
+                const isForeign = r.category === 'Equity - Foreign'
+                const isAnchor = isAnchored && r.category === 'Large Cap'
+                // In anchored mode, shortfall is only meaningful for mid/small/foreign
+                const showShortfall = !isAnchor
+                // In anchored mode, foreign target input is hidden (always 50% of LC)
+                const showTargetInput = !(isAnchored && isForeign)
+                return (
+                  <Table.Tr key={r.category}>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(r.category) }} />
+                        {r.category}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>
+                      {r.anchor_note
+                        ? <Text size="xs">{r.anchor_note}</Text>
+                        : `${r.target_pct.toFixed(1)}%`}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', color: isAnchor ? undefined : diffColor(r.current_diff) }}>
+                      {isAnchor ? '—' : `${r.current_diff > 0 ? '+' : ''}${r.current_diff.toFixed(2)}%`}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>
+                      {showShortfall && (
+                        <MoneyText value={r.current_value_diff} compact showSign style={{ color: diffColor(r.current_diff) }} />
+                      )}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
+                    <Table.Td style={{ textAlign: 'right' }}>
+                      {showTargetInput ? (
+                        <NumberInput
+                          size="xs"
+                          w={80}
+                          value={targets[r.category] ?? (isForeign ? comparison.foreign.target_pct : r.target_pct)}
+                          onChange={(v) => setTargets((p) => ({ ...p, [r.category]: Number(v) }))}
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      ) : (
+                        <Text size="xs">50% of LC</Text>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                )
+              })}
             </Table.Tbody>
           </Table>
           <Button size="xs" mt="xs" loading={saveMut.isPending} onClick={handleSaveTargets}>
