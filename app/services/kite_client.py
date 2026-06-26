@@ -85,13 +85,17 @@ async def get_positions(api_key: str, access_token: str) -> list[dict]:
     return data["data"].get("net", [])
 
 
-async def get_ltp(api_key: str, access_token: str, instruments: list[str]) -> dict[str, float]:
-    """Fetch last traded prices for up to 1000 instruments.
+async def get_ltp(
+    api_key: str, access_token: str, instruments: list[str]
+) -> dict[str, tuple[float, datetime | None]]:
+    """Fetch last traded prices for up to 500 instruments.
     instruments: list of "exchange:tradingsymbol" strings.
-    Returns {instrument_key: last_price}, skipping keys absent from the response."""
+    Returns {instrument_key: (last_price, last_trade_time)}.
+    last_trade_time is the datetime of the last actual trade (from the exchange),
+    not the time of this request — so it reflects the last trading session on holidays."""
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
-            f"{KITE_BASE}/quote/ltp",
+            f"{KITE_BASE}/quote",
             headers=_auth_headers(api_key, access_token),
             params=[("i", ins) for ins in instruments],
         )
@@ -101,11 +105,19 @@ async def get_ltp(api_key: str, access_token: str, instruments: list[str]) -> di
     if data.get("status") != "success":
         raise ValueError(f"Kite LTP fetch failed: {data.get('message', data)}")
 
-    return {
-        key: float(quote["last_price"])
-        for key, quote in data.get("data", {}).items()
-        if "last_price" in quote
-    }
+    result: dict[str, tuple[float, datetime | None]] = {}
+    for key, quote in data.get("data", {}).items():
+        if "last_price" not in quote:
+            continue
+        ltt_raw = quote.get("last_trade_time") or quote.get("timestamp")
+        ltt: datetime | None = None
+        if ltt_raw:
+            try:
+                ltt = datetime.fromisoformat(ltt_raw)
+            except (ValueError, TypeError):
+                pass
+        result[key] = (float(quote["last_price"]), ltt)
+    return result
 
 
 async def get_instruments_dump() -> list[dict]:

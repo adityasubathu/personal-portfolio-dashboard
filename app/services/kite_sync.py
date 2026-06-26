@@ -49,24 +49,24 @@ async def update_ltp(db: AsyncSession) -> dict:
     key_to_holding = {f"{instr.exchange}:{instr.tradingsymbol}": h for h, instr in eligible}
 
     errors: list[str] = []
-    ltp_map: dict[str, float] = {}
+    ltp_map: dict[str, tuple[float, datetime | None]] = {}
     try:
         ltp_map = await kite_client.get_ltp(config.api_key, config.access_token, instruments)
     except Exception as e:
         errors.append(str(e))
 
     updated = 0
-    ts = now_ist()
-    for key, price in ltp_map.items():
+    fallback_ts = now_ist()
+    for key, (price, ltt) in ltp_map.items():
         holding = key_to_holding.get(key)
         if holding:
             holding.last_price = price
-            holding.last_price_at = ts
+            holding.last_price_at = ltt if ltt is not None else fallback_ts
             updated += 1
 
     await db.commit()
     await recompute_and_store_xirr(db)
-    return {"updated": updated, "timestamp": ts.isoformat(), "errors": errors}
+    return {"updated": updated, "timestamp": fallback_ts.isoformat(), "errors": errors}
 
 
 async def sync(db: AsyncSession) -> dict:
