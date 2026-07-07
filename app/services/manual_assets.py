@@ -64,6 +64,7 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
                 "id": a.id,
                 "label": a.label or "",
                 "value_usd": value_usd,
+                "invested_usd": float(a.principal or 0),
                 "value_inr": round(value_usd * usdinr_rate, 2),
             })
 

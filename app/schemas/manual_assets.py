@@ -24,6 +24,7 @@ class ForeignEquityAsset(BaseModel):
     id: int
     label: str
     value_usd: float
+    invested_usd: float
     value_inr: float
 
 

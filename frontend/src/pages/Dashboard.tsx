@@ -14,6 +14,7 @@ import {
   useUpsertNpsMutation,
   useUpsertCashMutation,
   useAddForeignEquityMutation,
+  useUpdateForeignEquityMutation,
   useDeleteAssetMutation,
   useRefreshUsdinrMutation,
   useSetManualUsdinrMutation,
@@ -286,6 +287,7 @@ function ManualAssets() {
   const npsMut = useUpsertNpsMutation()
   const cashMut = useUpsertCashMutation()
   const addForeignMut = useAddForeignEquityMutation()
+  const updateForeignMut = useUpdateForeignEquityMutation()
   const deleteMut = useDeleteAssetMutation()
   const refreshUsdinrMut = useRefreshUsdinrMutation()
   const setManualUsdinrMut = useSetManualUsdinrMutation()
@@ -302,9 +304,12 @@ function ManualAssets() {
   const [ppfValue, setPpfValue] = useState<number | string>('')
   const [npsValue, setNpsValue] = useState<number | string>('')
   const [cashValue, setCashValue] = useState<number | string>('')
-  // Foreign equity form state
+  // Foreign equity form state (add new)
   const [fxLabel, setFxLabel] = useState('')
   const [fxValue, setFxValue] = useState<number | string>('')
+  const [fxInvested, setFxInvested] = useState<number | string>('')
+  // Foreign equity inline edit state: id → {label, current, invested}
+  const [fxEdits, setFxEdits] = useState<Record<number, { label: string; current: string; invested: string }>>({})
   // Manual USDINR override
   const [manualRate, setManualRate] = useState<number | string>('')
 
@@ -326,10 +331,24 @@ function ManualAssets() {
   async function handleAddForeignEquity() {
     if (!fxLabel || !fxValue) return
     try {
-      await addForeignMut.mutateAsync({ label: fxLabel, current_value: Number(fxValue) })
-      setFxLabel(''); setFxValue('')
+      await addForeignMut.mutateAsync({ label: fxLabel, current_value: Number(fxValue), invested_value: Number(fxInvested) || 0 })
+      setFxLabel(''); setFxValue(''); setFxInvested('')
       notifications.show({ color: 'green', message: 'Foreign equity added.' })
     } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+  }
+
+  async function handleSaveForeignEquity(id: number) {
+    const e = fxEdits[id]
+    if (!e) return
+    try {
+      await updateForeignMut.mutateAsync({ id, label: e.label, current_value: Number(e.current), invested_value: Number(e.invested) || 0 })
+      setFxEdits((prev) => { const n = { ...prev }; delete n[id]; return n })
+      notifications.show({ color: 'green', message: 'Updated.' })
+    } catch (err) { notifications.show({ color: 'red', message: String(err) }) }
+  }
+
+  function initFxEdit(fe: { id: number; label: string; value_usd: number; invested_usd: number }) {
+    setFxEdits((prev) => ({ ...prev, [fe.id]: { label: fe.label, current: String(fe.value_usd), invested: String(fe.invested_usd) } }))
   }
 
   async function handleRefreshUsdinr() {
@@ -362,19 +381,19 @@ function ManualAssets() {
       </Group>
 
       {/* Summary cards */}
-      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
-        {data.total_fd > 0 && <Paper withBorder p="xs"><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text></Paper>}
-        {data.ppf && <Paper withBorder p="xs"><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text></Paper>}
-        {data.nps && <Paper withBorder p="xs"><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text></Paper>}
-        {data.cash && <Paper withBorder p="xs"><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm"><MoneyText value={data.total_cash} /></Text></Paper>}
+      <Group gap="xs" wrap="nowrap">
+        {data.total_fd > 0 && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text></Paper>}
+        {data.ppf && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text></Paper>}
+        {data.nps && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text></Paper>}
+        {data.cash && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm"><MoneyText value={data.total_cash} /></Text></Paper>}
         {hasForeignEquity && (
-          <Paper withBorder p="xs">
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" c="dimmed">Foreign Equity</Text>
-            <Text fw={600} size="sm">${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-            <Text size="xs" c="dimmed"><MoneyText value={data.total_foreign_equity_inr} /></Text>
+            <Text fw={600} size="sm"><MoneyText value={data.total_foreign_equity_inr} /></Text>
+            <Text size="xs" c="dimmed">${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
           </Paper>
         )}
-      </SimpleGrid>
+      </Group>
 
       {/* FD list */}
       {data.fds.length > 0 && (
@@ -402,21 +421,58 @@ function ManualAssets() {
         <Box mt="md">
           <Group justify="space-between" mb={4}>
             <Text size="sm" fw={600}>Foreign Equity</Text>
-            <Text size="xs" c="dimmed">
-              USD/INR: {data.usdinr_rate.toFixed(4)}
-            </Text>
+            <Text size="xs" c="dimmed">USD/INR: {data.usdinr_rate.toFixed(4)}</Text>
           </Group>
           <Table fz="sm" withColumnBorders={false}>
-            <Table.Thead><Table.Tr><Table.Th>Label</Table.Th><Table.Th>USD</Table.Th><Table.Th>INR</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Label</Table.Th>
+                <Table.Th>Invested ($)</Table.Th>
+                <Table.Th>Current ($)</Table.Th>
+                <Table.Th>Change ($)</Table.Th>
+                <Table.Th>Change (%)</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
             <Table.Tbody>
-              {data.foreign_equities.map((fe) => (
-                <Table.Tr key={fe.id}>
-                  <Table.Td>{fe.label}</Table.Td>
-                  <Table.Td>${fe.value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Table.Td>
-                  <Table.Td><MoneyText value={fe.value_inr} /></Table.Td>
-                  <Table.Td><Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(fe.id)}>Del</Button></Table.Td>
-                </Table.Tr>
-              ))}
+              {data.foreign_equities.map((fe) => {
+                const editing = fxEdits[fe.id]
+                const chg = fe.invested_usd > 0 ? fe.value_usd - fe.invested_usd : null
+                const chgPct = fe.invested_usd > 0 ? ((fe.value_usd - fe.invested_usd) / fe.invested_usd) * 100 : null
+                const fmt = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                const chgColor = chg == null ? undefined : chg >= 0 ? 'green' : 'red'
+                if (editing) {
+                  return (
+                    <Table.Tr key={fe.id}>
+                      <Table.Td><TextInput size="xs" value={editing.label} onChange={(e) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], label: e.currentTarget.value } }))} w={100} /></Table.Td>
+                      <Table.Td><NumberInput size="xs" value={editing.invested} onChange={(v) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], invested: String(v) } }))} w={110} min={0} step={0.01} decimalScale={2} /></Table.Td>
+                      <Table.Td><NumberInput size="xs" value={editing.current} onChange={(v) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], current: String(v) } }))} w={110} min={0} step={0.01} decimalScale={2} /></Table.Td>
+                      <Table.Td colSpan={2} />
+                      <Table.Td>
+                        <Group gap={4} wrap="nowrap">
+                          <Button size="xs" loading={updateForeignMut.isPending} onClick={() => handleSaveForeignEquity(fe.id)}>Save</Button>
+                          <Button size="xs" variant="subtle" onClick={() => setFxEdits((p) => { const n = { ...p }; delete n[fe.id]; return n })}>Cancel</Button>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  )
+                }
+                return (
+                  <Table.Tr key={fe.id}>
+                    <Table.Td>{fe.label}</Table.Td>
+                    <Table.Td>{fe.invested_usd > 0 ? fmt(fe.invested_usd) : '—'}</Table.Td>
+                    <Table.Td>{fmt(fe.value_usd)}</Table.Td>
+                    <Table.Td c={chgColor}>{chg != null ? (chg >= 0 ? '+' : '') + fmt(chg) : '—'}</Table.Td>
+                    <Table.Td c={chgColor}>{chgPct != null ? (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%' : '—'}</Table.Td>
+                    <Table.Td>
+                      <Group gap={4} wrap="nowrap">
+                        {open && <Button size="xs" variant="subtle" onClick={() => initFxEdit(fe)}>Edit</Button>}
+                        <Button size="xs" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(fe.id)}>Del</Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                )
+              })}
             </Table.Tbody>
           </Table>
         </Box>
@@ -469,8 +525,9 @@ function ManualAssets() {
           <Box>
             <Text size="sm" fw={600} mb="xs">Add Foreign Equity (USD)</Text>
             <Group align="flex-end" wrap="wrap">
-              <TextInput label="Label" placeholder="AAPL, VTI, …" value={fxLabel} onChange={(e) => setFxLabel(e.currentTarget.value)} size="sm" w={160} />
-              <NumberInput label="Value (USD)" value={fxValue} onChange={setFxValue} size="sm" w={150} min={0} step={0.01} decimalScale={2} />
+              <TextInput label="Label" placeholder="AAPL, VTI, …" value={fxLabel} onChange={(e) => setFxLabel(e.currentTarget.value)} size="sm" w={140} />
+              <NumberInput label="Invested ($)" value={fxInvested} onChange={setFxInvested} size="sm" w={130} min={0} step={0.01} decimalScale={2} />
+              <NumberInput label="Current ($)" value={fxValue} onChange={setFxValue} size="sm" w={130} min={0} step={0.01} decimalScale={2} />
               <Button size="sm" loading={addForeignMut.isPending} onClick={handleAddForeignEquity}>Add</Button>
             </Group>
           </Box>

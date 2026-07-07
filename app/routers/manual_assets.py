@@ -100,10 +100,30 @@ async def add_cash(
 async def add_foreign_equity(
     label: str = Form(...),
     current_value: float = Form(...),
+    invested_value: float = Form(0.0),
     db: AsyncSession = Depends(get_db),
 ):
-    db.add(ManualAsset(asset_type="FOREIGN_EQ", label=label, current_value=current_value))
+    db.add(ManualAsset(asset_type="FOREIGN_EQ", label=label, current_value=current_value, principal=invested_value or None))
     await db.commit()
+    return await _summary(db)
+
+
+@router.put("/foreign-equity/{asset_id}", response_model=ManualAssetsSummary)
+async def update_foreign_equity(
+    asset_id: int,
+    label: str = Form(...),
+    current_value: float = Form(...),
+    invested_value: float = Form(0.0),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(ManualAsset).where(ManualAsset.id == asset_id, ManualAsset.asset_type == "FOREIGN_EQ")
+    )).scalar_one_or_none()
+    if row:
+        row.label = label
+        row.current_value = current_value
+        row.principal = invested_value or None
+        await db.commit()
     return await _summary(db)
 
 

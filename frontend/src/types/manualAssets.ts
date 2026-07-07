@@ -20,6 +20,7 @@ export interface ForeignEquityAsset {
   id: number
   label: string
   value_usd: number
+  invested_usd: number
   value_inr: number
 }
 

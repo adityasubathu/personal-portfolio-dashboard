@@ -88,12 +88,28 @@ export function useUpsertCashMutation() {
 export function useAddForeignEquityMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { label: string; current_value: number }) => {
+    mutationFn: (data: { label: string; current_value: number; invested_value?: number }) => {
       const form = new URLSearchParams({
         label: data.label,
         current_value: String(data.current_value),
+        invested_value: String(data.invested_value ?? 0),
       })
       return requestForm<ManualAssetsSummary>('/api/v1/manual-assets/foreign-equity', form)
+    },
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+export function useUpdateForeignEquityMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: number; label: string; current_value: number; invested_value?: number }) => {
+      const form = new URLSearchParams({
+        label: data.label,
+        current_value: String(data.current_value),
+        invested_value: String(data.invested_value ?? 0),
+      })
+      return requestForm<ManualAssetsSummary>(`/api/v1/manual-assets/foreign-equity/${data.id}`, form, 'PUT')
     },
     onSuccess: () => invalidateAll(qc),
   })
