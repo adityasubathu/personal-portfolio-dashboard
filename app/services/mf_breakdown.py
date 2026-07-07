@@ -44,6 +44,12 @@ FOREIGN_FUND_ISINS: set[str] = {
     "INF247L01AP3",   # MON100 / Nasdaq 100
 }
 
+# Individual company names (normalised, lowercase substrings) that are always foreign equity,
+# regardless of which fund holds them.
+FOREIGN_COMPANY_SUBSTRINGS: set[str] = {
+    "alphabet", "amazon", "apple", "meta platforms", "microsoft",
+}
+
 # Commodity ETFs whose entire value maps to a single non-equity category.
 # These bypass MF breakdown CSV lookup entirely.
 COMMODITY_ETF_CATEGORY: dict[str, str] = {
@@ -507,7 +513,8 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                 elif is_arb_holding:
                     category = "Equity - Arbitrage"
                 elif htype.strip() == "Equity":
-                    if is_foreign_fund:
+                    name_lower = name.lower()
+                    if is_foreign_fund or any(s in name_lower for s in FOREIGN_COMPANY_SUBSTRINGS):
                         category = "Equity - Foreign"
                     elif equity_override:
                         category = equity_override
@@ -1266,6 +1273,9 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
             _add("Debt", {"name": "NPS (debt portion)", "source_type": "manual", "fund_pct": 25.0, "contribution": round(nps_val * 0.25, 2)})
     if manual.get("total_cash", 0) > 0:
         _add("Cash", {"name": "Savings / Cash", "source_type": "manual", "fund_pct": 100.0, "contribution": round(manual["total_cash"], 2)})
+    for fe in manual.get("foreign_equities", []):
+        if fe["value_inr"] > 0:
+            _add("Equity - Foreign", {"name": fe["label"], "source_type": "manual", "fund_pct": 100.0, "contribution": round(fe["value_inr"], 2)})
 
     # Build ordered list with totals and per-source share_pct
     out = []
