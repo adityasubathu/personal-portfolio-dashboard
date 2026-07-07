@@ -69,9 +69,10 @@ portfolio-mac-arm/
 │   │   ├── nav_history.py       # NavHistory — daily NAV from mfapi.in / AMFI
 │   │   ├── kite.py              # KiteConfig (singleton) + KiteSyncLog
 │   │   ├── import_log.py        # CSVImportLog — per-batch import metadata
-│   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash
+│   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash / FOREIGN_EQ
 │   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
 │   │   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
+│   │   ├── app_config.py        # AppConfig — KV store for cached config (USDINR rate)
 │   │   └── nav_tracked_instrument.py
 │   ├── routers/                 # All return JSON, SSE stream, file download, or redirect
 │   │   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, SSE sync
@@ -79,7 +80,8 @@ portfolio-mac-arm/
 │   │   ├── kite.py              # Kite OAuth, config CRUD, holdings sync
 │   │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
 │   │   ├── mf_breakdown.py      # Ingest scheme CSVs, batch classify, chart data
-│   │   ├── manual_assets.py     # FD / PPF / NPS / Cash CRUD
+│   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
+│   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   └── settings.py          # Danger-zone bulk deletes, DB info
 │   └── services/
@@ -93,7 +95,8 @@ portfolio-mac-arm/
 │       ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_breakdown.py      # AMFI xlsx parse, scheme CSV ingest, chart aggregation
-│       ├── manual_assets.py     # FD FV calc, manual assets summary
+│       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
+│       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
@@ -185,7 +188,7 @@ Audit trail for every Kite sync: status (SUCCESS/FAILED/MISMATCH), counts, error
 Per-batch import metadata: filename, row counts, `errors_json`. `batch_id` enables rollback.
 
 ### ManualAsset
-Non-traded assets. `asset_type`: FD, PPF, NPS, CASH. FDs have `principal`, `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. Others store `current_value`.
+Non-traded assets. `asset_type`: FD, PPF, NPS, CASH, FOREIGN_EQ. FDs have `principal` (cost), `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. PPF/NPS/Cash store `current_value`. FOREIGN_EQ stores `current_value` (USD market value) and `principal` (USD cost basis); the INR equivalent is computed at query time using the stored USDINR rate.
 
 ### AmfiMarketCap
 AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker`, `exchanges`, `categorization`, `sector`, `aliases`.
@@ -210,6 +213,9 @@ Audit log of Policy Tracker state changes. Each PUT to the state endpoint append
 
 ### NavTrackedInstrument
 Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures `sync_nav_history` keeps their NAV up to date.
+
+### AppConfig
+Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configuration that needs to survive restarts. Currently used to store the USDINR exchange rate fetched from Kite's CDS USDINR futures market, including source and timestamp metadata.
 
 ---
 
@@ -297,8 +303,17 @@ Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures
 | `POST /ppf` | Upsert PPF |
 | `POST /nps` | Upsert NPS |
 | `POST /cash` | Upsert cash balance |
+| `POST /foreign-equity` | Add foreign equity holding (USD values) |
+| `PUT /foreign-equity/{asset_id}` | Update label, current value, invested value |
 | `DELETE /{asset_id}` | Remove asset |
 | `GET /` | All manual assets summary |
+
+### USDINR (`/api/v1/usdinr`)
+| Endpoint | Description |
+|---|---|
+| `GET /` | Stored rate info `{rate, source, fetched_at}` |
+| `POST /refresh` | Fetch live rate from Kite CDS USDINR near-month futures |
+| `POST /manual` | Override rate manually |
 
 ### Settings (`/api/v1/settings`)
 | Endpoint | Description |
