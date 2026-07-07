@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-07-07 (3) — Demo mode
+
+### Demo mode (Phase 1–3)
+- `scripts/fetch_demo_data.py` (new) — one-time developer tool to fetch real MF/ETF NAVs from mfapi.in and generate synthetic stock/index OHLC fixtures; saves to `data/demo/ohlc/` and `data/demo/nav/`
+- `data/demo/ohlc/*.json` (committed) — 504-row synthetic OHLC fixtures for 6 stocks + 5 indices
+- `data/demo/nav/*.json` (committed) — real NAV fixtures for 3 MFs + 2 ETFs from mfapi.in
+- `app/demo_seed.py` (new) — async `seed_demo_data(db)` that populates all tables: 17 instruments, ~70 trades, holdings, price history, NAV history, MF scheme breakdown, AMFI market cap, allocation/asset class targets, manual assets, USDINR rate, CSV import log, nav tracked instruments, policy trigger state
+- `app/config.py` — added `demo_mode: bool = False` setting (reads `DEMO_MODE` env var)
+- `app/main.py` — lifespan checks `demo_seeded` flag in `app_config`; seeds on first start in demo mode; skips if already seeded
+- `app/routers/demo.py` (new) — `GET /api/v1/status` returns `{demo_mode}` flag; `POST /api/v1/demo/reset` wipes all tables and re-seeds without restart
+- `frontend/src/types/status.ts` (new) — `AppStatus` interface
+- `frontend/src/api/status.ts` (new) — `useAppStatus()` and `useResetDemoMutation()` hooks
+- `frontend/src/components/AppLayout.tsx` — violet demo banner shown on all pages when `demo_mode=true`
+- `frontend/src/pages/Kite.tsx` — short-circuits to a demo info alert instead of the login form when in demo mode
+- `frontend/src/pages/Settings.tsx` — "Reset Demo Data" button shown only in demo mode; calls `POST /api/v1/demo/reset`
+
+---
+
 ## 2026-07-07 (2) — pgAdmin, foreign company classification, composition breakdown
 
 ### pgAdmin

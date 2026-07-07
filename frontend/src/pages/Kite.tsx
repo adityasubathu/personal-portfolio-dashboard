@@ -5,7 +5,7 @@ import {
   Stack, Table, Text, TextInput, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconRefresh, IconLogin, IconTrash, IconX } from '@tabler/icons-react'
+import { IconRefresh, IconLogin, IconTrash, IconX, IconFlask } from '@tabler/icons-react'
 import {
   useKiteStatus,
   useSaveKiteConfigMutation,
@@ -13,6 +13,7 @@ import {
   useKiteSyncMutation,
 } from '../api/kite'
 import { apiUrl } from '../api/client'
+import { useAppStatus } from '../api/status'
 
 export function Kite() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -20,6 +21,8 @@ export function Kite() {
   const saveMut = useSaveKiteConfigMutation()
   const deleteMut = useDeleteKiteConfigMutation()
   const syncMut = useKiteSyncMutation()
+  const { data: appStatus } = useAppStatus()
+  const demoMode = appStatus?.demo_mode ?? false
 
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
@@ -66,6 +69,17 @@ export function Kite() {
 
   function handleSync() {
     syncMut.mutate()
+  }
+
+  if (demoMode) {
+    return (
+      <Stack gap="lg" maw={560}>
+        <Title order={3}>Kite Integration</Title>
+        <Alert icon={<IconFlask size={14} />} color="violet" variant="light" title="Demo mode">
+          Kite integration is disabled in demo mode. The app is running with sample data — no live prices or sync available.
+        </Alert>
+      </Stack>
+    )
   }
 
   return (

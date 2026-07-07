@@ -32,12 +32,29 @@ docker compose up --build
 | React SPA | http://localhost:5173 |
 | FastAPI JSON + SSE | http://localhost:8000 |
 | OpenAPI docs | http://localhost:8000/docs |
+| pgAdmin | http://localhost:5050 |
 
 **Environment variables** (`.env`):
 ```
 DATABASE_URL=postgresql+asyncpg://portfolio:portfolio@db:5432/portfolio
 FRONTEND_URL=http://localhost:5173
 KITE_REDIRECT_URL=http://localhost:8000/api/v1/kite/auth/callback
+```
+
+### Demo mode
+
+Launch with a fully pre-populated fictional portfolio (no Kite account needed):
+
+```bash
+DEMO_MODE=true docker compose up --build
+```
+
+On first start the app auto-seeds ~17 instruments, ~70 trades, 2 years of price/NAV history, MF scheme breakdowns, manual assets, allocation targets, and USDINR rate. Kite integration is disabled. A **Reset Demo Data** button on the Settings page re-seeds from scratch without a restart.
+
+To refresh the fixture data (e.g. to extend the date range):
+```bash
+source venv/bin/activate
+python scripts/fetch_demo_data.py
 ```
 
 ---
@@ -47,8 +64,9 @@ KITE_REDIRECT_URL=http://localhost:8000/api/v1/kite/auth/callback
 ```
 portfolio-mac-arm/
 ├── app/
-│   ├── main.py                  # FastAPI app, CORSMiddleware, lifespan (runs alembic upgrade), router registration
-│   ├── config.py                # Pydantic settings (.env): DATABASE_URL, FRONTEND_URL, Kite keys
+│   ├── main.py                  # FastAPI app, CORSMiddleware, lifespan (alembic upgrade + demo seed), router registration
+│   ├── config.py                # Pydantic settings (.env): DATABASE_URL, FRONTEND_URL, Kite keys, DEMO_MODE
+│   ├── demo_seed.py             # Demo data seed: instruments, trades, holdings, price/NAV history, MF breakdown, manual assets
 │   ├── database.py              # AsyncEngine + AsyncSession (postgresql+asyncpg)
 │   ├── time_util.py             # IST timezone helper (now_ist)
 │   ├── schemas/                 # Pydantic response models (mirrored as TS types in frontend/src/types/)
@@ -83,7 +101,8 @@ portfolio-mac-arm/
 │   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
 │   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
-│   │   └── settings.py          # Danger-zone bulk deletes, DB info
+│   │   ├── settings.py          # Danger-zone bulk deletes, DB info
+│   │   └── demo.py              # GET /api/v1/status, POST /api/v1/demo/reset
 │   └── services/
 │       ├── csv_importer.py      # Multi-format CSV parser (Kite legacy/current, generic)
 │       ├── holdings_engine.py   # FIFO recompute from trades
@@ -118,7 +137,8 @@ portfolio-mac-arm/
 │       │   ├── mfBreakdown.ts
 │       │   ├── manualAssets.ts
 │       │   ├── charts.ts
-│       │   └── settings.ts
+│       │   ├── settings.ts
+│       │   └── status.ts        # useAppStatus(), useResetDemoMutation()
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
 │       ├── components/
 │       │   ├── AppLayout.tsx    # Mantine AppShell + nav (11 routes); orange dot on Policy when actions pending
@@ -152,7 +172,12 @@ portfolio-mac-arm/
 │       └── 0001_baseline.py     # Full schema + data migrations
 ├── alembic.ini                  # DB URL set programmatically from app.config
 ├── data/
-│   └── mf_portfolio_breakdown/  # Drop scheme CSVs (named by ISIN) + AMFI xlsx here
+│   ├── mf_portfolio_breakdown/  # Drop scheme CSVs (named by ISIN) + AMFI xlsx here
+│   └── demo/                    # Committed fixture files for demo seed
+│       ├── ohlc/                # <SYMBOL>.json — daily OHLC rows (synthetic)
+│       └── nav/                 # <ISIN>.json — daily NAV rows (real, from mfapi.in)
+├── scripts/
+│   └── fetch_demo_data.py       # One-time script to refresh demo fixture data (Yahoo Finance + mfapi.in)
 ├── docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000) + frontend (Vite :5173) + pgAdmin (5050)
 ├── Dockerfile                   # Backend image
 ├── requirements.txt
@@ -314,6 +339,12 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /` | Stored rate info `{rate, source, fetched_at}` |
 | `POST /refresh` | Fetch live rate from Kite CDS USDINR near-month futures |
 | `POST /manual` | Override rate manually |
+
+### Status / Demo (`/api/v1`)
+| Endpoint | Description |
+|---|---|
+| `GET /status` | `{demo_mode: bool}` — whether the app is running in demo mode |
+| `POST /demo/reset` | Wipe all data and re-seed demo portfolio (only active when `DEMO_MODE=true`) |
 
 ### Settings (`/api/v1/settings`)
 | Endpoint | Description |

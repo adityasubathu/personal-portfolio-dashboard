@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     kite_api_key: str | None = None
     kite_api_secret: str | None = None
     frontend_url: str = "http://localhost:5173"
+    demo_mode: bool = False
 
 
 settings = Settings()

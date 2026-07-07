@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   ActionIcon,
+  Alert,
   AppShell,
   Burger,
   Group,
@@ -10,6 +11,7 @@ import {
   ScrollArea,
   Tooltip,
 } from '@mantine/core'
+import { IconFlask } from '@tabler/icons-react'
 import { useDisclosure } from '@mantine/hooks'
 import {
   IconLayoutDashboard,
@@ -28,6 +30,7 @@ import {
 } from '@tabler/icons-react'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { usePolicyTracker } from '../api/policyTracker'
+import { useAppStatus } from '../api/status'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
@@ -48,6 +51,8 @@ export function AppLayout() {
   const { privacyMode, togglePrivacy } = usePrivacy()
   const { data: policyData } = usePolicyTracker()
   const actionCount = policyData?.action_count ?? 0
+  const { data: status } = useAppStatus()
+  const demoMode = status?.demo_mode ?? false
 
   return (
     <AppShell
@@ -97,6 +102,11 @@ export function AppLayout() {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        {demoMode && (
+          <Alert icon={<IconFlask size={14} />} color="violet" variant="light" mb="md" py={6} px="md">
+            Demo mode — using sample data. Kite integration is disabled.
+          </Alert>
+        )}
         <Outlet />
       </AppShell.Main>
 

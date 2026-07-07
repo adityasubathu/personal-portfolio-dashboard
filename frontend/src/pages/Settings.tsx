@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Alert, Box, Button, Group, Modal, Stack, Text, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { IconFlask } from '@tabler/icons-react'
 import {
   useDeleteTradesMutation,
   useDeletePriceHistoryMutation,
@@ -9,6 +10,7 @@ import {
   useDeleteManualAssetsMutation,
   useDbInfo,
 } from '../api/settings'
+import { useAppStatus, useResetDemoMutation } from '../api/status'
 import type { DeleteResult } from '../types/charts'
 
 interface DangerButtonProps {
@@ -57,11 +59,27 @@ function DangerButton({ label, description, mutate }: DangerButtonProps) {
 
 export function Settings() {
   const { data: db } = useDbInfo()
+  const { data: appStatus } = useAppStatus()
+  const demoMode = appStatus?.demo_mode ?? false
+  const resetDemoMut = useResetDemoMutation()
   const deleteTradesMut = useDeleteTradesMutation()
   const deletePriceHistoryMut = useDeletePriceHistoryMutation()
   const deleteNavHistoryMut = useDeleteNavHistoryMutation()
   const deleteMfBreakdownMut = useDeleteMfBreakdownMutation()
   const deleteManualAssetsMut = useDeleteManualAssetsMutation()
+  const [resetLoading, setResetLoading] = useState(false)
+
+  async function handleResetDemo() {
+    setResetLoading(true)
+    try {
+      await resetDemoMut.mutateAsync()
+      notifications.show({ color: 'green', message: 'Demo data reset successfully' })
+    } catch (e) {
+      notifications.show({ color: 'red', message: String(e) })
+    } finally {
+      setResetLoading(false)
+    }
+  }
 
   return (
     <Stack gap="lg" maw={600}>
@@ -71,6 +89,19 @@ export function Settings() {
         <Alert title="Database" color="blue" variant="light">
           <Text size="xs">Host: {db.host}:{db.port} / Database: {db.name}</Text>
         </Alert>
+      )}
+
+      {demoMode && (
+        <Box>
+          <Text fw={600} mb="xs">Demo Mode</Text>
+          <Group justify="space-between" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+            <div>
+              <Text size="sm" fw={500}><IconFlask size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Reset demo data</Text>
+              <Text size="xs" c="dimmed">Wipes all data and re-seeds the demo portfolio from scratch. No restart needed.</Text>
+            </div>
+            <Button color="violet" variant="light" size="xs" loading={resetLoading} onClick={handleResetDemo}>Reset</Button>
+          </Group>
+        </Box>
       )}
 
       <Box>
