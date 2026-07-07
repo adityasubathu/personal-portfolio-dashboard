@@ -153,7 +153,7 @@ portfolio-mac-arm/
 ├── alembic.ini                  # DB URL set programmatically from app.config
 ├── data/
 │   └── mf_portfolio_breakdown/  # Drop scheme CSVs (named by ISIN) + AMFI xlsx here
-├── docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000) + frontend (Vite :5173)
+├── docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000) + frontend (Vite :5173) + pgAdmin (5050)
 ├── Dockerfile                   # Backend image
 ├── requirements.txt
 └── .env
@@ -342,7 +342,7 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert → stream progress. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
 
 ### MF Breakdown
-Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
+Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
 
 **Equity categories:** `Large Cap`, `Mid Cap`, `Small Cap`, `Unclassified Equity` (domestic), `Equity - Foreign`, `Equity - Arbitrage`.  
 **Allocation comparison:** two modes selectable per session:

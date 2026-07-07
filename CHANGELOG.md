@@ -2,6 +2,17 @@
 
 ---
 
+## 2026-07-07 (2) — pgAdmin, foreign company classification, composition breakdown
+
+### pgAdmin
+- `docker-compose.yml` — added `pgadmin` service (`dpage/pgadmin4`, port 5050); desktop mode (`SERVER_MODE=False`, `MASTER_PASSWORD_REQUIRED=False`) so no login prompt; connects to `db` service on the Docker network
+
+### Foreign company classification in MF breakdown
+- `app/services/mf_breakdown.py` — added `FOREIGN_COMPANY_SUBSTRINGS` set; any fund holding whose name contains "alphabet", "amazon", "apple", "meta platforms", or "microsoft" is now classified as `Equity - Foreign` regardless of which fund holds it
+- `app/services/mf_breakdown.py` — `get_category_composition` now includes each manual `FOREIGN_EQ` asset as an individual row under `Equity - Foreign` (converted to INR at stored USDINR rate)
+
+---
+
 ## 2026-07-07 — Foreign equity USD tracking, USDINR rate, commodity ETF CSV fallback, LTP date fix
 
 ### Foreign equity USD tracking
