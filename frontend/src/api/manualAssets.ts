@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request, requestForm } from './client'
-import type { ManualAssetsSummary } from '../types/manualAssets'
+import type { ManualAssetsSummary, UsdinrInfo } from '../types/manualAssets'
 
 export const manualAssetKeys = {
   all: ['manual-assets'] as const,
@@ -85,11 +85,44 @@ export function useUpsertCashMutation() {
   })
 }
 
+export function useAddForeignEquityMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { label: string; current_value: number }) => {
+      const form = new URLSearchParams({
+        label: data.label,
+        current_value: String(data.current_value),
+      })
+      return requestForm<ManualAssetsSummary>('/api/v1/manual-assets/foreign-equity', form)
+    },
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
 export function useDeleteAssetMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (assetId: number) =>
       request<ManualAssetsSummary>(`/api/v1/manual-assets/${assetId}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+export function useRefreshUsdinrMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => request<UsdinrInfo>('/api/v1/usdinr/refresh', { method: 'POST' }),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+export function useSetManualUsdinrMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (rate: number) => {
+      const form = new URLSearchParams({ rate: String(rate) })
+      return requestForm<UsdinrInfo>('/api/v1/usdinr/manual', form)
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }

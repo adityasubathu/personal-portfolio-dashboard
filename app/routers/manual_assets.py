@@ -96,6 +96,17 @@ async def add_cash(
     return await _summary(db)
 
 
+@router.post("/foreign-equity", response_model=ManualAssetsSummary)
+async def add_foreign_equity(
+    label: str = Form(...),
+    current_value: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    db.add(ManualAsset(asset_type="FOREIGN_EQ", label=label, current_value=current_value))
+    await db.commit()
+    return await _summary(db)
+
+
 @router.delete("/{asset_id}", response_model=ManualAssetsSummary)
 async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db)):
     await db.execute(delete(ManualAsset).where(ManualAsset.id == asset_id))

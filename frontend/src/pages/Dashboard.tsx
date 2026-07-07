@@ -13,7 +13,10 @@ import {
   useUpsertPpfMutation,
   useUpsertNpsMutation,
   useUpsertCashMutation,
+  useAddForeignEquityMutation,
   useDeleteAssetMutation,
+  useRefreshUsdinrMutation,
+  useSetManualUsdinrMutation,
 } from '../api/manualAssets'
 import { MoneyText } from '../components/MoneyText'
 import { inr, pct, heatmapBg, heatmapTextColor } from '../lib/format'
@@ -282,7 +285,10 @@ function ManualAssets() {
   const ppfMut = useUpsertPpfMutation()
   const npsMut = useUpsertNpsMutation()
   const cashMut = useUpsertCashMutation()
+  const addForeignMut = useAddForeignEquityMutation()
   const deleteMut = useDeleteAssetMutation()
+  const refreshUsdinrMut = useRefreshUsdinrMutation()
+  const setManualUsdinrMut = useSetManualUsdinrMutation()
 
   const [open, setOpen] = useState(false)
   // FD form state
@@ -296,6 +302,11 @@ function ManualAssets() {
   const [ppfValue, setPpfValue] = useState<number | string>('')
   const [npsValue, setNpsValue] = useState<number | string>('')
   const [cashValue, setCashValue] = useState<number | string>('')
+  // Foreign equity form state
+  const [fxLabel, setFxLabel] = useState('')
+  const [fxValue, setFxValue] = useState<number | string>('')
+  // Manual USDINR override
+  const [manualRate, setManualRate] = useState<number | string>('')
 
   useEffect(() => {
     if (data?.ppf?.current_value != null) setPpfValue(data.ppf.current_value)
@@ -312,7 +323,34 @@ function ManualAssets() {
     } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
   }
 
+  async function handleAddForeignEquity() {
+    if (!fxLabel || !fxValue) return
+    try {
+      await addForeignMut.mutateAsync({ label: fxLabel, current_value: Number(fxValue) })
+      setFxLabel(''); setFxValue('')
+      notifications.show({ color: 'green', message: 'Foreign equity added.' })
+    } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+  }
+
+  async function handleRefreshUsdinr() {
+    try {
+      const r = await refreshUsdinrMut.mutateAsync()
+      notifications.show({ color: 'green', message: `USDINR rate updated: ₹${r.rate.toFixed(4)} (${r.source})` })
+    } catch (e) { notifications.show({ color: 'red', message: `USDINR refresh failed: ${String(e)}` }) }
+  }
+
+  async function handleSetManualRate() {
+    if (!manualRate) return
+    try {
+      await setManualUsdinrMut.mutateAsync(Number(manualRate))
+      setManualRate('')
+      notifications.show({ color: 'green', message: 'USDINR rate set manually.' })
+    } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+  }
+
   if (!data) return null
+
+  const hasForeignEquity = data.foreign_equities.length > 0 || data.total_foreign_equity_usd > 0
 
   return (
     <Box>
@@ -323,15 +361,22 @@ function ManualAssets() {
         </Button>
       </Group>
 
-      {/* Summary row */}
+      {/* Summary cards */}
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
         {data.total_fd > 0 && <Paper withBorder p="xs"><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text></Paper>}
         {data.ppf && <Paper withBorder p="xs"><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text></Paper>}
         {data.nps && <Paper withBorder p="xs"><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text></Paper>}
         {data.cash && <Paper withBorder p="xs"><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm"><MoneyText value={data.total_cash} /></Text></Paper>}
+        {hasForeignEquity && (
+          <Paper withBorder p="xs">
+            <Text size="xs" c="dimmed">Foreign Equity</Text>
+            <Text fw={600} size="sm">${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+            <Text size="xs" c="dimmed"><MoneyText value={data.total_foreign_equity_inr} /></Text>
+          </Paper>
+        )}
       </SimpleGrid>
 
-      {/* FD list — always visible */}
+      {/* FD list */}
       {data.fds.length > 0 && (
         <Box mt="md">
           <Table fz="sm" withColumnBorders={false}>
@@ -345,6 +390,31 @@ function ManualAssets() {
                   <Table.Td>{fd.maturity_date}</Table.Td>
                   <Table.Td><MoneyText value={fd.current_value} /></Table.Td>
                   <Table.Td><Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(fd.id)}>Del</Button></Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Box>
+      )}
+
+      {/* Foreign equity list */}
+      {data.foreign_equities.length > 0 && (
+        <Box mt="md">
+          <Group justify="space-between" mb={4}>
+            <Text size="sm" fw={600}>Foreign Equity</Text>
+            <Text size="xs" c="dimmed">
+              USD/INR: {data.usdinr_rate.toFixed(4)}
+            </Text>
+          </Group>
+          <Table fz="sm" withColumnBorders={false}>
+            <Table.Thead><Table.Tr><Table.Th>Label</Table.Th><Table.Th>USD</Table.Th><Table.Th>INR</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+            <Table.Tbody>
+              {data.foreign_equities.map((fe) => (
+                <Table.Tr key={fe.id}>
+                  <Table.Td>{fe.label}</Table.Td>
+                  <Table.Td>${fe.value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Table.Td>
+                  <Table.Td><MoneyText value={fe.value_inr} /></Table.Td>
+                  <Table.Td><Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(fe.id)}>Del</Button></Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -394,6 +464,42 @@ function ManualAssets() {
               </Group>
             </Box>
           </Group>
+
+          {/* Foreign equity */}
+          <Box>
+            <Text size="sm" fw={600} mb="xs">Add Foreign Equity (USD)</Text>
+            <Group align="flex-end" wrap="wrap">
+              <TextInput label="Label" placeholder="AAPL, VTI, …" value={fxLabel} onChange={(e) => setFxLabel(e.currentTarget.value)} size="sm" w={160} />
+              <NumberInput label="Value (USD)" value={fxValue} onChange={setFxValue} size="sm" w={150} min={0} step={0.01} decimalScale={2} />
+              <Button size="sm" loading={addForeignMut.isPending} onClick={handleAddForeignEquity}>Add</Button>
+            </Group>
+          </Box>
+
+          {/* USDINR rate */}
+          <Box>
+            <Text size="sm" fw={600} mb="xs">USD/INR Rate</Text>
+            <Group align="flex-end" wrap="wrap" gap="md">
+              <Box>
+                <Text size="xs" c="dimmed" mb={4}>Current: {data.usdinr_rate.toFixed(4)}</Text>
+                <Button
+                  size="sm"
+                  variant="light"
+                  leftSection={<IconRefresh size={14} />}
+                  loading={refreshUsdinrMut.isPending}
+                  onClick={handleRefreshUsdinr}
+                >
+                  Refresh from Kite
+                </Button>
+              </Box>
+              <Box>
+                <Text size="xs" c="dimmed" mb={4}>Override manually</Text>
+                <Group align="flex-end" gap="xs">
+                  <NumberInput placeholder="e.g. 85.50" value={manualRate} onChange={setManualRate} size="sm" w={130} min={0} step={0.01} decimalScale={4} />
+                  <Button size="sm" variant="subtle" loading={setManualUsdinrMut.isPending} onClick={handleSetManualRate}>Set</Button>
+                </Group>
+              </Box>
+            </Group>
+          </Box>
         </Stack>
       </Collapse>
     </Box>

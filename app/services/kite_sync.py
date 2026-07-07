@@ -66,6 +66,13 @@ async def update_ltp(db: AsyncSession) -> dict:
 
     await db.commit()
     await recompute_and_store_xirr(db)
+
+    try:
+        from app.services.usdinr import refresh_usdinr_rate
+        await refresh_usdinr_rate(db)
+    except Exception:
+        pass
+
     return {"updated": updated, "timestamp": fallback_ts.isoformat(), "errors": errors}
 
 

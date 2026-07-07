@@ -342,6 +342,12 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
 
     await db.commit()
 
+    try:
+        from app.services.usdinr import refresh_usdinr_rate
+        await refresh_usdinr_rate(db)
+    except Exception:
+        pass
+
     return {
         "instruments_synced": len(per_instrument),
         "rows_added": total_rows_added,

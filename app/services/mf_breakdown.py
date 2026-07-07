@@ -556,6 +556,25 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                 msg += f", {unmatched_here} unmatched"
             await on_progress(msg)
 
+    # Synthesize 100% rows for commodity ETFs with no CSV (gold/silver trackers need no breakdown).
+    for isin, commodity_cat in COMMODITY_ETF_CATEGORY.items():
+        if isin not in held_isins or isin in seen_isins:
+            continue
+        await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin == isin))
+        await db.execute(MfSchemeBreakdown.__table__.insert(), [{
+            "scheme_isin": isin,
+            "name": commodity_cat,
+            "holding_type": commodity_cat,
+            "holdings_pct": 100.0,
+            "category": commodity_cat,
+            "sector": commodity_cat,
+            "updated_at": now_ist(),
+        }])
+        seen_isins.add(isin)
+        rows_upserted += 1
+        if on_progress:
+            await on_progress(f"  → {isin_to_name.get(isin, isin)}: synthesized 100% {commodity_cat} (no CSV needed)")
+
     # Remove rows for schemes whose CSV was deleted.
     if seen_isins:
         await db.execute(
@@ -760,6 +779,8 @@ async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: 
         category_totals["Debt"] = category_totals.get("Debt", 0) + debt
     if manual.get("total_cash", 0) > 0:
         category_totals["Cash"] = category_totals.get("Cash", 0) + manual["total_cash"]
+    if manual.get("total_foreign_equity_inr", 0) > 0:
+        category_totals["Equity - Foreign"] = category_totals.get("Equity - Foreign", 0) + manual["total_foreign_equity_inr"]
 
     return category_totals
 

@@ -33,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings, charts, policy_tracker  # noqa: E402
+from app.routers import trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings, charts, policy_tracker, usdinr  # noqa: E402
 app.include_router(trades.router)
 app.include_router(portfolio.router)
 app.include_router(kite.router)
@@ -43,3 +43,4 @@ app.include_router(manual_assets.router)
 app.include_router(settings.router)
 app.include_router(charts.router)
 app.include_router(policy_tracker.router)
+app.include_router(usdinr.router)

@@ -2,6 +2,33 @@
 
 ---
 
+## 2026-07-07 — Foreign equity USD tracking, USDINR rate, commodity ETF CSV fallback, LTP date fix
+
+### Foreign equity USD tracking
+- `app/models/app_config.py` (new) — `AppConfig` KV table (`key`, `value_json`) for app-level cached config
+- `alembic/versions/d4e5f6a1b2c3_add_app_config.py` (new) — migration for `app_config` table
+- `app/services/usdinr.py` (new) — resolves near-month USDINR futures symbol from Kite instruments dump (CDS segment); `refresh_usdinr_rate(db)` fetches via `/quote` and persists to `app_config`; `get_usdinr_rate(db)` reads stored value (default 85.0 if not set); `set_usdinr_rate_manual(db, rate)` for manual override
+- `app/routers/usdinr.py` (new) — `GET /api/v1/usdinr` (stored rate), `POST /api/v1/usdinr/refresh` (live fetch from Kite), `POST /api/v1/usdinr/manual` (manual set)
+- `app/main.py` — registered `usdinr` router
+- `app/routers/manual_assets.py` — added `POST /api/v1/manual-assets/foreign-equity` (label + value in USD)
+- `app/schemas/manual_assets.py` — added `ForeignEquityAsset`; `ManualAssetsSummary` extended with `foreign_equities`, `total_foreign_equity_usd`, `total_foreign_equity_inr`, `usdinr_rate`
+- `app/services/manual_assets.py` — `FOREIGN_EQ` rows collected; each converted to INR at stored rate; totals included in summary
+- `app/services/mf_breakdown.py` — `_build_category_totals_full` adds `total_foreign_equity_inr` to `"Equity - Foreign"` so manual USD holdings flow into the donut chart and allocation tables
+- `app/services/kite_sync.py` — `update_ltp()` calls `refresh_usdinr_rate(db)` best-effort after updating stock prices
+- `app/services/kite_historical.py` — `sync_price_history()` calls `refresh_usdinr_rate(db)` best-effort after completing the sync
+- `frontend/src/types/manualAssets.ts` — added `ForeignEquityAsset`, `UsdinrInfo`; `ManualAssetsSummary` extended
+- `frontend/src/api/manualAssets.ts` — added `useAddForeignEquityMutation`, `useRefreshUsdinrMutation`, `useSetManualUsdinrMutation`
+- `frontend/src/pages/Dashboard.tsx` — `ManualAssets`: foreign equity summary card (USD + INR), always-visible table with delete; edit panel has Add form (label + USD value), USDINR rate display with "Refresh from Kite" button and manual override input
+
+### Commodity ETF CSV fallback (GOLDCASE, SILVERIETF)
+- `app/services/mf_breakdown.py` — after CSV loop, funds in `COMMODITY_ETF_CATEGORY` that are held but have no CSV file now get a synthetic 100% row inserted automatically; they are excluded from `missing_funds` warning
+
+### LTP date fix
+- `app/services/kite_client.py` — `get_ltp` now calls `/quote` instead of `/quote/ltp`; extracts `last_trade_time` (falls back to `timestamp`) and returns it alongside `last_price` as `dict[str, tuple[float, datetime | None]]`
+- `app/services/kite_sync.py` — `update_ltp` stores `last_trade_time` as `last_price_at` (falls back to `now_ist()` if absent), so the LTP date reflects the actual last trade rather than the fetch time
+
+---
+
 ## 2026-06-26 — Allocation modes, Policy Tracker, index OHLC, and UI fixes
 
 ### Allocation modes (anchored vs free float)

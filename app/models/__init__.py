@@ -10,6 +10,7 @@ from app.models.manual_asset import ManualAsset
 from app.models.allocation_target import AllocationTarget, AssetClassTarget
 from app.models.policy_trigger import PolicyTriggerState, PolicyTriggerEvent
 from app.models.nav_tracked_instrument import NavTrackedInstrument
+from app.models.app_config import AppConfig
 
 __all__ = [
     "Instrument",
@@ -29,4 +30,5 @@ __all__ = [
     "PolicyTriggerState",
     "PolicyTriggerEvent",
     "NavTrackedInstrument",
+    "AppConfig",
 ]

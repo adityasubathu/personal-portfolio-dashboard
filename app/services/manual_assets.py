@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.manual_asset import ManualAsset
+from app.services.usdinr import get_usdinr_rate
 
 
 def compute_fd_value(principal: float, annual_rate: float, start: date, as_of: date | None = None) -> float:
@@ -27,7 +28,10 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
     ppf = None
     nps = None
     cash = None
+    foreign_equities = []
     today = date.today()
+
+    usdinr_rate = await get_usdinr_rate(db)
 
     for a in rows:
         if a.asset_type == "FD":
@@ -54,23 +58,37 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
             nps = {"id": a.id, "label": a.label, "current_value": float(a.current_value or 0)}
         elif a.asset_type == "CASH":
             cash = {"id": a.id, "label": a.label, "current_value": float(a.current_value or 0)}
+        elif a.asset_type == "FOREIGN_EQ":
+            value_usd = float(a.current_value or 0)
+            foreign_equities.append({
+                "id": a.id,
+                "label": a.label or "",
+                "value_usd": value_usd,
+                "value_inr": round(value_usd * usdinr_rate, 2),
+            })
 
     total_fd = sum(f["current_value"] for f in fds)
     emergency_total = sum(f["current_value"] for f in fds if f["is_emergency_fund"])
     total_ppf = ppf["current_value"] if ppf else 0
     total_nps = nps["current_value"] if nps else 0
     total_cash = cash["current_value"] if cash else 0
-    total = total_fd + total_ppf + total_nps + total_cash
+    total_foreign_usd = sum(f["value_usd"] for f in foreign_equities)
+    total_foreign_inr = sum(f["value_inr"] for f in foreign_equities)
+    total = total_fd + total_ppf + total_nps + total_cash + total_foreign_inr
 
     return {
         "fds": fds,
         "ppf": ppf,
         "nps": nps,
         "cash": cash,
+        "foreign_equities": foreign_equities,
         "total_fd": total_fd,
         "emergency_total": emergency_total,
         "total_ppf": total_ppf,
         "total_nps": total_nps,
         "total_cash": total_cash,
+        "total_foreign_equity_usd": round(total_foreign_usd, 2),
+        "total_foreign_equity_inr": round(total_foreign_inr, 2),
+        "usdinr_rate": usdinr_rate,
         "total_manual": total,
     }
