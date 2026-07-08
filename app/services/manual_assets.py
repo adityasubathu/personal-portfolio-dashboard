@@ -28,6 +28,8 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
     ppf = None
     nps = None
     cash = None
+    usd_cash = None
+    usd_cash_usd = 0.0
     foreign_equities = []
     today = date.today()
 
@@ -58,6 +60,9 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
             nps = {"id": a.id, "label": a.label, "current_value": float(a.current_value or 0)}
         elif a.asset_type == "CASH":
             cash = {"id": a.id, "label": a.label, "current_value": float(a.current_value or 0)}
+        elif a.asset_type == "USD_CASH":
+            usd_cash_usd = float(a.current_value or 0)
+            usd_cash = {"id": a.id, "label": a.label, "current_value": round(usd_cash_usd * usdinr_rate, 2)}
         elif a.asset_type == "FOREIGN_EQ":
             value_usd = float(a.current_value or 0)
             foreign_equities.append({
@@ -72,7 +77,7 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
     emergency_total = sum(f["current_value"] for f in fds if f["is_emergency_fund"])
     total_ppf = ppf["current_value"] if ppf else 0
     total_nps = nps["current_value"] if nps else 0
-    total_cash = cash["current_value"] if cash else 0
+    total_cash = (cash["current_value"] if cash else 0) + (usd_cash["current_value"] if usd_cash else 0)
     total_foreign_usd = sum(f["value_usd"] for f in foreign_equities)
     total_foreign_inr = sum(f["value_inr"] for f in foreign_equities)
     total = total_fd + total_ppf + total_nps + total_cash + total_foreign_inr
@@ -82,12 +87,14 @@ async def get_manual_assets_summary(db: AsyncSession) -> dict:
         "ppf": ppf,
         "nps": nps,
         "cash": cash,
+        "usd_cash": usd_cash,
         "foreign_equities": foreign_equities,
         "total_fd": total_fd,
         "emergency_total": emergency_total,
         "total_ppf": total_ppf,
         "total_nps": total_nps,
         "total_cash": total_cash,
+        "usd_cash_value_usd": round(usd_cash_usd, 2),
         "total_foreign_equity_usd": round(total_foreign_usd, 2),
         "total_foreign_equity_inr": round(total_foreign_inr, 2),
         "usdinr_rate": usdinr_rate,

@@ -85,6 +85,20 @@ export function useUpsertCashMutation() {
   })
 }
 
+export function useUpsertUsdCashMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { label?: string; current_value: number }) => {
+      const form = new URLSearchParams({
+        label: data.label ?? 'INDMoney Wallet',
+        current_value: String(data.current_value),
+      })
+      return requestForm<ManualAssetsSummary>('/api/v1/manual-assets/usd-cash', form)
+    },
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
 export function useAddForeignEquityMutation() {
   const qc = useQueryClient()
   return useMutation({

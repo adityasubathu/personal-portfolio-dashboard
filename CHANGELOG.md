@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-07-09 — USD wallet cash (INDMoney), equal-height asset cards
+
+### USD wallet cash
+- `app/models/manual_asset.py` — new `asset_type = "USD_CASH"`; stores balance in USD (same `current_value` column used by CASH/FOREIGN_EQ)
+- `app/services/manual_assets.py` — converts USD balance to INR at query time using stored USDINR rate; INR equivalent is folded into `total_cash` so it flows into breakdown composition automatically
+- `app/schemas/manual_assets.py` — added `usd_cash: Optional[SimpleAsset]` (INR value) and `usd_cash_value_usd: float` to `ManualAssetsSummary`
+- `app/routers/manual_assets.py` — added `POST /api/v1/manual-assets/usd-cash` (upsert, like PPF/NPS/Cash)
+- `frontend/src/types/manualAssets.ts` — added `usd_cash` and `usd_cash_value_usd` fields
+- `frontend/src/api/manualAssets.ts` — added `useUpsertUsdCashMutation()`
+- `frontend/src/pages/Dashboard.tsx` — added INDMoney summary card (INR value + USD sub-text); added "INDMoney Wallet (USD)" input in the edit panel
+
+### UI
+- `frontend/src/pages/Dashboard.tsx` — manual asset summary cards now use `align="stretch"` so all cards are the same height regardless of content
+
+---
+
 ## 2026-07-07 (3) — Demo mode
 
 ### Demo mode (Phase 1–3)

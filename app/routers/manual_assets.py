@@ -96,6 +96,26 @@ async def add_cash(
     return await _summary(db)
 
 
+@router.post("/usd-cash", response_model=ManualAssetsSummary)
+async def upsert_usd_cash(
+    label: str = Form("INDMoney Wallet"),
+    current_value: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = (await db.execute(
+        select(ManualAsset).where(ManualAsset.asset_type == "USD_CASH")
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.current_value = current_value
+        existing.label = label
+    else:
+        db.add(ManualAsset(asset_type="USD_CASH", label=label, current_value=current_value))
+
+    await db.commit()
+    return await _summary(db)
+
+
 @router.post("/foreign-equity", response_model=ManualAssetsSummary)
 async def add_foreign_equity(
     label: str = Form(...),

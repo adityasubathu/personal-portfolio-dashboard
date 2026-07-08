@@ -87,7 +87,7 @@ portfolio-mac-arm/
 │   │   ├── nav_history.py       # NavHistory — daily NAV from mfapi.in / AMFI
 │   │   ├── kite.py              # KiteConfig (singleton) + KiteSyncLog
 │   │   ├── import_log.py        # CSVImportLog — per-batch import metadata
-│   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash / FOREIGN_EQ
+│   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash / USD_CASH / FOREIGN_EQ
 │   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
 │   │   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
 │   │   ├── app_config.py        # AppConfig — KV store for cached config (USDINR rate)
@@ -213,7 +213,7 @@ Audit trail for every Kite sync: status (SUCCESS/FAILED/MISMATCH), counts, error
 Per-batch import metadata: filename, row counts, `errors_json`. `batch_id` enables rollback.
 
 ### ManualAsset
-Non-traded assets. `asset_type`: FD, PPF, NPS, CASH, FOREIGN_EQ. FDs have `principal` (cost), `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. PPF/NPS/Cash store `current_value`. FOREIGN_EQ stores `current_value` (USD market value) and `principal` (USD cost basis); the INR equivalent is computed at query time using the stored USDINR rate.
+Non-traded assets. `asset_type`: FD, PPF, NPS, CASH, USD_CASH, FOREIGN_EQ. FDs have `principal` (cost), `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. PPF/NPS/Cash store `current_value` in INR. USD_CASH stores `current_value` in USD (e.g. INDMoney wallet); the INR equivalent is computed at query time and folded into the cash total. FOREIGN_EQ stores `current_value` (USD market value) and `principal` (USD cost basis); the INR equivalent is computed at query time using the stored USDINR rate.
 
 ### AmfiMarketCap
 AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker`, `exchanges`, `categorization`, `sector`, `aliases`.
@@ -327,7 +327,8 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `POST /fd` | Add fixed deposit |
 | `POST /ppf` | Upsert PPF |
 | `POST /nps` | Upsert NPS |
-| `POST /cash` | Upsert cash balance |
+| `POST /cash` | Upsert cash balance (INR) |
+| `POST /usd-cash` | Upsert USD wallet balance (e.g. INDMoney); converted to INR at USDINR rate |
 | `POST /foreign-equity` | Add foreign equity holding (USD values) |
 | `PUT /foreign-equity/{asset_id}` | Update label, current value, invested value |
 | `DELETE /{asset_id}` | Remove asset |

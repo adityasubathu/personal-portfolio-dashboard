@@ -29,12 +29,14 @@ export interface ManualAssetsSummary {
   ppf: SimpleAsset | null
   nps: SimpleAsset | null
   cash: SimpleAsset | null
+  usd_cash: SimpleAsset | null
   foreign_equities: ForeignEquityAsset[]
   total_fd: number
   emergency_total: number
   total_ppf: number
   total_nps: number
   total_cash: number
+  usd_cash_value_usd: number
   total_foreign_equity_usd: number
   total_foreign_equity_inr: number
   usdinr_rate: number

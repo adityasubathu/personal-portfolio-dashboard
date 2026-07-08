@@ -13,6 +13,7 @@ import {
   useUpsertPpfMutation,
   useUpsertNpsMutation,
   useUpsertCashMutation,
+  useUpsertUsdCashMutation,
   useAddForeignEquityMutation,
   useUpdateForeignEquityMutation,
   useDeleteAssetMutation,
@@ -286,6 +287,7 @@ function ManualAssets() {
   const ppfMut = useUpsertPpfMutation()
   const npsMut = useUpsertNpsMutation()
   const cashMut = useUpsertCashMutation()
+  const usdCashMut = useUpsertUsdCashMutation()
   const addForeignMut = useAddForeignEquityMutation()
   const updateForeignMut = useUpdateForeignEquityMutation()
   const deleteMut = useDeleteAssetMutation()
@@ -304,6 +306,7 @@ function ManualAssets() {
   const [ppfValue, setPpfValue] = useState<number | string>('')
   const [npsValue, setNpsValue] = useState<number | string>('')
   const [cashValue, setCashValue] = useState<number | string>('')
+  const [usdCashValue, setUsdCashValue] = useState<number | string>('')
   // Foreign equity form state (add new)
   const [fxLabel, setFxLabel] = useState('')
   const [fxValue, setFxValue] = useState<number | string>('')
@@ -317,6 +320,7 @@ function ManualAssets() {
     if (data?.ppf?.current_value != null) setPpfValue(data.ppf.current_value)
     if (data?.nps?.current_value != null) setNpsValue(data.nps.current_value)
     if (data?.cash?.current_value != null) setCashValue(data.cash.current_value)
+    if (data?.usd_cash_value_usd != null && data.usd_cash_value_usd > 0) setUsdCashValue(data.usd_cash_value_usd)
   }, [data])
 
   async function handleAddFd() {
@@ -381,11 +385,38 @@ function ManualAssets() {
       </Group>
 
       {/* Summary cards */}
-      <Group gap="xs" wrap="nowrap">
-        {data.total_fd > 0 && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">FDs</Text><Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text></Paper>}
-        {data.ppf && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">PPF</Text><Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text></Paper>}
-        {data.nps && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">NPS</Text><Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text></Paper>}
-        {data.cash && <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}><Text size="xs" c="dimmed">Cash</Text><Text fw={600} size="sm"><MoneyText value={data.total_cash} /></Text></Paper>}
+      <Group gap="xs" wrap="nowrap" align="stretch">
+        {data.total_fd > 0 && (
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" c="dimmed">FDs</Text>
+            <Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text>
+          </Paper>
+        )}
+        {data.ppf && (
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" c="dimmed">PPF</Text>
+            <Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text>
+          </Paper>
+        )}
+        {data.nps && (
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" c="dimmed">NPS</Text>
+            <Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text>
+          </Paper>
+        )}
+        {data.cash && (
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" c="dimmed">Cash</Text>
+            <Text fw={600} size="sm"><MoneyText value={data.cash.current_value} /></Text>
+          </Paper>
+        )}
+        {data.usd_cash && (
+          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" c="dimmed">INDMoney</Text>
+            <Text fw={600} size="sm"><MoneyText value={data.usd_cash.current_value} /></Text>
+            <Text size="xs" c="dimmed">${data.usd_cash_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+          </Paper>
+        )}
         {hasForeignEquity && (
           <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" c="dimmed">Foreign Equity</Text>
@@ -517,6 +548,14 @@ function ManualAssets() {
                 <NumberInput label="Value" value={cashValue} onChange={setCashValue} size="sm" w={150} />
                 <Button size="sm" loading={cashMut.isPending} onClick={() => cashMut.mutate({ current_value: Number(cashValue) })}>Save</Button>
                 {data.cash && <Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(data.cash!.id)}>Del</Button>}
+              </Group>
+            </Box>
+            <Box>
+              <Text size="sm" fw={600} mb="xs">INDMoney Wallet (USD)</Text>
+              <Group align="flex-end" gap="xs">
+                <NumberInput label="Balance ($)" value={usdCashValue} onChange={setUsdCashValue} size="sm" w={150} min={0} step={0.01} decimalScale={2} />
+                <Button size="sm" loading={usdCashMut.isPending} onClick={() => usdCashMut.mutate({ current_value: Number(usdCashValue) })}>Save</Button>
+                {data.usd_cash && <Button size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} onClick={() => deleteMut.mutate(data.usd_cash!.id)}>Del</Button>}
               </Group>
             </Box>
           </Group>

@@ -33,12 +33,14 @@ class ManualAssetsSummary(BaseModel):
     ppf: Optional[SimpleAsset] = None
     nps: Optional[SimpleAsset] = None
     cash: Optional[SimpleAsset] = None
+    usd_cash: Optional[SimpleAsset] = None
     foreign_equities: list[ForeignEquityAsset] = []
     total_fd: float
     emergency_total: float
     total_ppf: float
     total_nps: float
     total_cash: float
+    usd_cash_value_usd: float = 0.0
     total_foreign_equity_usd: float = 0.0
     total_foreign_equity_inr: float = 0.0
     usdinr_rate: float = 85.0
