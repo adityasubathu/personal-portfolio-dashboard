@@ -2,6 +2,13 @@
 
 ---
 
+## 2026-07-16 — Fix session
+
+- `frontend/src/components/LwChart.tsx` — tooltip root div now has `z-index:10` so value/date tooltips render above the chart canvas
+- `frontend/src/components/LwChart.tsx` — `formatTooltipDate` slices time string to first 10 chars before parsing, removing spurious ` HH:MM:SS` suffix from date tooltip when `timeVisible: true`
+
+---
+
 ## 2026-07-09 — USD wallet cash (INDMoney), equal-height asset cards
 
 ### USD wallet cash

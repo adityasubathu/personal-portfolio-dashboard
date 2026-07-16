@@ -31,7 +31,8 @@ _MONTH_MAP = {
 }
 
 # ETFs whose entire equity portfolio is a single market-cap category.
-# All equity holdings in these are classified directly without AMFI lookup.
+# Fallback cap category for holdings in these ETFs that AMFI doesn't recognise.
+# AMFI always takes priority; this only applies when AMFI returns Unclassified Equity.
 ETF_CAP_OVERRIDE: dict[str, str] = {
     "INF204KB14I2": "Large Cap",   # NIFTYBEES
     "INF732E01045": "Large Cap",   # JUNIORBEES (Nifty Next 50)
@@ -516,12 +517,11 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                     name_lower = name.lower()
                     if is_foreign_fund or any(s in name_lower for s in FOREIGN_COMPANY_SUBSTRINGS):
                         category = "Equity - Foreign"
-                    elif equity_override:
-                        category = equity_override
                     else:
                         category = _resolve_equity_category(name, alias_to_isin, name_to_isin, isin_to_mcap, amfi_by_name)
                         if category == "Unclassified Equity":
-                            category = overrides.get(normalize_company_name(name), "Unclassified Equity")
+                            # AMFI has no record — fall back to the fund's index cap tier, then manual overrides
+                            category = overrides.get(normalize_company_name(name)) or equity_override or "Unclassified Equity"
                 else:
                     category = _classify_type(htype, name)
                 if category == "Unclassified Equity":
