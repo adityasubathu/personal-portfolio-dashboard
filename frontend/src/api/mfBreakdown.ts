@@ -9,6 +9,7 @@ import type {
   DirectTradeBreakdown,
   SchemeBreakdown,
   SchemeListItem,
+  SectorClassifyResult,
   SectorCompositionItem,
   SectorStockBreakdownItem,
   StockHolding,
@@ -23,6 +24,7 @@ export const breakdownKeys = {
   categoryComposition: ['mf-breakdown', 'category-composition'] as const,
   sectorComposition: ['mf-breakdown', 'sector-composition'] as const,
   sectorStockBreakdown: ['mf-breakdown', 'sector-stock-breakdown'] as const,
+  sectorList: ['mf-breakdown', 'sector-list'] as const,
   directTrades: ['mf-breakdown', 'direct-trades'] as const,
   schemes: ['mf-breakdown', 'schemes'] as const,
   scheme: (isin: string) => ['mf-breakdown', 'scheme', isin] as const,
@@ -128,6 +130,25 @@ export function useSaveAllocationTargetsMutation() {
       Object.entries(targets).forEach(([cat, val]) => form.append(`target_${cat}`, String(val)))
       return requestForm<{ ok: boolean }>('/api/v1/mf-breakdown/allocation-targets', form)
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mf-breakdown'] }),
+  })
+}
+
+export function useSectorList() {
+  return useQuery({
+    queryKey: breakdownKeys.sectorList,
+    queryFn: () => request<string[]>('/api/v1/mf-breakdown/sector-list'),
+  })
+}
+
+export function useSectorClassifyBatchMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (rows: Array<{ name: string; sector: string }>) =>
+      request<SectorClassifyResult>('/api/v1/mf-breakdown/sector-classify-batch', {
+        method: 'PATCH',
+        body: JSON.stringify(rows),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['mf-breakdown'] }),
   })
 }

@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-07-20 — Manual sector override + holding name cleanup
+
+- `app/models/mf_breakdown.py` — add `EquitySectorOverride` model (mirrors `EquityCategoryOverride` pattern)
+- `alembic/versions/e5f6a1b2c3d4_add_equity_sector_override.py` — migration to create `equity_sector_override` table
+- `app/services/mf_breakdown.py` — strip trailing `**`/`^^` from holding names during ingestion (`name.rstrip("*^")`)
+- `app/services/mf_breakdown.py` — load manual sector overrides at ingest start; auto-prune stale overrides when AMFI data covers them; apply as fallback when `_resolve_equity_sector` returns None
+- `app/services/mf_breakdown.py` — add `save_sector_overrides` and `get_sector_list` service functions
+- `app/routers/mf_breakdown.py` — add `PATCH /api/v1/mf-breakdown/sector-classify-batch` and `GET /api/v1/mf-breakdown/sector-list` endpoints
+- `frontend/src/types/mfBreakdown.ts` — add `SectorClassifyResult` interface
+- `frontend/src/api/mfBreakdown.ts` — add `useSectorList`, `useSectorClassifyBatchMutation` hooks; add `sectorList` query key
+- `frontend/src/pages/Breakdown.tsx` — add `SectorClassifyPanel` component; wire into `SectorTab` to show when "Unknown"-sector stocks exist
+
+---
+
 ## 2026-07-16 — Fix session
 
 - `frontend/src/components/LwChart.tsx` — tooltip root div now has `z-index:10` so value/date tooltips render above the chart canvas

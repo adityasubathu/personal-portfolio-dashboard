@@ -15,6 +15,8 @@ import {
   useSaveAllocationTargetsMutation,
   useSaveAssetClassTargetsMutation,
   useClassifyBatchMutation,
+  useSectorList,
+  useSectorClassifyBatchMutation,
   useSchemeBreakdown,
 } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
@@ -297,12 +299,90 @@ function OverviewTab() {
   )
 }
 
+function SectorClassifyPanel({
+  unknownHoldings,
+  onDone,
+}: {
+  unknownHoldings: Array<{ name: string; value: number; pct: number }>
+  onDone: () => void
+}) {
+  const [selections, setSelections] = useState<Record<string, string>>({})
+  const { data: sectorList } = useSectorList()
+  const classifyMut = useSectorClassifyBatchMutation()
+
+  async function handleSave() {
+    const rows = unknownHoldings
+      .filter((h) => selections[h.name])
+      .map((h) => ({ name: h.name, sector: selections[h.name] }))
+    if (!rows.length) return
+    try {
+      const res = await classifyMut.mutateAsync(rows)
+      notifications.show({ color: 'green', message: `Classified ${res.updated} holding${res.updated === 1 ? '' : 's'}.` })
+      onDone()
+    } catch (e) {
+      notifications.show({ color: 'red', message: String(e) })
+    }
+  }
+
+  const pendingCount = unknownHoldings.filter((h) => !selections[h.name]).length
+
+  return (
+    <Paper withBorder p="sm">
+      <Text fw={600} size="sm" mb="xs">
+        Classify unknown-sector stocks ({unknownHoldings.length})
+      </Text>
+      <Table fz="sm" withColumnBorders={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Stock name</Table.Th>
+            <Table.Th style={{ width: 220 }}>Sector</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {unknownHoldings.map((h) => (
+            <Table.Tr key={h.name}>
+              <Table.Td>{h.name}</Table.Td>
+              <Table.Td>
+                <Select
+                  size="xs"
+                  placeholder="Select sector…"
+                  data={sectorList ?? []}
+                  searchable
+                  value={selections[h.name] ?? null}
+                  onChange={(v) => setSelections((prev) => ({ ...prev, [h.name]: v ?? '' }))}
+                />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Group mt="xs" gap="xs">
+        <Button
+          size="xs"
+          loading={classifyMut.isPending}
+          disabled={!Object.values(selections).filter(Boolean).length}
+          onClick={handleSave}
+        >
+          Save{pendingCount > 0 ? ` (${unknownHoldings.length - pendingCount} of ${unknownHoldings.length})` : ' all'}
+        </Button>
+        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
+          Dismiss
+        </Button>
+      </Group>
+    </Paper>
+  )
+}
+
 function SectorTab() {
   const { data: sectors } = useSectorComposition()
   const { data: stockBreakdown } = useSectorStockBreakdown()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [classifyDismissed, setClassifyDismissed] = useState(false)
 
   if (!sectors) return <Text size="sm" c="dimmed">Loading…</Text>
+
+  const unknownHoldings = stockBreakdown?.find((s) => s.sector === 'Unknown')?.holdings ?? []
+  const showClassifyPanel = !classifyDismissed && unknownHoldings.length > 0
 
   const totalSum = sectors.reduce((acc, s) => acc + s.total, 0)
   const grandTotal = stockBreakdown ? stockBreakdown.reduce((acc, s) => acc + s.total, 0) : 0
@@ -323,6 +403,13 @@ function SectorTab() {
 
   return (
     <Stack gap="lg">
+      {showClassifyPanel && (
+        <SectorClassifyPanel
+          unknownHoldings={unknownHoldings}
+          onDone={() => setClassifyDismissed(true)}
+        />
+      )}
+
       {labels.length > 0 && (
         <DonutChart labels={labels} values={values} colorMode="sector" />
       )}

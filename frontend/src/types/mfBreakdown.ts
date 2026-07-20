@@ -130,6 +130,10 @@ export interface ClassifyResult {
   updated: number
 }
 
+export interface SectorClassifyResult {
+  updated: number
+}
+
 export interface IngestDonePayload {
   ok: boolean
   amfi?: {

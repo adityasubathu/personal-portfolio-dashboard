@@ -8,12 +8,13 @@ from pathlib import Path
 
 import openpyxl
 from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.allocation_target import AllocationTarget, AssetClassTarget
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, EquitySectorOverride, MfSchemeBreakdown
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
@@ -415,6 +416,19 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
         for o in (await db.execute(select(EquityCategoryOverride))).scalars().all()
     }
 
+    sector_override_rows = (await db.execute(select(EquitySectorOverride))).scalars().all()
+    sector_overrides: dict[str, str] = {o.name_normalized: o.sector for o in sector_override_rows}
+
+    # Auto-prune: if AMFI now has a sector for an override, the override is stale
+    pruned = 0
+    for o in sector_override_rows:
+        if _resolve_equity_sector(o.raw_name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector) is not None:
+            await db.execute(delete(EquitySectorOverride).where(EquitySectorOverride.id == o.id))
+            sector_overrides.pop(o.name_normalized, None)
+            pruned += 1
+    if on_progress and pruned:
+        await on_progress(f"Auto-removed {pruned} stale sector override(s)")
+
     held_funds = (await db.execute(
         select(Instrument)
         .join(Holding, Holding.instrument_id == Instrument.id)
@@ -484,7 +498,7 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
 
         dedup: dict[tuple[str, str], dict] = {}
         for row_num, row in enumerate(reader, start=2):
-            name = (row.get("Name") or "").strip()
+            name = (row.get("Name") or "").strip().rstrip("*^")
             htype = (row.get("Type") or "").strip()
             pct_raw = row.get("Holdings") or ""
             if not name or not htype:
@@ -538,6 +552,8 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
                     sector = _sector_for_type(htype, name)
                     if sector is None and htype.strip() == "Equity":
                         sector = _resolve_equity_sector(name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector)
+                        if sector is None:
+                            sector = sector_overrides.get(normalize_company_name(name))
 
                 dedup[key] = {
                     "scheme_isin": scheme_isin,
@@ -1606,3 +1622,54 @@ async def get_direct_trade_breakdown(db: AsyncSession) -> list[dict]:
             "trades": trade_rows,
         })
     return result
+
+
+async def save_sector_overrides(db: AsyncSession, rows: list[dict]) -> int:
+    """Upsert manual sector overrides and apply them to matching MfSchemeBreakdown rows."""
+    override_rows = [
+        {
+            "name_normalized": normalize_company_name(r["name"]),
+            "raw_name": r["name"],
+            "sector": r["sector"],
+            "updated_at": now_ist(),
+        }
+        for r in rows
+    ]
+    if override_rows:
+        stmt = pg_insert(EquitySectorOverride).values(override_rows)
+        await db.execute(stmt.on_conflict_do_update(
+            index_elements=["name_normalized"],
+            set_={
+                "raw_name": stmt.excluded.raw_name,
+                "sector": stmt.excluded.sector,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        ))
+
+    norm_to_sector = {normalize_company_name(r["name"]): r["sector"] for r in rows}
+    unknown_rows = (await db.execute(
+        select(MfSchemeBreakdown).where(
+            or_(MfSchemeBreakdown.sector.is_(None), MfSchemeBreakdown.sector == "Unknown")
+        )
+    )).scalars().all()
+
+    updated = 0
+    for row in unknown_rows:
+        norm = normalize_company_name(row.name)
+        if norm in norm_to_sector:
+            row.sector = norm_to_sector[norm]
+            updated += 1
+
+    await db.commit()
+    return updated
+
+
+async def get_sector_list(db: AsyncSession) -> list[str]:
+    """Return sorted distinct sector names currently in mf_scheme_breakdown, excluding Unknown."""
+    rows = await db.execute(
+        select(MfSchemeBreakdown.sector)
+        .where(MfSchemeBreakdown.sector.is_not(None), MfSchemeBreakdown.sector != "Unknown")
+        .distinct()
+        .order_by(MfSchemeBreakdown.sector)
+    )
+    return [r for (r,) in rows.all() if r]

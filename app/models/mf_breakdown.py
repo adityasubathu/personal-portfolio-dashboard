@@ -35,6 +35,16 @@ class EquityCategoryOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
 
 
+class EquitySectorOverride(Base):
+    __tablename__ = "equity_sector_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name_normalized: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    raw_name: Mapped[str] = mapped_column(String(255))
+    sector: Mapped[str] = mapped_column(String(60))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
+
+
 class MfSchemeBreakdown(Base):
     __tablename__ = "mf_scheme_breakdown"
     __table_args__ = (

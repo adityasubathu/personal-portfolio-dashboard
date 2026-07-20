@@ -23,11 +23,13 @@ from app.services.mf_breakdown import (
     get_direct_trade_breakdown,
     get_scheme_breakdown,
     get_sector_composition,
+    get_sector_list,
     get_sector_stock_breakdown,
     get_stock_holdings_table,
     ingest_scheme_csvs,
     save_allocation_targets,
     save_asset_class_targets,
+    save_sector_overrides,
     sync_amfi_market_cap,
 )
 from app.time_util import now_ist
@@ -115,6 +117,19 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"updated": updated}
+
+
+@router.patch("/sector-classify-batch")
+async def sector_classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
+    body = await request.json()
+    updated = await save_sector_overrides(db, body)
+    return {"updated": updated}
+
+
+@router.get("/sector-list")
+async def sector_list(db: AsyncSession = Depends(get_db)):
+    sectors = await get_sector_list(db)
+    return JSONResponse(sectors)
 
 
 @router.get("/chart-data")
