@@ -373,16 +373,14 @@ function SectorClassifyPanel({
   )
 }
 
-function SectorTab() {
+function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: () => void }) {
   const { data: sectors } = useSectorComposition()
   const { data: stockBreakdown } = useSectorStockBreakdown()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [classifyDismissed, setClassifyDismissed] = useState(false)
 
   if (!sectors) return <Text size="sm" c="dimmed">Loading…</Text>
 
   const unknownHoldings = stockBreakdown?.find((s) => s.sector === 'Unknown')?.holdings ?? []
-  const showClassifyPanel = !classifyDismissed && unknownHoldings.length > 0
 
   const totalSum = sectors.reduce((acc, s) => acc + s.total, 0)
   const grandTotal = stockBreakdown ? stockBreakdown.reduce((acc, s) => acc + s.total, 0) : 0
@@ -403,13 +401,6 @@ function SectorTab() {
 
   return (
     <Stack gap="lg">
-      {showClassifyPanel && (
-        <SectorClassifyPanel
-          unknownHoldings={unknownHoldings}
-          onDone={() => setClassifyDismissed(true)}
-        />
-      )}
-
       {labels.length > 0 && (
         <DonutChart labels={labels} values={values} colorMode="sector" />
       )}
@@ -454,6 +445,10 @@ function SectorTab() {
           </Table.Tbody>
         </Table>
       </Box>
+
+      {!dismissed && unknownHoldings.length > 0 && (
+        <SectorClassifyPanel unknownHoldings={unknownHoldings} onDone={onDismiss} />
+      )}
     </Stack>
   )
 }
@@ -679,11 +674,16 @@ function ClassifyPanel({
 export function Breakdown() {
   const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
   const [unmatchedEquities, setUnmatchedEquities] = useState<UnmatchedEquity[]>([])
+  const [sectorClassifyDismissed, setSectorClassifyDismissed] = usePersistentState('sectorClassifyDismissed', false)
 
   useEffect(() => {
     const equities = ingestSse.result?.ingest?.unmatched_equities
     if (equities?.length) {
       setUnmatchedEquities(equities)
+    }
+    // Reset sector classify dismiss whenever a new ingest completes
+    if (ingestSse.result) {
+      setSectorClassifyDismissed(false)
     }
   }, [ingestSse.result])
 
@@ -723,7 +723,7 @@ export function Breakdown() {
         </Tabs.List>
 
         <Tabs.Panel value="overview" pt="md"><OverviewTab /></Tabs.Panel>
-        <Tabs.Panel value="sector" pt="md"><SectorTab /></Tabs.Panel>
+        <Tabs.Panel value="sector" pt="md"><SectorTab dismissed={sectorClassifyDismissed} onDismiss={() => setSectorClassifyDismissed(true)} /></Tabs.Panel>
         <Tabs.Panel value="composition" pt="md"><CompositionTab /></Tabs.Panel>
       </Tabs>
     </Stack>
