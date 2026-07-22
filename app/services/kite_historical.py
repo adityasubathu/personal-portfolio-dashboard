@@ -42,7 +42,7 @@ INDEX_INSTRUMENTS = [
     {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250"},
     {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX"},
 ]
-HISTORY_START = date(2015, 1, 1)  # earliest date fetched for all instruments
+HISTORY_START = date(2018, 6, 1)  # Kite historical data available from ~mid-2018
 
 _cancel_event = asyncio.Event()
 
