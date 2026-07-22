@@ -196,15 +196,15 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
         <Table.Thead>
           <Table.Tr>
             <Table.Th w={120}>Horizon</Table.Th>
-            <Table.Th w={170}>Trend</Table.Th>
-            <Table.Th>Momentum</Table.Th>
-            <Table.Th w={180}>
+            <Table.Th w={160}>Trend</Table.Th>
+            <Table.Th w={220}>Momentum</Table.Th>
+            <Table.Th w={160}>
               <Group gap={4} align="center" wrap="nowrap">
                 Volatility (realized)
                 <ChartInfo text={EXPLANATIONS.tableVol} />
               </Group>
             </Table.Th>
-            <Table.Th w={230}>Volatility (implied)</Table.Th>
+            <Table.Th w={260}>Volatility (implied)</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
