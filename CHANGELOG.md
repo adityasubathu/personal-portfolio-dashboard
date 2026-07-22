@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-07-23 — Market Sentiment table info buttons, MACD histogram, explanation additions
+
+- `frontend/src/components/LwChart.tsx` — added `histogram` series type (lightweight-charts `HistogramSeries`); data path reuses `line` prop
+- `frontend/src/pages/MarketSentiment.tsx`:
+  - MACD chart changed from `seriesType="line"` to `seriesType="histogram"`
+  - Summary table wrapped in `Box px={128}` to match chart side padding; table `fz` raised from `sm` to `md` (+20%)
+  - Per-row info icon added in Momentum column (short/mid/long each have tailored explanations)
+  - Info icon added to Volatility column header explaining vol_regime
+  - Info icon added to FlagsBanner when a gap badge is present (gap analysis explanation)
+  - Added `EXPLANATIONS` keys: `tableShort`, `tableMid`, `tableLong`, `tableVol`, `gap`; updated `price` to include Bollinger Band %B detail
+
+---
+
 ## 2026-07-23 — Market Sentiment info popovers
 
 - `frontend/src/pages/MarketSentiment.tsx` — added `ChartInfo` component (Mantine `Popover` + `ActionIcon` with `IconInfoCircle`) and `EXPLANATIONS` map with plain-language descriptions for all six charts (price/overlays, RSI, MACD, ADX, ATR%, Realized Volatility); info button appears to the right of each chart name and to the top-right of the candlestick chart

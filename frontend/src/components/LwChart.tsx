@@ -4,6 +4,7 @@ import {
   createSeriesMarkers,
   AreaSeries,
   CandlestickSeries,
+  HistogramSeries,
   LineSeries,
   type IChartApi,
   type ISeriesApi,
@@ -22,7 +23,7 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { usePrivacy } from '../hooks/usePrivacy'
 import type { Candle, NavPoint, TradeMarker } from '../types/charts'
 
-type SeriesType = 'candlestick' | 'area' | 'line'
+type SeriesType = 'candlestick' | 'area' | 'line' | 'histogram'
 
 interface LwChartProps {
   seriesType: SeriesType
@@ -202,6 +203,11 @@ export function LwChart({
         topColor: 'rgba(59,130,246,0.3)',
         bottomColor: 'rgba(59,130,246,0.0)',
       })
+    } else if (seriesType === 'histogram') {
+      mainSeriesRef.current = chart.addSeries(HistogramSeries, {
+        color: MAIN_COLOR,
+        priceLineVisible: false,
+      })
     } else {
       mainSeriesRef.current = chart.addSeries(LineSeries, { color: MAIN_COLOR })
     }
@@ -374,7 +380,8 @@ export function LwChart({
     if (seriesType === 'candlestick' && candles) {
       s.setData(candles.map((c) => ({ ...c, time: c.time as Time })) as CandlestickData<Time>[])
     } else if (line) {
-      s.setData(line.map((p) => ({ time: p.time as Time, value: p.value })) as (LineData<Time> | AreaData<Time>)[])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      s.setData(line.map((p) => ({ time: p.time as Time, value: p.value })) as any[])
     }
 
     if (markers?.length) {

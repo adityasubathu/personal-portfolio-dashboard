@@ -59,7 +59,7 @@ const oscFormatter = (p: number) => p.toFixed(2)
 // ── Chart explanations ────────────────────────────────────────────────────────
 
 const EXPLANATIONS = {
-  price: `Each candle shows the Open, High, Low, and Close price for one trading day. Green = closed higher than open; red = lower. Hover to see the OHLC values in the top-left corner.\n\nOverlays:\n• EMA 9 / EMA 20 — fast-moving averages; when the 9 crosses below the 20 it's an early "momentum flipping" signal.\n• SMA 50 / 100 / 200 — slower averages marking medium and long-term trend direction. The 200-DMA is the classic bull/bear regime line.\n• Bollinger Bands — drawn 2 standard deviations above/below a 20-day average. Narrow bands = low volatility ("squeeze"), often preceding a big move.`,
+  price: `Each candle shows the Open, High, Low, and Close price for one trading day. Green = closed higher than open; red = lower. Hover to see the OHLC values in the top-left corner.\n\nOverlays:\n• EMA 9 / EMA 20 — fast-moving averages; when the 9 crosses below the 20 it's an early "momentum flipping" signal.\n• SMA 50 / 100 / 200 — slower averages marking medium and long-term trend direction. The 200-DMA is the classic bull/bear regime line.\n• Bollinger Bands — drawn 2 standard deviations above/below a 20-day average. Narrow bands = low volatility ("squeeze"), often preceding a big move. Position (%B) = where price sits within the bands — near the top = stretched high, near the bottom = stretched low.`,
 
   rsi: `RSI (Relative Strength Index) is a 0–100 oscillator measuring how strong recent up-moves are vs. down-moves over 14 periods.\n\nAbove 70 = overbought — rallied hard, due for a pause or pullback.\nBelow 30 = oversold.\nAround 50 = neutral / balanced.\n\n1D RSI uses daily closes and reacts quickly. 1W RSI uses weekly closes — much smoother, it filters out daily noise to show medium-term momentum. Divergence between the two (e.g. 1D overbought but 1W neutral) often means the move is a short-term spike rather than a sustained trend.`,
 
@@ -70,6 +70,16 @@ const EXPLANATIONS = {
   atr: `ATR (Average True Range) measures the average daily trading range — High minus Low, adjusted for overnight gaps — over 14 days. Expressing it as % of price makes it comparable across different price levels and time periods.\n\nRising ATR% = market getting choppier, bigger daily swings.\nFalling ATR% = market calming down, tighter ranges.\n\nThere's no inherently "good" or "bad" level — it's a volatility thermometer. High ATR% means stop-loss levels need to be wider to avoid being shaken out by noise.`,
 
   vol: `Realized volatility is the actual standard deviation of daily returns over the past 20 or 60 trading days, annualized to a yearly percentage.\n\nRV 20 (amber line) reacts faster to regime changes — it'll spike as soon as volatility picks up.\nRV 60 (purple line) is smoother — it shows the sustained volatility environment rather than short bursts.\n\nComparing the two tells you if a volatility spike is fading (RV 20 drops back toward RV 60) or becoming a new regime (RV 60 starts rising to meet RV 20).`,
+
+  tableShort: `Short-term momentum uses two indicators:\n\n• RSI(14) — 0–100 oscillator. Above 70 = overbought; below 30 = oversold; ~50 = neutral.\n• MACD histogram — gap between a fast and slow EMA shown as bars. Bars growing above zero = momentum accelerating; shrinking toward zero = fading before price moves.`,
+
+  tableMid: `Mid-term momentum uses two indicators:\n\n• ADX — measures trend strength (not direction). Below ~20 = no real trend; above ~25 = trend is in place and MA signals are more reliable.\n• Weekly RSI — same RSI formula on weekly closes. Much smoother than daily; shows the underlying medium-term momentum without day-to-day noise.`,
+
+  tableLong: `Long-term momentum uses three reads:\n\n• SMA200 slope — is the 200-day average itself rising, flat, or falling? Cleaner regime signal than price-vs-200DMA alone.\n• Drawdown from ATH — how far current price has fallen from the most recent peak, and how long the drawdown has lasted.\n• Rolling 1-year return — the % return over the trailing 252 trading days. Puts current performance in context: unusually strong, weak, or normal vs. history.`,
+
+  tableVol: `Volatility regime classifies the current realized volatility environment:\n\n• Low — vol is below its historical median; market is calm.\n• Normal — vol is in its typical range.\n• High — vol is elevated; expect wider daily swings and less reliable trend signals.\n\nBased on rolling 60-day realized volatility percentile vs. the full 6-year window.`,
+
+  gap: `Gap analysis measures the % difference between today's open and yesterday's close.\n\nA big gap = strong overnight sentiment shift driven by news or global cues. The gap badge appears when today's gap exceeds 0.5% in either direction.\n\n"Fill rate" (not shown here) = how often the gap gets closed same-day — a texture read on whether gaps tend to be sustained or quickly faded by the market.`,
 }
 
 function ChartInfo({ text }: { text: string }) {
@@ -117,6 +127,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail1: `RSI(14): ${horizons.short.rsi14 ?? '—'}`,
       detail2: `MACD hist: ${horizons.short.macd_hist ?? '—'}`,
       vol: horizons.short.vol_regime,
+      momentumInfo: EXPLANATIONS.tableShort,
     },
     {
       horizon: 'Mid-term',
@@ -124,6 +135,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail1: `ADX: ${horizons.mid.adx ?? '—'}`,
       detail2: `Weekly RSI: ${horizons.mid.weekly_rsi ?? '—'}`,
       vol: horizons.mid.vol_regime,
+      momentumInfo: EXPLANATIONS.tableMid,
     },
     {
       horizon: 'Long-term',
@@ -131,38 +143,49 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail1: `SMA200 slope: ${horizons.long.sma200_slope ?? '—'}`,
       detail2: `Drawdown from ATH: ${horizons.long.drawdown_from_ath_pct != null ? `${horizons.long.drawdown_from_ath_pct}%` : '—'}`,
       vol: `Vol pct: ${horizons.long.vol_percentile != null ? `${horizons.long.vol_percentile}%ile` : '—'}`,
+      momentumInfo: EXPLANATIONS.tableLong,
     },
   ]
 
   return (
-    <Table withTableBorder withColumnBorders fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th w={110}>Horizon</Table.Th>
-          <Table.Th w={160}>Trend</Table.Th>
-          <Table.Th>Momentum</Table.Th>
-          <Table.Th w={140}>Volatility</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {rows.map((r) => (
-          <Table.Tr key={r.horizon}>
-            <Table.Td fw={500}>{r.horizon}</Table.Td>
-            <Table.Td>
-              <Badge color={trendColor(r.trend)} variant="light" size="sm">
-                {r.trend}
-              </Badge>
-            </Table.Td>
-            <Table.Td c="dimmed" fz="xs">
-              {r.detail1} &nbsp;·&nbsp; {r.detail2}
-            </Table.Td>
-            <Table.Td c="dimmed" fz="xs">
-              {r.vol}
-            </Table.Td>
+    <Box px={128}>
+      <Table withTableBorder withColumnBorders fz="md">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th w={120}>Horizon</Table.Th>
+            <Table.Th w={170}>Trend</Table.Th>
+            <Table.Th>Momentum</Table.Th>
+            <Table.Th w={160}>
+              <Group gap={4} align="center" wrap="nowrap">
+                Volatility
+                <ChartInfo text={EXPLANATIONS.tableVol} />
+              </Group>
+            </Table.Th>
           </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((r) => (
+            <Table.Tr key={r.horizon}>
+              <Table.Td fw={500}>{r.horizon}</Table.Td>
+              <Table.Td>
+                <Badge color={trendColor(r.trend)} variant="light" size="sm">
+                  {r.trend}
+                </Badge>
+              </Table.Td>
+              <Table.Td c="dimmed" fz="sm">
+                <Group gap={4} align="center" wrap="nowrap">
+                  <span>{r.detail1} &nbsp;·&nbsp; {r.detail2}</span>
+                  <ChartInfo text={r.momentumInfo} />
+                </Group>
+              </Table.Td>
+              <Table.Td c="dimmed" fz="sm">
+                {r.vol}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Box>
   )
 }
 
@@ -200,13 +223,16 @@ function FlagsBanner({ flags }: { flags: SentimentFlags }) {
   const active = items.filter((i) => i.show)
   if (active.length === 0) return null
 
+  const hasGap = active.some((i) => i.label.startsWith('Gap'))
+
   return (
-    <Group gap="xs" wrap="wrap">
+    <Group gap="xs" wrap="wrap" align="center">
       {active.map((item) => (
         <Badge key={item.label} color={item.color} variant="light" size="sm">
           {item.label}
         </Badge>
       ))}
+      {hasGap && <ChartInfo text={EXPLANATIONS.gap} />}
     </Group>
   )
 }
@@ -398,7 +424,7 @@ export function MarketSentiment() {
                 <ChartInfo text={EXPLANATIONS.macd} />
               </Group>
               <LwChart
-                seriesType="line"
+                seriesType="histogram"
                 line={oscData.macd_hist}
                 persistKey="market-sentiment-macd"
                 defaultHeight={130}
