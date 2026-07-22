@@ -168,7 +168,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
             <Table.Tr key={r.horizon}>
               <Table.Td fw={500}>{r.horizon}</Table.Td>
               <Table.Td>
-                <Badge color={trendColor(r.trend)} variant="light" size="sm">
+                <Badge color={trendColor(r.trend)} variant="light" size="sm" fz="0.825rem">
                   {r.trend}
                 </Badge>
               </Table.Td>
