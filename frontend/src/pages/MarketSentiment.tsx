@@ -315,7 +315,7 @@ export function MarketSentiment() {
   )
 
   const rangeDays = RANGE_OPTIONS.find((r) => r.label === rangeLabel)?.days ?? 252
-  const { data: series, isLoading: seriesLoading } = useSentimentSeries(2000)
+  const { data: series, isLoading: seriesLoading } = useSentimentSeries(0)
 
   const filteredCandles = useMemo(
     () => filterByDays(series?.candles ?? [], rangeDays),
