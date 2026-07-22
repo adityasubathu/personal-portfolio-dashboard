@@ -2,6 +2,12 @@
 
 ---
 
+## 2026-07-22 — Market Sentiment auto-refresh on Kite sync
+
+- `frontend/src/pages/NavHistory.tsx` — after price-history SSE completes, invalidate `['market-sentiment']` query keys so the Market Sentiment page refreshes automatically without a manual page reload
+
+---
+
 ## 2026-07-22 — Market Sentiment page polish
 
 - `app/services/market_sentiment.py` — add `rsi14_weekly` to `get_sentiment_series` oscillators

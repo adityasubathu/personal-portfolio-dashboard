@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Box, Button, Group, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconRefresh, IconUpload } from '@tabler/icons-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
 import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, useSyncNavMutation } from '../api/mf'
@@ -26,7 +27,14 @@ export function NavHistory() {
   const syncHistoryMut = useSyncNavHistoryMutation()
   const syncNavMut = useSyncNavMutation()
 
+  const qc = useQueryClient()
   const priceSyncSse = useSse(`${apiUrl('/api/v1/portfolio/sync-price-history/stream')}`)
+
+  useEffect(() => {
+    if (priceSyncSse.result) {
+      qc.invalidateQueries({ queryKey: ['market-sentiment'] })
+    }
+  }, [priceSyncSse.result])
 
   // OHLC fetch SSE — url built from form state
   const [fetchTicker, setFetchTicker] = useState('')
