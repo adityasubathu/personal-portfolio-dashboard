@@ -182,7 +182,8 @@ portfolio-mac-arm/
 │       ├── ohlc/                # <SYMBOL>.json — daily OHLC rows (synthetic)
 │       └── nav/                 # <ISIN>.json — daily NAV rows (real, from mfapi.in)
 ├── scripts/
-│   └── fetch_demo_data.py       # One-time script to refresh demo fixture data (Yahoo Finance + mfapi.in)
+│   ├── fetch_demo_data.py       # One-time script to refresh demo fixture data (Yahoo Finance + mfapi.in)
+│   └── fetch_nifty50_ohlc.py   # Standalone: fetch Nifty 50 daily OHLC from Kite and write to CSV (supports --start/--end/--append)
 ├── docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000) + frontend (Vite :5173) + pgAdmin (5050)
 ├── Dockerfile                   # Backend image
 ├── requirements.txt
@@ -259,6 +260,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /nav-history` | Portfolio value timeseries `{date, value, invested}` |
 | `GET /instruments` | All traded instruments with price row count |
 | `GET /sync-price-history/stream` | SSE: Kite OHLC sync with live progress |
+| `POST /sync-price-history/cancel` | Halt a running price sync |
 | `POST /upload-ohlc` | Manual OHLC CSV upload |
 | `GET /fetch-ohlc/stream` | SSE: fetch Kite OHLC for a specific ticker |
 
@@ -376,7 +378,7 @@ OAuth login → exchange token (expires 06:00 IST next day) → fetch holdings +
 AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`.
 
 ### Price History Sync (SSE)
-Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows → upsert → stream progress. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
+Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → stream progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. A Halt button POSTs to `/sync-price-history/cancel` to stop mid-run. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
 
 ### MF Breakdown
 Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
