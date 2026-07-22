@@ -583,8 +583,8 @@ export function MarketSentiment() {
               <LwChart
                 seriesType="line"
                 line={oscData.rsi14}
-                label="1D RSI"
-                compareLines={[{ label: '1W RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
+                label="Daily RSI"
+                compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
                 persistKey="market-sentiment-rsi"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
