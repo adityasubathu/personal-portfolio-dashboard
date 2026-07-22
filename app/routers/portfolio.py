@@ -16,7 +16,7 @@ from app.models.kite import KiteSyncLog
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.schemas.portfolio import DirectHoldingsResponse, HoldingRow, HoldingsSection, InstrumentListItem, SummaryCards
-from app.services.kite_historical import fetch_ohlc_for_ticker, sync_index_history, sync_price_history
+from app.services.kite_historical import cancel_sync, fetch_ohlc_for_ticker, sync_index_history, sync_price_history
 from app.services import kite_sync
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
@@ -472,6 +472,12 @@ async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
             await task
 
     return EventSourceResponse(_generate())
+
+
+@router.post("/sync-price-history/cancel")
+async def cancel_price_sync():
+    cancel_sync()
+    return JSONResponse({"ok": True})
 
 
 @router.get("/nav-history")

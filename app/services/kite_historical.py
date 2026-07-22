@@ -44,6 +44,12 @@ INDEX_INSTRUMENTS = [
 ]
 HISTORY_START = date(2015, 1, 1)  # earliest date fetched for all instruments
 
+_cancel_event = asyncio.Event()
+
+
+def cancel_sync() -> None:
+    _cancel_event.set()
+
 
 
 async def resolve_instrument_tokens(db: AsyncSession) -> dict:
@@ -310,6 +316,7 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
 
     If `on_progress` is provided, it's called with a string message after each
     instrument completes — used for SSE streaming."""
+    _cancel_event.clear()
     config = await _get_config(db)
     _assert_token_valid(config)
 
@@ -339,6 +346,11 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
     latest_price_date: date | None = None
 
     for idx, instr in enumerate(instruments, 1):
+        if _cancel_event.is_set():
+            if on_progress:
+                await on_progress("⏹ Sync halted by user.")
+            break
+
         sym = instr.tradingsymbol or "?"
         if not instr.kite_instrument_token:
             failed.append(f"{sym}: no Kite token (not found in instruments dump)")
@@ -414,6 +426,11 @@ async def sync_index_history(db: AsyncSession, on_progress=None) -> dict:
     total_rows = 0
     instruments_synced = 0
     for idx, instr in enumerate(instruments, 1):
+        if _cancel_event.is_set():
+            if on_progress:
+                await on_progress("⏹ Index sync halted by user.")
+            break
+
         sym = instr.tradingsymbol or "?"
         if not instr.kite_instrument_token:
             if on_progress:

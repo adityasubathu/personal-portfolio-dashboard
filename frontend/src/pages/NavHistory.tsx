@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Box, Button, Group, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconRefresh, IconUpload } from '@tabler/icons-react'
+import { IconPlayerStop, IconRefresh, IconUpload } from '@tabler/icons-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
 import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, useSyncNavMutation } from '../api/mf'
 import { LwChart } from '../components/LwChart'
@@ -17,6 +17,34 @@ function navPriceFormatter(price: number): string {
   if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(2)}L`
   if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(2)}K`
   return `${sign}₹${abs.toFixed(2)}`
+}
+
+function HaltSyncButton() {
+  const [halting, setHalting] = useState(false)
+
+  async function halt() {
+    setHalting(true)
+    try {
+      await fetch(apiUrl('/api/v1/portfolio/sync-price-history/cancel'), { method: 'POST' })
+    } catch {
+      // best-effort — the SSE stream will surface the halt message
+    } finally {
+      setHalting(false)
+    }
+  }
+
+  return (
+    <Button
+      size="xs"
+      color="red"
+      variant="light"
+      leftSection={<IconPlayerStop size={12} />}
+      loading={halting}
+      onClick={halt}
+    >
+      Halt
+    </Button>
+  )
 }
 
 export function NavHistory() {
@@ -159,6 +187,9 @@ export function NavHistory() {
           >
             Sync now
           </Button>
+          {priceSyncSse.status === 'running' && (
+            <HaltSyncButton />
+          )}
         </Group>
         <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" maw={560} />
       </Box>
