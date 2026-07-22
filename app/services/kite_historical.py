@@ -42,7 +42,7 @@ INDEX_INSTRUMENTS = [
     {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250"},
     {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX"},
 ]
-INDEX_BACKFILL_START = date(2020, 1, 1)
+HISTORY_START = date(2015, 1, 1)  # earliest date fetched for all instruments
 
 
 
@@ -180,6 +180,43 @@ async def _latest_stored_price_date(db: AsyncSession, instrument_id: int) -> dat
     ).scalar_one_or_none()
 
 
+async def _earliest_stored_price_date(db: AsyncSession, instrument_id: int) -> date | None:
+    return (
+        await db.execute(
+            select(func.min(PriceHistory.price_date)).where(
+                PriceHistory.instrument_id == instrument_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _fetch_range(
+    config: KiteConfig,
+    token: int,
+    start: date,
+    end: date,
+) -> tuple[list[dict], str | None]:
+    """Fetch candles for [start, end] in KITE_DAY_CANDLE_CAP-day windows.
+    Returns (candles, error_str | None)."""
+    candles: list[dict] = []
+    cursor = start
+    while cursor <= end:
+        window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), end)
+        try:
+            chunk = await kite_client.get_historical_candles(
+                config.api_key,
+                config.access_token,
+                token,
+                cursor,
+                window_end,
+            )
+        except (httpx.HTTPError, ValueError) as e:
+            return [], f"kite: {e}"
+        candles.extend(chunk)
+        cursor = window_end + timedelta(days=1)
+    return candles, None
+
+
 async def _sync_one(
     db: AsyncSession,
     config: KiteConfig,
@@ -188,44 +225,44 @@ async def _sync_one(
 ) -> dict:
     """Sync history for a single instrument. Returns {rows_added, latest_price_date, error?}.
 
-    `backfill_start`: used when no price history exists yet. Defaults to 10 days
-    before the earliest trade date (for traded instruments). Pass an explicit date
-    for instruments with no trades (e.g. indices)."""
+    `backfill_start`: floor date for initial and backward-gap fills.
+    Defaults to HISTORY_START for instruments with no trades, or
+    10 days before the earliest trade date (whichever is earlier)."""
     latest_stored = await _latest_stored_price_date(db, instrument.id)
+    earliest_stored = await _earliest_stored_price_date(db, instrument.id)
+    today = date.today()
+    floor = backfill_start if backfill_start is not None else HISTORY_START
+
+    # ── Determine forward fetch start ─────────────────────────────────────────
     if latest_stored:
-        # Re-fetch the last 5 days so any corrected/late-published candles are overwritten.
-        start = latest_stored - timedelta(days=4)
+        forward_start = latest_stored - timedelta(days=4)
     else:
         if backfill_start is not None:
-            start = backfill_start
+            forward_start = backfill_start
         else:
             earliest_trade = await _earliest_trade_date(db, instrument.id)
             if earliest_trade is None:
                 return {"rows_added": 0, "latest_price_date": None}
-            # Buffer 10 days so the chart has room to breathe before the first trade.
-            start = earliest_trade - timedelta(days=10)
+            forward_start = min(earliest_trade - timedelta(days=10), floor)
 
-    today = date.today()
-    if start > today:
+    if forward_start > today:
         return {"rows_added": 0, "latest_price_date": latest_stored.isoformat() if latest_stored else None}
 
-    # Window the span by KITE_DAY_CANDLE_CAP to stay under Kite's per-request candle cap.
-    all_candles: list[dict] = []
-    cursor = start
-    while cursor <= today:
-        window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), today)
-        try:
-            chunk = await kite_client.get_historical_candles(
-                config.api_key,
-                config.access_token,
-                instrument.kite_instrument_token,
-                cursor,
-                window_end,
+    # ── Fetch forward (recent data) ───────────────────────────────────────────
+    all_candles, err = await _fetch_range(config, instrument.kite_instrument_token, forward_start, today)
+    if err:
+        return {"rows_added": 0, "latest_price_date": None, "error": err}
+
+    # ── Fetch backward gap if existing data doesn't reach the floor ───────────
+    if earliest_stored is not None and earliest_stored > floor:
+        backward_end = earliest_stored - timedelta(days=1)
+        if backward_end >= floor:
+            back_candles, err = await _fetch_range(
+                config, instrument.kite_instrument_token, floor, backward_end
             )
-        except (httpx.HTTPError, ValueError) as e:
-            return {"rows_added": 0, "latest_price_date": None, "error": f"kite: {e}"}
-        all_candles.extend(chunk)
-        cursor = window_end + timedelta(days=1)
+            if err:
+                return {"rows_added": 0, "latest_price_date": None, "error": err}
+            all_candles.extend(back_candles)
 
     if not all_candles:
         # Kite returned zero candles across the requested window. Common for
@@ -310,7 +347,7 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
             continue
 
         await asyncio.sleep(0.5)
-        outcome = await _sync_one(db, config, instr)
+        outcome = await _sync_one(db, config, instr, backfill_start=HISTORY_START)
 
         if outcome.get("error"):
             failed.append(f"{sym}: {outcome['error']}")
@@ -384,7 +421,7 @@ async def sync_index_history(db: AsyncSession, on_progress=None) -> dict:
             continue
 
         await asyncio.sleep(0.5)
-        outcome = await _sync_one(db, config, instr, backfill_start=INDEX_BACKFILL_START)
+        outcome = await _sync_one(db, config, instr, backfill_start=HISTORY_START)
 
         if outcome.get("error"):
             if on_progress:
