@@ -18,7 +18,7 @@ export interface AssetClassComparison {
   rows: AssetClassRow[]
   foreign_equity_target: number
   investable_total: number
-  excluded: { emergency_fund: number; ppf: number; cash: number; total_excluded: number }
+  excluded: { emergency_fund: number; cash: number; total_excluded: number }
   grand_total: number
 }
 

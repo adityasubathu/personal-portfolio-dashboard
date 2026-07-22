@@ -54,7 +54,7 @@ function AssetClassTargetsSection() {
     }
   }
 
-  const { emergency_fund, ppf, cash } = ac.excluded
+  const { emergency_fund, cash } = ac.excluded
 
   return (
     <Box>
@@ -137,7 +137,6 @@ function AssetClassTargetsSection() {
         <Text size="xs" c="dimmed">
           Excludes:{' '}
           {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
-          {ppf > 0 && <>PPF {inrCompact(ppf)}, </>}
           {cash > 0 && <>Savings {inrCompact(cash)}</>}
         </Text>
       </Group>

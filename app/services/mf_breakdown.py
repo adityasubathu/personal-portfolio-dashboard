@@ -921,18 +921,18 @@ async def get_asset_class_comparison(db: AsyncSession) -> dict:
 
     savings_cash = manual.get("total_cash", 0)
     emergency_fund = manual.get("emergency_total", 0)
-    ppf = manual.get("total_ppf", 0)
 
     # MF internal cash = total "Cash" category minus savings-account-only cash
     mf_cash = max(0.0, category_totals.get("Cash", 0) - savings_cash)
 
     equity = sum(category_totals.get(c, 0) for c in _AC_EQUITY)
-    debt = sum(category_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund - ppf
+    # PPF is already in category_totals["Debt"] via _build_category_totals_full; include it in investable debt
+    debt = sum(category_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund
     debt = max(0.0, debt)
     precious_metals = sum(category_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
 
     investable_total = equity + debt + precious_metals
-    grand_total = investable_total + savings_cash + emergency_fund + ppf
+    grand_total = investable_total + savings_cash + emergency_fund
 
     targets = await get_asset_class_targets(db)
 
@@ -968,9 +968,8 @@ async def get_asset_class_comparison(db: AsyncSession) -> dict:
         "investable_total": round(investable_total, 2),
         "excluded": {
             "emergency_fund": round(emergency_fund, 2),
-            "ppf": round(ppf, 2),
             "cash": round(savings_cash, 2),
-            "total_excluded": round(savings_cash + emergency_fund + ppf, 2),
+            "total_excluded": round(savings_cash + emergency_fund, 2),
         },
         "grand_total": round(grand_total, 2),
     }

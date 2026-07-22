@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-07-22 — Include PPF in debt bucket for allocation targets
+
+- `app/services/mf_breakdown.py` — `get_asset_class_comparison`: removed `- ppf` from debt calculation so PPF (already present in `category_totals["Debt"]` via `_build_category_totals_full`) is counted in investable debt; removed PPF from `grand_total` add-back and `excluded` dict
+- `frontend/src/types/mfBreakdown.ts` — removed `ppf` field from `AssetClassComparison.excluded`
+- `frontend/src/pages/Breakdown.tsx` — removed PPF line from "Excludes:" footnote under asset class targets table
+
+---
+
 ## 2026-07-22 — Market Sentiment auto-refresh on Kite sync
 
 - `frontend/src/pages/NavHistory.tsx` — after price-history SSE completes, invalidate `['market-sentiment']` query keys so the Market Sentiment page refreshes automatically without a manual page reload
