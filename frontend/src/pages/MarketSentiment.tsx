@@ -228,7 +228,7 @@ function FlagsBanner({ flags }: { flags: SentimentFlags }) {
   return (
     <Group gap="xs" wrap="wrap" align="center">
       {active.map((item) => (
-        <Badge key={item.label} color={item.color} variant="light" size="sm">
+        <Badge key={item.label} color={item.color} variant="light" size="sm" fz="0.825rem">
           {item.label}
         </Badge>
       ))}
@@ -337,7 +337,7 @@ export function MarketSentiment() {
       </Group>
 
       {summary?.horizons && <SentimentSummaryCard data={summary} />}
-      {summary?.flags && <FlagsBanner flags={summary.flags} />}
+      {summary?.flags && <Box px={128}><FlagsBanner flags={summary.flags} /></Box>}
 
       {/* Range selector */}
       <Group justify="space-between" align="center" wrap="nowrap">
