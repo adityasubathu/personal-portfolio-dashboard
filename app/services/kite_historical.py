@@ -280,6 +280,17 @@ async def _sync_one(
             "no_data": latest_stored is None,
         }
 
+    # Deduplicate by date — forward candles are added first so they take
+    # precedence (they're the most recently fetched / corrected). The forward
+    # range goes 4 days before latest_stored; if earliest_stored is nearby it
+    # can overlap with the backward range, producing duplicate dates that would
+    # cause "ON CONFLICT DO UPDATE command cannot affect row a second time".
+    seen: dict = {}
+    for c in all_candles:
+        if c["date"] not in seen:
+            seen[c["date"]] = c
+    all_candles = list(seen.values())
+
     stmt = pg_insert(PriceHistory).values(
         [
             {
