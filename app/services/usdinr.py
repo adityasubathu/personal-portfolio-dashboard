@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app_config import AppConfig
 from app.services import kite_client
-from app.services.kite_sync import _assert_token_valid, _get_config
+from app.services.kite_sync import assert_token_valid, get_config
 from app.time_util import now_ist
 
 _APP_CONFIG_KEY = "usdinr_rate"
@@ -57,8 +57,8 @@ async def _resolve_near_month_symbol() -> str | None:
 async def refresh_usdinr_rate(db: AsyncSession) -> dict:
     """Fetch live USDINR rate from Kite CDS and persist it. Returns the rate dict.
     Raises on auth or resolution failure; callers treat this as best-effort."""
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     symbol = await _resolve_near_month_symbol()
     if symbol is None:
