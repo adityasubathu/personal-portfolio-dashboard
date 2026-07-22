@@ -501,6 +501,7 @@ export function MarketSentiment() {
             <LwChart
               seriesType="line"
               line={toNavPoints(breadthData.ratios!.mid150_nifty50)}
+              label="Mid150 / Nifty50"
               compareLines={[{ label: 'Small250 / Nifty50', color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250_nifty50) }]}
               persistKey="market-sentiment-breadth-ratio"
               defaultHeight={180}
@@ -582,6 +583,7 @@ export function MarketSentiment() {
               <LwChart
                 seriesType="line"
                 line={oscData.rsi14}
+                label="1D RSI"
                 compareLines={[{ label: '1W RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
                 persistKey="market-sentiment-rsi"
                 defaultHeight={130}
@@ -647,6 +649,7 @@ export function MarketSentiment() {
               <LwChart
                 seriesType="line"
                 line={oscData.rv20}
+                label="RV 20"
                 compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
                 persistKey="market-sentiment-vol"
                 defaultHeight={130}

@@ -29,6 +29,7 @@ interface LwChartProps {
   seriesType: SeriesType
   candles?: Candle[]
   line?: NavPoint[]
+  label?: string
   compareLines?: Array<{ data: NavPoint[]; label: string; color: string }>
   markers?: TradeMarker[]
   persistKey: string
@@ -129,6 +130,7 @@ export function LwChart({
   seriesType,
   candles,
   line,
+  label,
   compareLines,
   markers,
   persistKey,
@@ -223,7 +225,7 @@ export function LwChart({
     mainTag.wrap.style.display = 'none'
     mainTag.connector.style.display = 'none'
     if (!hideMainTag) {
-      seriesMetaRef.current.set(mainSeriesRef.current, { label: '', color: MAIN_COLOR, tag: mainTag })
+      seriesMetaRef.current.set(mainSeriesRef.current, { label: label ?? '', color: MAIN_COLOR, tag: mainTag })
     }
 
     const dateEl = makeDateEl()

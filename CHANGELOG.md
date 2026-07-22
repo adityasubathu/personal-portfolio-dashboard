@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-07-23 — Fix session
+
+- `LwChart.tsx` — added `label?: string` prop; main series price tag now shows the label when provided (previously always blank)
+- `MarketSentiment.tsx` — added `label` to RSI chart ("1D RSI"), realized volatility chart ("RV 20"), and breadth ratio chart ("Mid150 / Nifty50") so both lines in each multi-line chart show their name on the crosshair tag
+- `NavChart.tsx` — added `label` to ETF area chart when `etfCompareLines` are present so the NAV line is identified alongside the close-price compare line
+
+---
+
 ## 2026-07-23 — Market Breadth (Phases 1 & 2)
 
 - `app/services/market_sentiment.py` — added `_breadth_regime`, `_relative_strength_order`, `_segment_drawdown` composite helpers and `get_market_breadth` API function

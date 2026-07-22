@@ -134,6 +134,7 @@ export function NavChart() {
               <LwChart
                 seriesType="area"
                 line={mainLine}
+                label={etfCompareLines ? `${selectedInstr?.name ?? 'NAV'} (NAV)` : undefined}
                 markers={mainData.markers}
                 compareLines={etfCompareLines}
                 persistKey={`nav_chart_h_${selectedId}`}
