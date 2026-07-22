@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-07-22 — Market Sentiment page
+
+- `app/services/market_indicators.py` (new) — pure pandas/numpy indicator functions: EMA, SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger bands, gap analysis, streaks, golden/death cross, drawdown, rolling volatility, volatility percentile, rolling return
+- `app/services/market_sentiment.py` (new) — composites (`_short_trend`, `_mid_trend`, `_long_trend`, `_vol_regime`, `_momentum_divergence`) and API functions `get_sentiment_summary` + `get_sentiment_series` over Nifty 50 `price_history` rows; returns `{"no_data": true}` when no INDEX rows exist
+- `app/routers/market_sentiment.py` (new) — `GET /api/v1/market-sentiment/summary` and `GET /api/v1/market-sentiment/series?days=N`
+- `app/main.py` — register `market_sentiment` router
+- `frontend/src/types/marketSentiment.ts` (new) — `SentimentSummary`, `SentimentSeries`, `IndicatorPoint` interfaces
+- `frontend/src/api/marketSentiment.ts` (new) — `useSentimentSummary`, `useSentimentSeries` React Query hooks (1h staleTime)
+- `frontend/src/pages/MarketSentiment.tsx` (new) — page with `SentimentSummaryCard` (3-horizon table), `FlagsBanner` (badges), price candlestick chart with toggleable EMA/SMA/Bollinger overlays, oscillator panels (RSI, MACD hist, ADX), and volatility panels (ATR%, realized vol); range selector 1M/3M/6M/1Y/3Y/All; overlay and range states persisted
+- `frontend/src/components/LwChart.tsx` — tooltip tags now include series label when set (e.g. "SMA 200: 24935"), benefiting compare lines on all chart pages
+- `frontend/src/App.tsx` — add `/market/sentiment` route
+- `frontend/src/components/AppLayout.tsx` — add "Market Sentiment" nav entry (IconGauge) between Breakdown and Fund Detail
+
+---
+
 ## 2026-07-20 — Manual sector override + holding name cleanup
 
 - `app/models/mf_breakdown.py` — add `EquitySectorOverride` model (mirrors `EquityCategoryOverride` pattern)

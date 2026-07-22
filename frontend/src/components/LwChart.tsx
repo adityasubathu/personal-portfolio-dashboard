@@ -228,7 +228,7 @@ export function LwChart({
       const chartHeight = heightRef.current
 
       // Gather tooltip positions
-      const positions: { y: number; tag: TagEl; value: number; color: string }[] = []
+      const positions: { y: number; tag: TagEl; value: number; color: string; label: string }[] = []
 
       for (const [series, meta] of seriesMetaRef.current) {
         const raw = param.seriesData.get(series)
@@ -239,7 +239,7 @@ export function LwChart({
         const y = series.priceToCoordinate(value)
         if (x == null || y == null) { meta.tag.wrap.style.display = 'none'; meta.tag.connector.style.display = 'none'; continue }
 
-        positions.push({ y, tag: meta.tag, value, color: meta.color })
+        positions.push({ y, tag: meta.tag, value, color: meta.color, label: meta.label })
       }
 
       // Anti-overlap: sort by Y (top first), push down as needed
@@ -259,15 +259,15 @@ export function LwChart({
       const x = chart.timeScale().timeToCoordinate(param.time) ?? 0
 
       for (let i = 0; i < positions.length; i++) {
-        const { y: actualY, tag, value, color } = positions[i]
+        const { y: actualY, tag, value, color, label: seriesLabel } = positions[i]
         const ty = adjustedY[i]
         const shift = Math.abs(ty + TAG_H / 2 - actualY)
 
-        const text = privacyModeRef.current ? '₹...' : formatTooltipValue(value)
-        tag.label.textContent = text
+        const formatted = privacyModeRef.current ? '...' : formatTooltipValue(value)
+        tag.label.textContent = seriesLabel ? `${seriesLabel}: ${formatted}` : formatted
 
         // Estimate label width to decide flip
-        const labelW = tag.label.offsetWidth || text.length * 7 + 14
+        const labelW = tag.label.offsetWidth || tag.label.textContent!.length * 7 + 14
         const TIP_W = 6
         const totalW = labelW + TIP_W
         const EDGE_MARGIN = 8

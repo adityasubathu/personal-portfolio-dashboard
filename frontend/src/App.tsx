@@ -11,6 +11,7 @@ import { Import } from './pages/Import'
 import { Kite } from './pages/Kite'
 import { Settings } from './pages/Settings'
 import { PolicyTracker } from './pages/PolicyTracker'
+import { MarketSentiment } from './pages/MarketSentiment'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/portfolio/nav-history" element={<NavHistory />} />
         <Route path="/portfolio/breakdown" element={<Breakdown />} />
         <Route path="/portfolio/fund-breakdown" element={<FundBreakdown />} />
+        <Route path="/market/sentiment" element={<MarketSentiment />} />
         <Route path="/charts/price" element={<PriceChart />} />
         <Route path="/charts/nav" element={<NavChart />} />
         <Route path="/trades" element={<Trades />} />
