@@ -207,6 +207,7 @@ async def get_sentiment_series(db: AsyncSession, days: int) -> dict:
     s200 = mi.sma(df, 200)
     bb = mi.bollinger(df)
     rsi14 = mi.rsi(df)
+    rsi14_weekly = mi.weekly_rsi(df)
     macd_df = mi.macd(df)
     adx_df = mi.adx(df)
     atr_df = mi.atr(df)
@@ -244,6 +245,7 @@ async def get_sentiment_series(db: AsyncSession, days: int) -> dict:
         },
         "oscillators": {
             "rsi14": _s(rsi14),
+            "rsi14_weekly": _s(rsi14_weekly),
             "macd_hist": _s(macd_df['histogram']),
             "adx": _s(adx_df['adx']),
             "atr_pct": _s(atr_df['atr_pct']),

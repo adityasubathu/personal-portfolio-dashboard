@@ -4,7 +4,7 @@ import {
   Badge,
   Box,
   Button,
-  Checkbox,
+  Divider,
   Group,
   Loader,
   SegmentedControl,
@@ -211,6 +211,7 @@ export function MarketSentiment() {
     const d = rangeDays
     return {
       rsi14: toNavPoints(filterByDays(osc.rsi14, d)),
+      rsi14_weekly: toNavPoints(filterByDays(osc.rsi14_weekly, d)),
       macd_hist: toNavPoints(filterByDays(osc.macd_hist, d)),
       adx: toNavPoints(filterByDays(osc.adx, d)),
       atr_pct: toNavPoints(filterByDays(osc.atr_pct, d)),
@@ -220,9 +221,10 @@ export function MarketSentiment() {
   }, [series?.oscillators, rangeDays])
 
   function toggleOverlay(key: OverlayKey) {
-    setEnabledOverlays((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-    )
+    const next = enabledOverlays.includes(key)
+      ? enabledOverlays.filter((k) => k !== key)
+      : [...enabledOverlays, key]
+    setEnabledOverlays(next)
   }
 
   if (summaryLoading) return <Loader size="sm" m="xl" />
@@ -269,17 +271,31 @@ export function MarketSentiment() {
           onChange={setRangeLabel}
           data={RANGE_OPTIONS.map((r) => r.label)}
         />
-        <Group gap={6} wrap="wrap">
-          {OVERLAY_DEFS.map((d) => (
-            <Checkbox
-              key={d.key}
-              size="xs"
-              label={<Text fz="xs" c={enabledOverlays.includes(d.key) ? undefined : 'dimmed'}>{d.label}</Text>}
-              checked={enabledOverlays.includes(d.key)}
-              onChange={() => toggleOverlay(d.key)}
-              styles={{ input: { borderColor: d.color, ...(enabledOverlays.includes(d.key) ? { backgroundColor: d.color } : {}) } }}
-            />
-          ))}
+        <Group gap={14} wrap="wrap">
+          {OVERLAY_DEFS.map((d) => {
+            const enabled = enabledOverlays.includes(d.key)
+            return (
+              <Group
+                key={d.key}
+                gap={4}
+                align="center"
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleOverlay(d.key)}
+              >
+                <Box
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: 2,
+                    border: `2px solid ${d.color}`,
+                    backgroundColor: enabled ? d.color : 'transparent',
+                    flexShrink: 0,
+                  }}
+                />
+                <Text fz="xs" c={enabled ? undefined : 'dimmed'}>{d.label}</Text>
+              </Group>
+            )
+          })}
         </Group>
       </Group>
 
@@ -294,69 +310,72 @@ export function MarketSentiment() {
           persistKey="market-sentiment-price"
           defaultHeight={440}
           priceFormatter={numFormatter}
+          showOhlcInfo
+          hideMainTag
         />
       ) : null}
 
       {/* Oscillator panels */}
       {oscData && (
         <>
-          <Text fz="xs" fw={600} c="dimmed" tt="uppercase" mt="xs">
-            Oscillators
-          </Text>
+          <Divider mt="lg" mb="xs" label={<Title order={2} c="black">Oscillators</Title>} labelPosition="center" />
 
-          <Stack gap="xs">
-            <Box>
-              <Text fz="xs" c="dimmed" mb={2}>RSI (14) — overbought &gt;70 / oversold &lt;30</Text>
+          <Stack gap="lg">
+            <Box px={128}>
+              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>RSI — overbought &gt;70 / oversold &lt;30 ↓</Text>
               <LwChart
                 seriesType="line"
                 line={oscData.rsi14}
+                compareLines={[{ label: '1W RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
                 persistKey="market-sentiment-rsi"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                hideControls
               />
             </Box>
 
-            <Box>
-              <Text fz="xs" c="dimmed" mb={2}>MACD Histogram</Text>
+            <Box px={128}>
+              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>MACD Histogram ↓</Text>
               <LwChart
                 seriesType="line"
                 line={oscData.macd_hist}
                 persistKey="market-sentiment-macd"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                hideControls
               />
             </Box>
 
-            <Box>
-              <Text fz="xs" c="dimmed" mb={2}>ADX — trend strength (&gt;25 = trending)</Text>
+            <Box px={128}>
+              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>ADX — trend strength (&gt;25 = trending) ↓</Text>
               <LwChart
                 seriesType="line"
                 line={oscData.adx}
                 persistKey="market-sentiment-adx"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                hideControls
               />
             </Box>
           </Stack>
 
-          <Text fz="xs" fw={600} c="dimmed" tt="uppercase" mt="xs">
-            Volatility
-          </Text>
+          <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Volatility</Title>} labelPosition="center" />
 
-          <Stack gap="xs">
-            <Box>
-              <Text fz="xs" c="dimmed" mb={2}>ATR %</Text>
+          <Stack gap="lg">
+            <Box px={128}>
+              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>ATR % ↓</Text>
               <LwChart
                 seriesType="line"
                 line={oscData.atr_pct}
                 persistKey="market-sentiment-atr"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                hideControls
               />
             </Box>
 
-            <Box>
-              <Text fz="xs" c="dimmed" mb={2}>Realized Volatility (annualized %)</Text>
+            <Box px={128}>
+              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>Realized Volatility (annualized %) ↓</Text>
               <LwChart
                 seriesType="line"
                 line={oscData.rv20}
@@ -364,6 +383,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-vol"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                hideControls
               />
             </Box>
           </Stack>

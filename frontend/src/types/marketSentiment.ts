@@ -59,6 +59,7 @@ export interface SentimentOverlays {
 
 export interface SentimentOscillators {
   rsi14: IndicatorPoint[]
+  rsi14_weekly: IndicatorPoint[]
   macd_hist: IndicatorPoint[]
   adx: IndicatorPoint[]
   atr_pct: IndicatorPoint[]

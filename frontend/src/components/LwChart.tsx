@@ -33,6 +33,9 @@ interface LwChartProps {
   persistKey: string
   defaultHeight?: number
   priceFormatter?: (price: number) => string
+  showOhlcInfo?: boolean
+  hideControls?: boolean
+  hideMainTag?: boolean
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -130,10 +133,15 @@ export function LwChart({
   persistKey,
   defaultHeight = 520,
   priceFormatter,
+  showOhlcInfo = false,
+  hideControls = false,
+  hideMainTag = false,
 }: LwChartProps) {
   const { privacyMode } = usePrivacy()
   const privacyModeRef = useRef(privacyMode)
   privacyModeRef.current = privacyMode
+  const priceFormatterRef = useRef(priceFormatter)
+  priceFormatterRef.current = priceFormatter
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -208,11 +216,21 @@ export function LwChart({
     root.appendChild(mainTag.connector)
     mainTag.wrap.style.display = 'none'
     mainTag.connector.style.display = 'none'
-    seriesMetaRef.current.set(mainSeriesRef.current, { label: '', color: MAIN_COLOR, tag: mainTag })
+    if (!hideMainTag) {
+      seriesMetaRef.current.set(mainSeriesRef.current, { label: '', color: MAIN_COLOR, tag: mainTag })
+    }
 
     const dateEl = makeDateEl()
     root.appendChild(dateEl)
     dateElRef.current = dateEl
+
+    // OHLC info box (top-left, candlestick only)
+    let ohlcEl: HTMLDivElement | null = null
+    if (showOhlcInfo && seriesType === 'candlestick') {
+      ohlcEl = document.createElement('div')
+      ohlcEl.style.cssText = 'position:absolute;top:8px;left:8px;z-index:10;pointer-events:none;font-size:13px;font-family:sans-serif;line-height:1.7;background:rgba(55,65,81,0.82);color:#fff;padding:5px 10px;border-radius:4px;display:none;'
+      containerRef.current.appendChild(ohlcEl)
+    }
 
     // Crosshair subscription
     const sub = chart.subscribeCrosshairMove((param) => {
@@ -221,6 +239,7 @@ export function LwChart({
       if (!param.time || !param.point) {
         allMeta.forEach(({ tag }) => { tag.wrap.style.display = 'none'; tag.connector.style.display = 'none' })
         dateEl.style.display = 'none'
+        if (ohlcEl) ohlcEl.style.display = 'none'
         return
       }
 
@@ -263,7 +282,11 @@ export function LwChart({
         const ty = adjustedY[i]
         const shift = Math.abs(ty + TAG_H / 2 - actualY)
 
-        const formatted = privacyModeRef.current ? '...' : formatTooltipValue(value)
+        const formatted = privacyModeRef.current
+          ? '...'
+          : priceFormatterRef.current
+            ? priceFormatterRef.current(value)
+            : formatTooltipValue(value)
         tag.label.textContent = seriesLabel ? `${seriesLabel}: ${formatted}` : formatted
 
         // Estimate label width to decide flip
@@ -300,6 +323,20 @@ export function LwChart({
           tag.connector.style.display = 'block'
         } else {
           tag.connector.style.display = 'none'
+        }
+      }
+
+      // OHLC info box
+      if (ohlcEl && mainSeriesRef.current) {
+        const raw = param.seriesData.get(mainSeriesRef.current) as CandlestickData<Time> | undefined
+        if (raw && typeof raw.open === 'number') {
+          const fmt = priceFormatterRef.current ?? ((v: number) => v.toFixed(2))
+          const pct = (raw.close - raw.open) / raw.open * 100
+          const sign = pct >= 0 ? '+' : ''
+          const pctColor = pct >= 0 ? '#4ade80' : '#f87171'
+          ohlcEl.innerHTML =
+            `O&nbsp;${fmt(raw.open)}&nbsp;&nbsp;H&nbsp;${fmt(raw.high)}&nbsp;&nbsp;L&nbsp;${fmt(raw.low)}&nbsp;&nbsp;C&nbsp;${fmt(raw.close)}&nbsp;&nbsp;<span style="color:${pctColor}">${sign}${pct.toFixed(2)}%</span>`
+          ohlcEl.style.display = 'block'
         }
       }
 
@@ -425,11 +462,13 @@ export function LwChart({
 
   return (
     <Box>
-      <Group justify="flex-end" mb={4} gap="xs">
-        <Button size="xs" variant="subtle" leftSection={<IconRefresh size={12} />} onClick={() => setHeight(defaultHeight)}>
-          Reset size
-        </Button>
-      </Group>
+      {!hideControls && (
+        <Group justify="flex-end" mb={4} gap="xs">
+          <Button size="xs" variant="subtle" leftSection={<IconRefresh size={12} />} onClick={() => setHeight(defaultHeight)}>
+            Reset size
+          </Button>
+        </Group>
+      )}
       <Box
         ref={containerRef}
         style={{

@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-07-22 — Market Sentiment page polish
+
+- `app/services/market_sentiment.py` — add `rsi14_weekly` to `get_sentiment_series` oscillators
+- `frontend/src/types/marketSentiment.ts` — add `rsi14_weekly` field to `SentimentOscillators`
+- `frontend/src/components/LwChart.tsx` — add `showOhlcInfo` prop (OHLC + open→close % overlay at top-left on hover for candlestick charts); add `hideControls` prop (suppresses Reset Size button, used on mini oscillator panels so label sits flush above chart); add `hideMainTag` prop (excludes main series from crosshair tag loop, keeping tags only for compare lines); tooltip tags now use `priceFormatter` when set, removing ₹ symbol and K/L/Cr shortening on non-INR charts; tooltip tags now display series label prefix (e.g. "SMA 200: 24935")
+- `frontend/src/pages/MarketSentiment.tsx` — 1W RSI plotted alongside 1D RSI on same chart as amber compare line; section headings ("Oscillators", "Volatility") changed to `Title order={2}` centered on `Divider`, font color black; chart names increased to `fz="1.75rem"`, centered, with ↓ suffix to clarify which chart they label; `hideControls` applied to all oscillator/volatility panels; `hideMainTag` on Nifty price chart; `showOhlcInfo` on Nifty price chart; overlay toggles rewritten as custom `Group` + coloured box to fix inner-vs-outer gap ambiguity; `toggleOverlay` fixed to pass a computed value (not a functional updater) to `usePersistentState` so selections persist across refreshes; section padding `px={128}`
+
+---
+
 ## 2026-07-22 — Market Sentiment page
 
 - `app/services/market_indicators.py` (new) — pure pandas/numpy indicator functions: EMA, SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger bands, gap analysis, streaks, golden/death cross, drawdown, rolling volatility, volatility percentile, rolling return
