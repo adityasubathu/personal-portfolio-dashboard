@@ -194,6 +194,54 @@ def _momentum_divergence(df: pd.DataFrame, rsi14: pd.Series, lookback: int = 20)
     return bool((price_new_high and rsi_not_high) or (price_new_low and rsi_not_low))
 
 
+# ── Breadth composite helpers ─────────────────────────────────────────────────
+
+def _breadth_regime(returns_5d: dict) -> str:
+    def up(v): return v is not None and v > 0
+    def dn(v): return v is not None and v < 0
+    vals = list(returns_5d.values())
+    if all(up(v) for v in vals):
+        return "Broad Rally"
+    if all(dn(v) for v in vals):
+        return "Broad Selloff"
+    if up(returns_5d['nifty50']) and dn(returns_5d['mid150']) and dn(returns_5d['small250']):
+        return "Narrow Rally"
+    if dn(returns_5d['nifty50']) and up(returns_5d['mid150']) and up(returns_5d['small250']):
+        return "Narrow Selloff"
+    return "Rotation"
+
+
+def _relative_strength_order(returns_1m: dict) -> dict:
+    labels = {'nifty50': 'Nifty50', 'next50': 'Next50', 'mid150': 'Mid150', 'small250': 'Small250'}
+    sorted_keys = sorted(
+        returns_1m.keys(),
+        key=lambda k: returns_1m[k] if returns_1m[k] is not None else float('-inf'),
+        reverse=True,
+    )
+    order_str = ' > '.join(labels[k] for k in sorted_keys)
+    top2 = set(sorted_keys[:2])
+    if top2 == {'small250', 'mid150'}:
+        tone = 'risk_on'
+    elif top2 == {'nifty50', 'next50'}:
+        tone = 'risk_off'
+    else:
+        tone = 'mixed'
+    return {'order': order_str, 'tone': tone}
+
+
+def _segment_drawdown(dfs: dict) -> dict:
+    result = {}
+    for key, df in dfs.items():
+        dd = mi.drawdown_from_recent_high(df, lookback=252)
+        result[key] = _safe(dd.iloc[-1]) if not dd.empty else None
+    n50_dd = result.get('nifty50') or 0.0
+    s250_dd = result.get('small250') or 0.0
+    result['stress_flag'] = bool(
+        n50_dd != 0 and abs(s250_dd) > 5.0 and abs(s250_dd) > 2.5 * abs(n50_dd)
+    )
+    return result
+
+
 # ── API-facing functions ──────────────────────────────────────────────────────
 
 async def get_sentiment_summary(db: AsyncSession) -> dict:
@@ -251,6 +299,52 @@ async def get_sentiment_summary(db: AsyncSession) -> dict:
             "days_since_cross": cross["days_since_cross"],
             "streak": streak,
             "gap_pct": _safe(gap['gap_pct'].iloc[-1]),
+        },
+    }
+
+
+async def get_market_breadth(db: AsyncSession) -> dict:
+    n50 = await _load_index_df(db, "NIFTY 50")
+    nn50 = await _load_index_df(db, "NIFTY NEXT 50")
+    mid150 = await _load_index_df(db, "NIFTY MIDCAP 150")
+    sml250 = await _load_index_df(db, "NIFTY SMLCAP 250")
+
+    dfs = {'nifty50': n50, 'next50': nn50, 'mid150': mid150, 'small250': sml250}
+    if any(df is None or len(df) < 22 for df in dfs.values()):
+        return {"no_data": True}
+
+    returns_5d = {k: _safe(mi.rolling_return(df, 5).iloc[-1]) for k, df in dfs.items()}
+    returns_1m = {k: _safe(mi.rolling_return(df, 21).iloc[-1]) for k, df in dfs.items()}
+    drawdowns = _segment_drawdown(dfs)
+    rs = _relative_strength_order(returns_1m)
+
+    # Ratio chart — trailing 252 rows on the intersection of all four series
+    combined = pd.DataFrame({
+        'nifty50': n50['close'],
+        'mid150': mid150['close'],
+        'small250': sml250['close'],
+    }).dropna().tail(252)
+
+    mid_ratio = combined['mid150'] / combined['nifty50']
+    small_ratio = combined['small250'] / combined['nifty50']
+    mid_ratio = mid_ratio / mid_ratio.iloc[0] * 100
+    small_ratio = small_ratio / small_ratio.iloc[0] * 100
+
+    return {
+        "as_of": combined.index[-1].strftime('%Y-%m-%d'),
+        "regime": {
+            "label": _breadth_regime(returns_5d),
+            "returns_5d": returns_5d,
+        },
+        "relative_strength": {
+            "order": rs['order'],
+            "tone": rs['tone'],
+            "returns_1m": returns_1m,
+        },
+        "drawdowns": drawdowns,
+        "ratios": {
+            "mid150_nifty50": _to_points(mid_ratio),
+            "small250_nifty50": _to_points(small_ratio),
         },
     }
 

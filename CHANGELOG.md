@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-07-23 — Market Breadth (Phases 1 & 2)
+
+- `app/services/market_sentiment.py` — added `_breadth_regime`, `_relative_strength_order`, `_segment_drawdown` composite helpers and `get_market_breadth` API function
+- `app/routers/market_sentiment.py` — added `GET /api/v1/market-sentiment/breadth` endpoint
+- `frontend/src/types/marketSentiment.ts` — added `MarketBreadth`, `BreadthDrawdowns` interfaces
+- `frontend/src/api/marketSentiment.ts` — added `useMarketBreadth` hook and `sentimentKeys.breadth`
+- `frontend/src/pages/MarketSentiment.tsx` — added `MarketBreadthCard` (3-row table: regime/relative-strength/drawdown), ratio chart (Mid150 vs Nifty50 and Small250 vs Nifty50, rebased 1Y), breadth EXPLANATIONS entries; Refresh button now invalidates breadth key
+
+---
+
 ## 2026-07-23 — Market Sentiment table info buttons, MACD histogram, explanation additions
 
 - `frontend/src/components/LwChart.tsx` — added `histogram` series type (lightweight-charts `HistogramSeries`); data path reuses `line` prop

@@ -94,3 +94,37 @@ export interface SentimentSeries {
   overlays?: SentimentOverlays
   oscillators?: SentimentOscillators
 }
+
+interface BreadthReturns {
+  nifty50: number | null
+  next50: number | null
+  mid150: number | null
+  small250: number | null
+}
+
+export interface BreadthDrawdowns {
+  nifty50: number | null
+  next50: number | null
+  mid150: number | null
+  small250: number | null
+  stress_flag: boolean
+}
+
+export interface MarketBreadth {
+  no_data?: boolean
+  as_of?: string
+  regime?: {
+    label: string
+    returns_5d: BreadthReturns
+  }
+  relative_strength?: {
+    order: string
+    tone: 'risk_on' | 'risk_off' | 'mixed'
+    returns_1m: BreadthReturns
+  }
+  drawdowns?: BreadthDrawdowns
+  ratios?: {
+    mid150_nifty50: IndicatorPoint[]
+    small250_nifty50: IndicatorPoint[]
+  }
+}

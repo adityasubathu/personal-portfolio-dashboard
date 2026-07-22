@@ -102,7 +102,7 @@ portfolio-mac-arm/
 │   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   ├── settings.py          # Danger-zone bulk deletes, DB info
-│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series
+│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth
 │   │   └── demo.py              # GET /api/v1/status, POST /api/v1/demo/reset
 │   └── services/
 │       ├── csv_importer.py      # Multi-format CSV parser (Kite legacy/current, generic)
@@ -121,7 +121,7 @@ portfolio-mac-arm/
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
 │       ├── market_indicators.py  # Pure indicator functions: EMA/SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger, drawdown, vol
-│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series
+│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth
 │       └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── frontend/
 │   ├── Dockerfile               # node:20-alpine, Vite dev server
@@ -162,7 +162,7 @@ portfolio-mac-arm/
 │       │   ├── Trades.tsx       # Debounced search + paginated trade list
 │       │   ├── Import.tsx       # CSV upload, import history, rollback, split-credit
 │       │   ├── Kite.tsx         # Config form, OAuth login, token status, one-click sync
-│       │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags, candlestick + overlays, oscillator + volatility panels
+│       │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags, breadth table + ratio chart, candlestick + overlays, oscillator + volatility panels
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}

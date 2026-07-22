@@ -17,10 +17,10 @@ import {
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-react'
-import { useSentimentSummary, useSentimentSeries, sentimentKeys } from '../api/marketSentiment'
+import { useSentimentSummary, useSentimentSeries, useMarketBreadth, sentimentKeys } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
-import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth } from '../types/marketSentiment'
 import type { NavPoint } from '../types/charts'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,6 +86,14 @@ const EXPLANATIONS = {
   vixMid: `India VIX vs its own 20-day simple moving average.\n\nVIX persistently above its MA = a stretch of elevated, sustained nervousness — often coincides with choppy or range-bound Nifty price action.\nVIX below its MA and drifting down = a sustained calm/complacency regime.\n\nThe duration above or below matters more than any single day's level. Pairs naturally with ADX: both classify trending vs. choppy regime, but VIX does it from the implied side.`,
 
   vixLong: `India VIX percentile rank vs its full 6-year history.\n\nAbsolute VIX levels drift over market cycles, so percentile rank is far more meaningful than a raw number.\n\nLow percentile (<20th) = historically complacent — can precede surprise volatility events.\nHigh percentile (>80th) = historically fearful — often coincides with capitulation-type bottoms or major uncertainty.\nMid-range = normal regime, nothing notable.\n\nPairs directly with the realized-vol percentile in the adjacent column: together they give you a forward-looking (implied) vs. backward-looking (realized) comparison.`,
+
+  breadthRegime: `Breadth Regime classifies whether participation in the current market move is broad or narrow, based on the trailing 5-day return of all four index segments.\n\n• Broad Rally — all four (Nifty50, Next50, Mid150, Small250) are up. Healthy, broad-based buying.\n• Broad Selloff — all four are down. Broad-based risk-off.\n• Narrow Rally — Nifty50 up, but Mid150 and Small250 down. Large-cap-only leadership; participation is thinning — a common late-cycle warning.\n• Narrow Selloff — Nifty50 down, but mid/small up. Unusual; often signals rotation out of large-caps into riskier names.\n• Rotation — mixed signals; money is moving between segments rather than making a clear directional move.`,
+
+  relativeStrength: `Relative Strength ranks the four index segments by their trailing 1-month (21-day) return, from highest to lowest.\n\nThe ranking tells you which part of the market is leading:\n\n• Risk-On — Small250 and Mid150 hold the top 2 positions. Investors are reaching for risk in smaller companies — a sign of broader market confidence and healthy breadth.\n• Risk-Off — Nifty50 and Next50 hold the top 2. Capital rotating into large-cap safety; risk appetite declining.\n• Mixed — any other combination; no clear size-factor signal.`,
+
+  segmentDrawdown: `How far each segment has fallen from its own 1-year rolling high (252 trading days).\n\n0% = the segment is currently at a 52-week high. Larger negative values = deeper correction from recent peak.\n\nThe orange "Smallcap drawdown disproportionate" flag appears when the Small250 drawdown is more than 2.5× the Nifty50 drawdown and greater than 5% absolute — a sign that risk appetite has specifically dried up at the smaller end of the market, even if large-caps are holding up.`,
+
+  breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to the Nifty 50 over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while Nifty50 is rising, that is the chart version of a Narrow Rally: the headline index propped up by a handful of large-caps while the broader market weakens.`,
 }
 
 function ChartInfo({ text }: { text: string }) {
@@ -287,6 +295,96 @@ function FlagsBanner({ flags }: { flags: SentimentFlags }) {
   )
 }
 
+// ── Breadth table ─────────────────────────────────────────────────────────────
+
+function regimeColor(label: string): string {
+  if (label === 'Broad Rally') return 'green'
+  if (label === 'Broad Selloff' || label === 'Narrow Selloff') return 'red'
+  return 'yellow'
+}
+
+function MarketBreadthCard({ data }: { data: MarketBreadth }) {
+  if (!data.regime || !data.relative_strength || !data.drawdowns) return null
+
+  const dd = data.drawdowns
+  const ddStr = [
+    `Nifty50: ${dd.nifty50 != null ? dd.nifty50.toFixed(1) : '—'}%`,
+    `Next50: ${dd.next50 != null ? dd.next50.toFixed(1) : '—'}%`,
+    `Mid150: ${dd.mid150 != null ? dd.mid150.toFixed(1) : '—'}%`,
+    `Small250: ${dd.small250 != null ? dd.small250.toFixed(1) : '—'}%`,
+  ].join(' | ')
+
+  const tone = data.relative_strength.tone
+  const toneLabel = tone === 'risk_on' ? 'Risk-On' : tone === 'risk_off' ? 'Risk-Off' : 'Mixed'
+  const toneColor = tone === 'risk_on' ? 'green' : 'yellow'
+
+  return (
+    <Box px={128}>
+      <Table withTableBorder withColumnBorders fz="md">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th w={120}>Horizon</Table.Th>
+            <Table.Th w={200}>Signal</Table.Th>
+            <Table.Th>Reading</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          <Table.Tr>
+            <Table.Td fw={500}>Short-term</Table.Td>
+            <Table.Td c="dimmed" fz="sm">
+              <Group gap={4} align="center" wrap="nowrap">
+                Breadth Regime
+                <ChartInfo text={EXPLANATIONS.breadthRegime} />
+              </Group>
+            </Table.Td>
+            <Table.Td>
+              <Badge color={regimeColor(data.regime.label)} variant="light" size="sm" fz="0.825rem">
+                {data.regime.label}
+              </Badge>
+            </Table.Td>
+          </Table.Tr>
+          <Table.Tr>
+            <Table.Td fw={500}>Mid-term</Table.Td>
+            <Table.Td c="dimmed" fz="sm">
+              <Group gap={4} align="center" wrap="nowrap">
+                Relative Strength
+                <ChartInfo text={EXPLANATIONS.relativeStrength} />
+              </Group>
+            </Table.Td>
+            <Table.Td>
+              <Group gap={8} align="center" wrap="nowrap">
+                <Text fz="sm" c="dimmed">{data.relative_strength.order}</Text>
+                <Badge color={toneColor} variant="light" size="xs" fz="0.825rem">
+                  {toneLabel}
+                </Badge>
+              </Group>
+            </Table.Td>
+          </Table.Tr>
+          <Table.Tr>
+            <Table.Td fw={500}>Long-term</Table.Td>
+            <Table.Td c="dimmed" fz="sm">
+              <Group gap={4} align="center" wrap="nowrap">
+                Segment Drawdown
+                <ChartInfo text={EXPLANATIONS.segmentDrawdown} />
+              </Group>
+            </Table.Td>
+            <Table.Td>
+              <Group gap={8} align="center" wrap="nowrap">
+                <Text fz="sm" c="dimmed">{ddStr}</Text>
+                {dd.stress_flag && (
+                  <Badge color="orange" variant="light" size="xs" fz="0.825rem">
+                    Smallcap drawdown disproportionate
+                  </Badge>
+                )}
+              </Group>
+            </Table.Td>
+          </Table.Tr>
+        </Table.Tbody>
+      </Table>
+    </Box>
+  )
+}
+
 // ── Overlay toggle config ─────────────────────────────────────────────────────
 
 const OVERLAY_DEFS = [
@@ -307,6 +405,7 @@ type OverlayKey = typeof OVERLAY_DEFS[number]['key']
 export function MarketSentiment() {
   const qc = useQueryClient()
   const { data: summary, isLoading: summaryLoading } = useSentimentSummary()
+  const { data: breadthData } = useMarketBreadth()
 
   const [rangeLabel, setRangeLabel] = usePersistentState<string>('market-sentiment-range', '1Y')
   const [enabledOverlays, setEnabledOverlays] = usePersistentState<OverlayKey[]>(
@@ -380,6 +479,7 @@ export function MarketSentiment() {
           onClick={() => {
             qc.invalidateQueries({ queryKey: sentimentKeys.summary })
             qc.invalidateQueries({ queryKey: ['market-sentiment', 'series'] })
+            qc.invalidateQueries({ queryKey: sentimentKeys.breadth })
           }}
         >
           Refresh
@@ -388,6 +488,28 @@ export function MarketSentiment() {
 
       {summary?.horizons && <SentimentSummaryCard data={summary} />}
       {summary?.flags && <Box px={128}><FlagsBanner flags={summary.flags} /></Box>}
+
+      {/* Market breadth table + ratio chart */}
+      {breadthData && !breadthData.no_data && (
+        <>
+          <MarketBreadthCard data={breadthData} />
+          <Box px={128}>
+            <Group justify="center" align="center" gap={6} mb={4}>
+              <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap (rebased, 1Y) ↓</Text>
+              <ChartInfo text={EXPLANATIONS.breadthRatioChart} />
+            </Group>
+            <LwChart
+              seriesType="line"
+              line={toNavPoints(breadthData.ratios!.mid150_nifty50)}
+              compareLines={[{ label: 'Small250 / Nifty50', color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250_nifty50) }]}
+              persistKey="market-sentiment-breadth-ratio"
+              defaultHeight={180}
+              priceFormatter={(p) => p.toFixed(1)}
+              hideControls
+            />
+          </Box>
+        </>
+      )}
 
       {/* Range selector */}
       <Group justify="space-between" align="center" wrap="nowrap">
