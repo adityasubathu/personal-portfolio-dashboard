@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  ActionIcon,
   Alert,
   Badge,
   Box,
@@ -7,6 +8,7 @@ import {
   Divider,
   Group,
   Loader,
+  Popover,
   SegmentedControl,
   Stack,
   Table,
@@ -14,7 +16,7 @@ import {
   Title,
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconAlertCircle, IconRefresh } from '@tabler/icons-react'
+import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-react'
 import { useSentimentSummary, useSentimentSeries, sentimentKeys } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
@@ -53,6 +55,54 @@ function trendColor(trend: string): string {
 
 const numFormatter = (p: number) => p.toFixed(0)
 const oscFormatter = (p: number) => p.toFixed(2)
+
+// ── Chart explanations ────────────────────────────────────────────────────────
+
+const EXPLANATIONS = {
+  price: `Each candle shows the Open, High, Low, and Close price for one trading day. Green = closed higher than open; red = lower. Hover to see the OHLC values in the top-left corner.\n\nOverlays:\n• EMA 9 / EMA 20 — fast-moving averages; when the 9 crosses below the 20 it's an early "momentum flipping" signal.\n• SMA 50 / 100 / 200 — slower averages marking medium and long-term trend direction. The 200-DMA is the classic bull/bear regime line.\n• Bollinger Bands — drawn 2 standard deviations above/below a 20-day average. Narrow bands = low volatility ("squeeze"), often preceding a big move.`,
+
+  rsi: `RSI (Relative Strength Index) is a 0–100 oscillator measuring how strong recent up-moves are vs. down-moves over 14 periods.\n\nAbove 70 = overbought — rallied hard, due for a pause or pullback.\nBelow 30 = oversold.\nAround 50 = neutral / balanced.\n\n1D RSI uses daily closes and reacts quickly. 1W RSI uses weekly closes — much smoother, it filters out daily noise to show medium-term momentum. Divergence between the two (e.g. 1D overbought but 1W neutral) often means the move is a short-term spike rather than a sustained trend.`,
+
+  macd: `The MACD histogram shows the gap between a fast (12-day) and slow (26-day) exponential moving average.\n\nBars growing above zero = upward momentum accelerating.\nBars shrinking toward zero = momentum fading, even if price is still rising — it often flips direction before price does.\nCrossing zero is a trend-change signal.\n\nWatch for the histogram reversing direction while price continues — that divergence is the main signal to pay attention to.`,
+
+  adx: `ADX (Average Directional Index) measures how strong a trend is, regardless of direction. It runs 0–100.\n\nBelow ~20 = weak or no trend — the market is choppy and range-bound. Moving average signals will whipsaw.\nAbove ~25 = a real trend is in place, making trend-following reads more reliable.\n\nADX doesn't tell you which direction the trend is, only how strong it is. Pair it with RSI or price-vs-MA to determine direction.`,
+
+  atr: `ATR (Average True Range) measures the average daily trading range — High minus Low, adjusted for overnight gaps — over 14 days. Expressing it as % of price makes it comparable across different price levels and time periods.\n\nRising ATR% = market getting choppier, bigger daily swings.\nFalling ATR% = market calming down, tighter ranges.\n\nThere's no inherently "good" or "bad" level — it's a volatility thermometer. High ATR% means stop-loss levels need to be wider to avoid being shaken out by noise.`,
+
+  vol: `Realized volatility is the actual standard deviation of daily returns over the past 20 or 60 trading days, annualized to a yearly percentage.\n\nRV 20 (amber line) reacts faster to regime changes — it'll spike as soon as volatility picks up.\nRV 60 (purple line) is smoother — it shows the sustained volatility environment rather than short bursts.\n\nComparing the two tells you if a volatility spike is fading (RV 20 drops back toward RV 60) or becoming a new regime (RV 60 starts rising to meet RV 20).`,
+}
+
+function ChartInfo({ text }: { text: string }) {
+  const [opened, setOpened] = useState(false)
+  return (
+    <Popover
+      opened={opened}
+      onChange={setOpened}
+      width={320}
+      position="bottom"
+      withArrow
+      shadow="md"
+      clickOutsideEvents={['mousedown', 'touchstart']}
+    >
+      <Popover.Target>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size="sm"
+          onClick={() => setOpened((o) => !o)}
+          style={{ flexShrink: 0 }}
+        >
+          <IconInfoCircle size={16} />
+        </ActionIcon>
+      </Popover.Target>
+      <Popover.Dropdown maw={320}>
+        <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+          {text}
+        </Text>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
 
 // ── Summary table ─────────────────────────────────────────────────────────────
 
@@ -303,16 +353,21 @@ export function MarketSentiment() {
       {seriesLoading ? (
         <Loader size="sm" />
       ) : filteredCandles.length > 0 ? (
-        <LwChart
-          seriesType="candlestick"
-          candles={filteredCandles}
-          compareLines={compareLines}
-          persistKey="market-sentiment-price"
-          defaultHeight={440}
-          priceFormatter={numFormatter}
-          showOhlcInfo
-          hideMainTag
-        />
+        <>
+          <Group justify="flex-end" mb={2}>
+            <ChartInfo text={EXPLANATIONS.price} />
+          </Group>
+          <LwChart
+            seriesType="candlestick"
+            candles={filteredCandles}
+            compareLines={compareLines}
+            persistKey="market-sentiment-price"
+            defaultHeight={440}
+            priceFormatter={numFormatter}
+            showOhlcInfo
+            hideMainTag
+          />
+        </>
       ) : null}
 
       {/* Oscillator panels */}
@@ -322,7 +377,10 @@ export function MarketSentiment() {
 
           <Stack gap="lg">
             <Box px={128}>
-              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>RSI — overbought &gt;70 / oversold &lt;30 ↓</Text>
+              <Group justify="center" align="center" gap={6} mb={4}>
+                <Text fz="1.75rem" fw={500} c="dimmed">RSI — overbought &gt;70 / oversold &lt;30 ↓</Text>
+                <ChartInfo text={EXPLANATIONS.rsi} />
+              </Group>
               <LwChart
                 seriesType="line"
                 line={oscData.rsi14}
@@ -335,7 +393,10 @@ export function MarketSentiment() {
             </Box>
 
             <Box px={128}>
-              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>MACD Histogram ↓</Text>
+              <Group justify="center" align="center" gap={6} mb={4}>
+                <Text fz="1.75rem" fw={500} c="dimmed">MACD Histogram ↓</Text>
+                <ChartInfo text={EXPLANATIONS.macd} />
+              </Group>
               <LwChart
                 seriesType="line"
                 line={oscData.macd_hist}
@@ -347,7 +408,10 @@ export function MarketSentiment() {
             </Box>
 
             <Box px={128}>
-              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>ADX — trend strength (&gt;25 = trending) ↓</Text>
+              <Group justify="center" align="center" gap={6} mb={4}>
+                <Text fz="1.75rem" fw={500} c="dimmed">ADX — trend strength (&gt;25 = trending) ↓</Text>
+                <ChartInfo text={EXPLANATIONS.adx} />
+              </Group>
               <LwChart
                 seriesType="line"
                 line={oscData.adx}
@@ -363,7 +427,10 @@ export function MarketSentiment() {
 
           <Stack gap="lg">
             <Box px={128}>
-              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>ATR % ↓</Text>
+              <Group justify="center" align="center" gap={6} mb={4}>
+                <Text fz="1.75rem" fw={500} c="dimmed">ATR % ↓</Text>
+                <ChartInfo text={EXPLANATIONS.atr} />
+              </Group>
               <LwChart
                 seriesType="line"
                 line={oscData.atr_pct}
@@ -375,7 +442,10 @@ export function MarketSentiment() {
             </Box>
 
             <Box px={128}>
-              <Text fz="1.75rem" fw={500} ta="center" c="dimmed" mb={4}>Realized Volatility (annualized %) ↓</Text>
+              <Group justify="center" align="center" gap={6} mb={4}>
+                <Text fz="1.75rem" fw={500} c="dimmed">Realized Volatility (annualized %) ↓</Text>
+                <ChartInfo text={EXPLANATIONS.vol} />
+              </Group>
               <LwChart
                 seriesType="line"
                 line={oscData.rv20}

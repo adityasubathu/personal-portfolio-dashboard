@@ -2,6 +2,12 @@
 
 ---
 
+## 2026-07-23 — Market Sentiment info popovers
+
+- `frontend/src/pages/MarketSentiment.tsx` — added `ChartInfo` component (Mantine `Popover` + `ActionIcon` with `IconInfoCircle`) and `EXPLANATIONS` map with plain-language descriptions for all six charts (price/overlays, RSI, MACD, ADX, ATR%, Realized Volatility); info button appears to the right of each chart name and to the top-right of the candlestick chart
+
+---
+
 ## 2026-07-22 — Include PPF in debt bucket for allocation targets
 
 - `app/services/mf_breakdown.py` — `get_asset_class_comparison`: removed `- ppf` from debt calculation so PPF (already present in `category_totals["Debt"]` via `_build_category_totals_full`) is counted in investable debt; removed PPF from `grand_total` add-back and `excluded` dict
