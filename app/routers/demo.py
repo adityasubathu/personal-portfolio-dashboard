@@ -1,9 +1,11 @@
+import app.models  # noqa: F401 — registers all models in Base.metadata
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
+from app.database import Base, get_db
 
 router = APIRouter(prefix="/api/v1", tags=["demo"])
 
@@ -18,18 +20,12 @@ async def reset_demo(db: AsyncSession = Depends(get_db)):
     if not settings.demo_mode:
         return {"ok": False, "message": "Not in demo mode"}
 
-    tables = [
-        "policy_trigger_events", "policy_trigger_state",
-        "nav_tracked_instruments", "csv_import_log",
-        "manual_assets", "asset_class_targets", "allocation_targets",
-        "mf_scheme_breakdown", "amfi_market_cap", "equity_category_override",
-        "nav_history", "price_history",
-        "holdings", "trades", "instruments",
-    ]
-    for table in tables:
-        await db.execute(text(f"DELETE FROM {table}"))
+    for table in reversed(Base.metadata.sorted_tables):
+        if table.name == "app_config":
+            continue
+        await db.execute(text(f"DELETE FROM {table.name}"))
 
-    # Remove demo_seeded flag but preserve any Kite config
+    # Preserve Kite credentials but clear any other config (e.g. demo_seeded flag)
     await db.execute(text("DELETE FROM app_config WHERE key != 'kite_config'"))
     await db.commit()
 

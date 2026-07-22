@@ -30,7 +30,7 @@ from app.models.kite import KiteConfig
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
 from app.services import kite_client
-from app.services.kite_sync import _assert_token_valid, _get_config
+from app.services.kite_sync import assert_token_valid, get_config
 
 EQUITY_TYPES = ("STOCK", "BOND", "ETF", "INDEX")
 KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
@@ -328,8 +328,8 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
     If `on_progress` is provided, it's called with a string message after each
     instrument completes — used for SSE streaming."""
     _cancel_event.clear()
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     if on_progress:
         await on_progress("Resolving instrument tokens…")
@@ -423,8 +423,8 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
 async def sync_index_history(db: AsyncSession, on_progress=None) -> dict:
     """Sync daily OHLC history for all INDEX instruments (Nifty 50, etc.).
     Separate from sync_price_history which only covers traded instruments."""
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     token_result = await resolve_index_tokens(db)
     if on_progress and token_result["resolved"]:
@@ -555,8 +555,8 @@ async def fetch_ohlc_for_ticker(
     instrument = candidates[0]
     await _progress(f"Instrument: {instrument.tradingsymbol} (id={instrument.id})")
 
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     # Resolve + cache the instrument_token.
     if instrument.kite_instrument_token and skip_token_check:

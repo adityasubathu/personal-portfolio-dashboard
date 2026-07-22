@@ -1,14 +1,13 @@
 import asyncio
-import json as jsonlib
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.sse import sse_stream
 from app.models.allocation_target import AllocationTarget
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
 from app.services.mf_breakdown import (
@@ -41,43 +40,15 @@ _ingest_lock = asyncio.Lock()
 
 @router.get("/ingest/stream")
 async def ingest_stream(db: AsyncSession = Depends(get_db)):
-    if _ingest_lock.locked():
-        async def _busy():
-            yield {"event": "done", "data": jsonlib.dumps({"ok": False, "error": "An ingest is already running."})}
-        return EventSourceResponse(_busy())
+    async def _runner(on_progress):
+        amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
+        if "error" not in amfi:
+            ingest = await ingest_scheme_csvs(db, on_progress=on_progress)
+        else:
+            ingest = {"error": "Skipped — AMFI classification not loaded"}
+        return {"amfi": amfi, "ingest": ingest}
 
-    async def _generate():
-        async with _ingest_lock:
-            queue: asyncio.Queue[str] = asyncio.Queue()
-
-            async def _on_progress(msg: str):
-                await queue.put(msg)
-
-            async def _run():
-                try:
-                    amfi = await sync_amfi_market_cap(db, on_progress=_on_progress)
-                    if "error" not in amfi:
-                        ingest = await ingest_scheme_csvs(db, on_progress=_on_progress)
-                    else:
-                        ingest = {"error": "Skipped — AMFI classification not loaded"}
-                    await queue.put(None)
-                    await queue.put(jsonlib.dumps({"ok": True, "amfi": amfi, "ingest": ingest}))
-                except Exception as e:
-                    await queue.put(None)
-                    await queue.put(jsonlib.dumps({"ok": False, "error": str(e)}))
-
-            task = asyncio.create_task(_run())
-            while True:
-                msg = await queue.get()
-                if msg is None:
-                    break
-                yield {"event": "log", "data": msg}
-
-            final = await queue.get()
-            yield {"event": "done", "data": final}
-            await task
-
-    return EventSourceResponse(_generate())
+    return sse_stream(_runner, lock=_ingest_lock, busy_msg="An ingest is already running.")
 
 
 VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign"}

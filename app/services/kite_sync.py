@@ -26,8 +26,8 @@ from app.time_util import now_ist
 
 async def update_ltp(db: AsyncSession) -> dict:
     """Fetch live LTPs from Kite and update Holding.last_price / last_price_at."""
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     result = await db.execute(
         select(Holding, Instrument).join(Instrument, Holding.instrument_id == Instrument.id)
@@ -77,8 +77,8 @@ async def update_ltp(db: AsyncSession) -> dict:
 
 
 async def sync(db: AsyncSession) -> dict:
-    config = await _get_config(db)
-    _assert_token_valid(config)
+    config = await get_config(db)
+    assert_token_valid(config)
 
     holdings_data: list[dict] = []
     positions_data: list[dict] = []
@@ -241,7 +241,7 @@ def _kite_instrument_type(h: dict) -> str:
     return "STOCK"
 
 
-async def _get_config(db: AsyncSession) -> KiteConfig:
+async def get_config(db: AsyncSession) -> KiteConfig:
     result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
     config = result.scalar_one_or_none()
     if not config:
@@ -249,7 +249,7 @@ async def _get_config(db: AsyncSession) -> KiteConfig:
     return config
 
 
-def _assert_token_valid(config: KiteConfig) -> None:
+def assert_token_valid(config: KiteConfig) -> None:
     if not config.access_token:
         raise ValueError("No access token. Please log in via Kite.")
     if config.access_token_expiry:

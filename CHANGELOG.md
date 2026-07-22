@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-07-23 — Code review: readability & maintainability
+
+- `app/routers/portfolio.py` — XIRR recompute now runs unconditionally after each sync/fetch-OHLC flow, not only when the LTP update fails
+- `app/sse.py` (new) — extracted shared SSE queue/runner/generator scaffold into `sse_stream()` helper; removes ~100 lines of boilerplate
+- `app/routers/portfolio.py` — `sync_price_history_stream` and `fetch_ohlc_stream` now delegate to `sse_stream()`
+- `app/routers/mf_breakdown.py` — `ingest_stream` now delegates to `sse_stream()`; removed `json as jsonlib` and `EventSourceResponse` imports
+- `app/services/holdings_engine.py` — moved all `direct_holdings` business logic out of the router; added `get_direct_holdings()`, `SORT_FIELDS`, `SECTION_ORDER`, `_sort_key`, `_isodate`, `_range`
+- `app/routers/portfolio.py` — `direct_holdings` handler is now a one-line delegate to `get_direct_holdings()`
+- `app/services/mf_breakdown.py` (1674 lines) — split into `mf_ingest.py` (AMFI sync + scheme CSV ingestion), `allocation.py` (allocation targets/comparison), `composition.py` (category/sector/scheme composition + direct-trade breakdown); `mf_breakdown.py` is now a re-export shim
+- `app/main.py` — renamed `settings` router import to `settings_router` to fix name shadowing with config `settings`
+- `app/services/holdings_engine.py` — moved `datetime` import to module level (was inline inside `_isodate`)
+- `app/routers/demo.py` — demo reset now derives table list from `Base.metadata.sorted_tables` instead of a hardcoded list
+- `app/services/kite_sync.py` — renamed `_get_config` → `get_config` and `_assert_token_valid` → `assert_token_valid` (cross-module API, not private)
+- `app/services/kite_historical.py` — updated to use renamed public functions from `kite_sync`
+- `frontend/src/hooks/useSse.ts` — added `useEffect` cleanup to close the `EventSource` on component unmount
+
+---
+
 ## 2026-07-23 — Fix session
 
 - `LwChart.tsx` — added `label?: string` prop; main series price tag now shows the label when provided (previously always blank)

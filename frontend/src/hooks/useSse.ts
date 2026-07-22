@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 export type SseStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -66,6 +66,8 @@ export function useSse<T = unknown>(url: string): SseState<T> {
       esRef.current = null
     }
   }, [url])
+
+  useEffect(() => () => { esRef.current?.close() }, [])
 
   return { logs, status, result, error, start, reset }
 }
