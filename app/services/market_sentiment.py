@@ -12,6 +12,33 @@ from app.models.price_history import PriceHistory
 from app.services import market_indicators as mi
 
 
+async def _load_index_df(db: AsyncSession, tradingsymbol: str) -> pd.DataFrame | None:
+    result = await db.execute(
+        select(Instrument).where(
+            Instrument.tradingsymbol == tradingsymbol,
+            Instrument.instrument_type == "INDEX",
+        )
+    )
+    instrument = result.scalar_one_or_none()
+    if instrument is None:
+        return None
+
+    rows = (await db.execute(
+        select(PriceHistory)
+        .where(PriceHistory.instrument_id == instrument.id)
+        .order_by(PriceHistory.price_date)
+    )).scalars().all()
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(
+        [{'close': float(r.close)} for r in rows],
+        index=pd.to_datetime([r.price_date for r in rows]),
+    )
+    return df.sort_index()
+
+
 async def _load_nifty_df(db: AsyncSession) -> pd.DataFrame | None:
     result = await db.execute(
         select(Instrument).where(
@@ -42,6 +69,32 @@ async def _load_nifty_df(db: AsyncSession) -> pd.DataFrame | None:
         index=pd.to_datetime([r.price_date for r in rows]),
     )
     return df.sort_index()
+
+
+def _vix_short(vix: pd.DataFrame) -> dict:
+    """Short-term: VIX day-over-day % change and 5-day % change."""
+    close = vix['close']
+    day_chg = _safe((close.iloc[-1] / close.iloc[-2] - 1) * 100) if len(close) >= 2 else None
+    chg_5d = _safe((close.iloc[-1] / close.iloc[-5] - 1) * 100) if len(close) >= 5 else None
+    return {"vix_day_chg": day_chg, "vix_5d_chg": chg_5d, "vix_current": _safe(close.iloc[-1])}
+
+
+def _vix_mid(vix: pd.DataFrame) -> dict:
+    """Mid-term: VIX vs its 20-day SMA."""
+    close = vix['close']
+    sma20 = float(close.rolling(20).mean().iloc[-1])
+    current = float(close.iloc[-1])
+    vs_pct = _safe((current / sma20 - 1) * 100) if sma20 and not np.isnan(sma20) else None
+    above = bool(current > sma20) if not np.isnan(sma20) else None
+    return {"vix_current": _safe(current), "vix_sma20": _safe(sma20), "vix_vs_sma20_pct": vs_pct, "vix_above_sma20": above}
+
+
+def _vix_long(vix: pd.DataFrame) -> dict:
+    """Long-term: VIX percentile rank vs full history."""
+    close = vix['close']
+    current = float(close.iloc[-1])
+    pct_rank = round(float((close < current).sum() / len(close) * 100), 1)
+    return {"vix_current": _safe(current), "vix_pct_rank": pct_rank}
 
 
 def _safe(val) -> float | None:
@@ -154,12 +207,17 @@ async def get_sentiment_summary(db: AsyncSession) -> dict:
     cross = mi.golden_death_cross(df)
     dd = mi.max_drawdown_and_underwater(df)
     vol_pct = mi.volatility_percentile(df)
-    streak = int(mi.streaks(df).iloc[-1])  # ensure Python int, not numpy int
+    streak = int(mi.streaks(df).iloc[-1])
     gap = mi.gap_analysis(df)
     s200 = mi.sma(df, 200)
     s200_slope = mi.sma_slope(s200).iloc[-1]
     wrsi = mi.weekly_rsi(df)
     vol_reg = _vol_regime(df)
+
+    vix_df = await _load_index_df(db, "INDIA VIX")
+    vix_short = _vix_short(vix_df) if vix_df is not None and len(vix_df) >= 5 else {}
+    vix_mid = _vix_mid(vix_df) if vix_df is not None and len(vix_df) >= 20 else {}
+    vix_long = _vix_long(vix_df) if vix_df is not None and len(vix_df) >= 2 else {}
 
     return {
         "as_of": df.index[-1].strftime('%Y-%m-%d'),
@@ -170,18 +228,21 @@ async def get_sentiment_summary(db: AsyncSession) -> dict:
                 "rsi14": _safe(rsi14.iloc[-1]),
                 "macd_hist": _safe(macd_df['histogram'].iloc[-1]),
                 "vol_regime": vol_reg,
+                "vix": vix_short,
             },
             "mid": {
                 "trend": _mid_trend(df, adx_df),
                 "adx": _safe(adx_df['adx'].iloc[-1]),
                 "weekly_rsi": _safe(wrsi.iloc[-1]),
                 "vol_regime": vol_reg,
+                "vix": vix_mid,
             },
             "long": {
                 "trend": _long_trend(df),
                 "sma200_slope": s200_slope,
                 "drawdown_from_ath_pct": dd["current_drawdown"],
                 "vol_percentile": vol_pct,
+                "vix": vix_long,
             },
         },
         "flags": {

@@ -5,11 +5,30 @@ export interface IndicatorPoint {
   value: number | null
 }
 
+export interface VixShort {
+  vix_current: number | null
+  vix_day_chg: number | null
+  vix_5d_chg: number | null
+}
+
+export interface VixMid {
+  vix_current: number | null
+  vix_sma20: number | null
+  vix_vs_sma20_pct: number | null
+  vix_above_sma20: boolean | null
+}
+
+export interface VixLong {
+  vix_current: number | null
+  vix_pct_rank: number | null
+}
+
 export interface SentimentHorizonShort {
   trend: string
   rsi14: number | null
   macd_hist: number | null
   vol_regime: string
+  vix: VixShort
 }
 
 export interface SentimentHorizonMid {
@@ -17,6 +36,7 @@ export interface SentimentHorizonMid {
   adx: number | null
   weekly_rsi: number | null
   vol_regime: string
+  vix: VixMid
 }
 
 export interface SentimentHorizonLong {
@@ -24,6 +44,7 @@ export interface SentimentHorizonLong {
   sma200_slope: string | null
   drawdown_from_ath_pct: number | null
   vol_percentile: number | null
+  vix: VixLong
 }
 
 export interface SentimentFlags {

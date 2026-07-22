@@ -20,7 +20,7 @@ import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-reac
 import { useSentimentSummary, useSentimentSeries, sentimentKeys } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
-import type { SentimentSummary, SentimentFlags, IndicatorPoint } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong } from '../types/marketSentiment'
 import type { NavPoint } from '../types/charts'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,6 +80,12 @@ const EXPLANATIONS = {
   tableVol: `Volatility regime classifies the current realized volatility environment:\n\n• Low — vol is below its historical median; market is calm.\n• Normal — vol is in its typical range.\n• High — vol is elevated; expect wider daily swings and less reliable trend signals.\n\nBased on rolling 60-day realized volatility percentile vs. the full 6-year window.`,
 
   gap: `Gap analysis measures the % difference between today's open and yesterday's close.\n\nA big gap = strong overnight sentiment shift driven by news or global cues. The gap badge appears when today's gap exceeds 0.5% in either direction.\n\n"Fill rate" (not shown here) = how often the gap gets closed same-day — a texture read on whether gaps tend to be sustained or quickly faded by the market.`,
+
+  vixShort: `India VIX day-over-day and 5-day % change.\n\nVIX measures implied volatility — what options traders are pricing in as forward risk. It often moves *before* Nifty price reacts, making it the earliest warning signal on the dashboard.\n\nA sharp single-day spike (+10–15%) = sudden fear entering the market. A fast drop after a spike = fear unwinding. Small daily moves = business as usual.`,
+
+  vixMid: `India VIX vs its own 20-day simple moving average.\n\nVIX persistently above its MA = a stretch of elevated, sustained nervousness — often coincides with choppy or range-bound Nifty price action.\nVIX below its MA and drifting down = a sustained calm/complacency regime.\n\nThe duration above or below matters more than any single day's level. Pairs naturally with ADX: both classify trending vs. choppy regime, but VIX does it from the implied side.`,
+
+  vixLong: `India VIX percentile rank vs its full 6-year history.\n\nAbsolute VIX levels drift over market cycles, so percentile rank is far more meaningful than a raw number.\n\nLow percentile (<20th) = historically complacent — can precede surprise volatility events.\nHigh percentile (>80th) = historically fearful — often coincides with capitulation-type bottoms or major uncertainty.\nMid-range = normal regime, nothing notable.\n\nPairs directly with the realized-vol percentile in the adjacent column: together they give you a forward-looking (implied) vs. backward-looking (realized) comparison.`,
 }
 
 function ChartInfo({ text }: { text: string }) {
@@ -114,6 +120,37 @@ function ChartInfo({ text }: { text: string }) {
   )
 }
 
+// ── VIX cell formatters ───────────────────────────────────────────────────────
+
+function fmtChg(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+}
+
+function vixShortLabel(v: VixShort | undefined): string {
+  if (!v || v.vix_current == null) return '—'
+  const cur = v.vix_current.toFixed(1)
+  const d = fmtChg(v.vix_day_chg)
+  const w = fmtChg(v.vix_5d_chg)
+  return `VIX ${cur} · 1d: ${d} · 5d: ${w}`
+}
+
+function vixMidLabel(v: VixMid | undefined): string {
+  if (!v || v.vix_current == null) return '—'
+  const cur = v.vix_current.toFixed(1)
+  if (v.vix_vs_sma20_pct == null) return `VIX ${cur}`
+  const dir = v.vix_above_sma20 ? 'above' : 'below'
+  const gap = Math.abs(v.vix_vs_sma20_pct).toFixed(1)
+  return `VIX ${cur} · ${gap}% ${dir} 20d MA`
+}
+
+function vixLongLabel(v: VixLong | undefined): string {
+  if (!v || v.vix_current == null) return '—'
+  const cur = v.vix_current.toFixed(1)
+  const pct = v.vix_pct_rank != null ? `${v.vix_pct_rank}th %ile` : '—'
+  return `VIX ${cur} · ${pct}`
+}
+
 // ── Summary table ─────────────────────────────────────────────────────────────
 
 function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
@@ -128,6 +165,8 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail2: `MACD hist: ${horizons.short.macd_hist ?? '—'}`,
       vol: horizons.short.vol_regime,
       momentumInfo: EXPLANATIONS.tableShort,
+      vixLabel: vixShortLabel(horizons.short.vix),
+      vixInfo: EXPLANATIONS.vixShort,
     },
     {
       horizon: 'Mid-term',
@@ -136,6 +175,8 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail2: `Weekly RSI: ${horizons.mid.weekly_rsi ?? '—'}`,
       vol: horizons.mid.vol_regime,
       momentumInfo: EXPLANATIONS.tableMid,
+      vixLabel: vixMidLabel(horizons.mid.vix),
+      vixInfo: EXPLANATIONS.vixMid,
     },
     {
       horizon: 'Long-term',
@@ -144,6 +185,8 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
       detail2: `Drawdown from ATH: ${horizons.long.drawdown_from_ath_pct != null ? `${horizons.long.drawdown_from_ath_pct}%` : '—'}`,
       vol: `Vol pct: ${horizons.long.vol_percentile != null ? `${horizons.long.vol_percentile}%ile` : '—'}`,
       momentumInfo: EXPLANATIONS.tableLong,
+      vixLabel: vixLongLabel(horizons.long.vix),
+      vixInfo: EXPLANATIONS.vixLong,
     },
   ]
 
@@ -155,12 +198,13 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
             <Table.Th w={120}>Horizon</Table.Th>
             <Table.Th w={170}>Trend</Table.Th>
             <Table.Th>Momentum</Table.Th>
-            <Table.Th w={160}>
+            <Table.Th w={180}>
               <Group gap={4} align="center" wrap="nowrap">
-                Volatility
+                Volatility (realized)
                 <ChartInfo text={EXPLANATIONS.tableVol} />
               </Group>
             </Table.Th>
+            <Table.Th w={230}>Volatility (implied)</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -180,6 +224,12 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
               </Table.Td>
               <Table.Td c="dimmed" fz="sm">
                 {r.vol}
+              </Table.Td>
+              <Table.Td c="dimmed" fz="sm">
+                <Group gap={4} align="center" wrap="nowrap">
+                  <span>{r.vixLabel}</span>
+                  <ChartInfo text={r.vixInfo} />
+                </Group>
               </Table.Td>
             </Table.Tr>
           ))}
