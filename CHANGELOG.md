@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-07-23 — Fix session
+
+- `app/routers/market_sentiment.py` — added `POST /api/v1/market-sentiment/refresh-indices` endpoint; calls `sync_index_history` to fetch the latest candle for all 5 index instruments; before market open Kite returns no new candle (0 rows added), handled gracefully
+- `frontend/src/api/marketSentiment.ts` — added `useRefreshIndicesMutation`; invalidates summary, series, and breadth queries on settle
+- `frontend/src/pages/MarketSentiment.tsx` — wired Refresh button to call the mutation instead of only invalidating the client cache; button shows loading spinner while pending; shows a notification on error or when 0 rows were added (market not yet open)
+
+---
+
 ## 2026-07-23 — Expanded FlagsBanner with 8 new indicator chips
 
 - `app/services/market_sentiment.py` — added `_detect_ema_cross()` helper; extended `get_sentiment_summary` to compute Bollinger bands, EMA 9/20, and surface 8 new flags: `rsi14`, `above_200dma`, `adx`, `bb_squeeze`, `bb_pct_b`, `ema_cross`, `underwater_days`, `vix_day_chg`

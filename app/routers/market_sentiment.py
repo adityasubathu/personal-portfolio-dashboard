@@ -24,3 +24,15 @@ async def series(days: int = 365, db: AsyncSession = Depends(get_db)):
 async def breadth(db: AsyncSession = Depends(get_db)):
     data = await get_market_breadth(db)
     return JSONResponse(data)
+
+
+@router.post("/refresh-indices")
+async def refresh_indices(db: AsyncSession = Depends(get_db)):
+    """Fetch the latest candle for all index instruments from Kite and update price_history.
+    Safe to call at any time — before market open, Kite simply returns no new candle yet."""
+    from app.services.kite_historical import sync_index_history
+    try:
+        result = await sync_index_history(db)
+        return JSONResponse({"ok": True, **result})
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)

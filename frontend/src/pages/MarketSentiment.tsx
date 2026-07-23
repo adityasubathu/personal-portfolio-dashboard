@@ -15,9 +15,9 @@ import {
   Text,
   Title,
 } from '@mantine/core'
-import { useQueryClient } from '@tanstack/react-query'
+import { notifications } from '@mantine/notifications'
 import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-react'
-import { useSentimentSummary, useSentimentSeries, useMarketBreadth, sentimentKeys } from '../api/marketSentiment'
+import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth } from '../types/marketSentiment'
@@ -509,7 +509,7 @@ type OverlayKey = typeof OVERLAY_DEFS[number]['key']
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function MarketSentiment() {
-  const qc = useQueryClient()
+  const refreshMutation = useRefreshIndicesMutation()
   const { data: summary, isLoading: summaryLoading } = useSentimentSummary()
   const { data: breadthData } = useMarketBreadth()
 
@@ -582,10 +582,32 @@ export function MarketSentiment() {
           size="xs"
           variant="subtle"
           leftSection={<IconRefresh size={14} />}
+          loading={refreshMutation.isPending}
           onClick={() => {
-            qc.invalidateQueries({ queryKey: sentimentKeys.summary })
-            qc.invalidateQueries({ queryKey: ['market-sentiment', 'series'] })
-            qc.invalidateQueries({ queryKey: sentimentKeys.breadth })
+            refreshMutation.mutate(undefined, {
+              onSuccess: (data) => {
+                if (!data.ok) {
+                  notifications.show({
+                    title: 'Index refresh failed',
+                    message: data.error ?? 'Unknown error',
+                    color: 'red',
+                  })
+                } else if (data.rows_added === 0) {
+                  notifications.show({
+                    message: 'No new candles — market may not have opened yet or data is already current.',
+                    color: 'gray',
+                    autoClose: 3000,
+                  })
+                }
+              },
+              onError: (err) => {
+                notifications.show({
+                  title: 'Index refresh failed',
+                  message: err instanceof Error ? err.message : 'Request failed',
+                  color: 'red',
+                })
+              },
+            })
           }}
         >
           Refresh
