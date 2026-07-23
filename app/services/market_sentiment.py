@@ -167,6 +167,18 @@ def _long_trend(df: pd.DataFrame) -> str:
 
 # ── Composite helpers ─────────────────────────────────────────────────────────
 
+def _detect_ema_cross(ema9: pd.Series, ema20: pd.Series, lookback: int = 3) -> str | None:
+    above = ema9 > ema20
+    if len(above) < lookback + 1:
+        return None
+    recent = above.iloc[-(lookback + 1):]
+    if not recent.iloc[0] and recent.iloc[-1]:
+        return "bullish"
+    if recent.iloc[0] and not recent.iloc[-1]:
+        return "bearish"
+    return None
+
+
 def _vol_regime(df: pd.DataFrame) -> str:
     atr_pct = mi.atr(df)['atr_pct'].dropna()
     if atr_pct.empty:
@@ -261,6 +273,13 @@ async def get_sentiment_summary(db: AsyncSession) -> dict:
     s200_slope = mi.sma_slope(s200).iloc[-1]
     wrsi = mi.weekly_rsi(df)
     vol_reg = _vol_regime(df)
+    bb = mi.bollinger(df)
+    ema9 = mi.ema(df, 9)
+    ema20 = mi.ema(df, 20)
+
+    # Bollinger squeeze: bandwidth at 60-day low
+    bb_bw = bb['bb_bw'].dropna()
+    bb_squeeze = bool(len(bb_bw) >= 60 and bb_bw.iloc[-1] <= bb_bw.iloc[-60:].min())
 
     vix_df = await _load_index_df(db, "INDIA VIX")
     vix_short = _vix_short(vix_df) if vix_df is not None and len(vix_df) >= 5 else {}
@@ -299,6 +318,14 @@ async def get_sentiment_summary(db: AsyncSession) -> dict:
             "days_since_cross": cross["days_since_cross"],
             "streak": streak,
             "gap_pct": _safe(gap['gap_pct'].iloc[-1]),
+            "rsi14": _safe(rsi14.iloc[-1]),
+            "above_200dma": bool(pd.notna(s200.iloc[-1]) and df['close'].iloc[-1] > s200.iloc[-1]),
+            "adx": _safe(adx_df['adx'].iloc[-1]),
+            "bb_squeeze": bb_squeeze,
+            "bb_pct_b": _safe(bb['bb_pct_b'].iloc[-1]),
+            "ema_cross": _detect_ema_cross(ema9, ema20),
+            "underwater_days": dd["underwater_days"],
+            "vix_day_chg": vix_short.get("vix_day_chg"),
         },
     }
 

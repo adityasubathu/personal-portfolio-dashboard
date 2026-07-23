@@ -249,48 +249,154 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
 
 // ── Flags banner ──────────────────────────────────────────────────────────────
 
+function FlagChip({ label, color, info }: { label: string; color: string; info: string }) {
+  const [opened, setOpened] = useState(false)
+  return (
+    <Popover
+      opened={opened}
+      onChange={setOpened}
+      width={320}
+      position="bottom"
+      withArrow
+      shadow="md"
+      clickOutsideEvents={['mousedown', 'touchstart']}
+    >
+      <Popover.Target>
+        <Badge
+          color={color}
+          variant="light"
+          size="sm"
+          fz="0.825rem"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setOpened((o) => !o)}
+        >
+          {label}
+        </Badge>
+      </Popover.Target>
+      <Popover.Dropdown maw={320}>
+        <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>{info}</Text>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
+
 function FlagsBanner({ flags }: { flags: SentimentFlags }) {
-  const items: { label: string; color: string; show: boolean }[] = [
+  const items: { label: string; color: string; show: boolean; info: string }[] = [
+    // ── Regime ──
     {
-      label: flags.cross_state === 'golden' ? 'Golden Cross' : 'Death Cross',
-      color: flags.cross_state === 'golden' ? 'yellow' : 'red',
-      show: flags.cross_state !== 'none',
+      label: 'Above 200 DMA', color: 'green', show: flags.above_200dma === true,
+      info: 'Price is above the 200-day moving average — the most widely watched long-term trend line. Being above it is generally considered a bullish regime: dips tend to find support near the 200 DMA, and trend-following strategies work better.\n\nA sustained move below the 200 DMA flips the regime to bearish.',
     },
     {
-      label: `${flags.days_since_cross} days since cross`,
-      color: 'gray',
+      label: 'Below 200 DMA', color: 'red', show: flags.above_200dma === false,
+      info: 'Price is below the 200-day moving average — the classic bull/bear regime line. Being below it means the long-term trend is down or under pressure.\n\nRallies often stall at or near the 200 DMA from below. A reclaim (close back above) is a positive signal.',
+    },
+
+    // ── Cross signals ──
+    {
+      label: 'Golden Cross', color: 'yellow', show: flags.cross_state === 'golden',
+      info: 'The 50-day moving average has crossed above the 200-day — a "Golden Cross." It confirms that medium-term momentum has turned bullish relative to the long-term trend.\n\nIt\'s a lagging signal (it confirms what price has already done), but it marks a regime shift that tends to persist. The last golden cross often precedes months of follow-through.',
+    },
+    {
+      label: 'Death Cross', color: 'red', show: flags.cross_state === 'death',
+      info: 'The 50-day moving average has crossed below the 200-day — a "Death Cross." It confirms that medium-term momentum has turned bearish relative to the long-term trend.\n\nLike the golden cross, it\'s lagging — price has already fallen significantly by the time it fires. But the regime it signals (sustained weakness, rallies failing) tends to persist.',
+    },
+    {
+      label: `${flags.days_since_cross} days since cross`, color: 'gray',
       show: flags.cross_state !== 'none' && flags.days_since_cross != null,
+      info: 'How many trading days have passed since the last SMA 50/200 crossover. Early days after a cross = the signal is fresh and the new regime is still establishing. Longer durations = the regime is entrenched and more reliable.',
     },
     {
-      label: 'Momentum divergence',
-      color: 'orange',
-      show: flags.divergence,
+      label: 'EMA 9 crossed above 20', color: 'green', show: flags.ema_cross === 'bullish',
+      info: 'The 9-day EMA just crossed above the 20-day EMA in the last 3 sessions — a short-term bullish momentum shift.\n\nThis is a faster, earlier signal than the golden/death cross (which uses 50/200). It catches trend changes within weeks rather than months. The trade-off: more false signals in choppy markets (check ADX to filter).',
+    },
+    {
+      label: 'EMA 9 crossed below 20', color: 'red', show: flags.ema_cross === 'bearish',
+      info: 'The 9-day EMA just crossed below the 20-day EMA in the last 3 sessions — a short-term bearish momentum shift.\n\nEarly warning that the short-term trend is flipping. If ADX is also rising, the downward move has conviction. If ADX is low/flat, it may just be choppy noise.',
+    },
+
+    // ── Momentum ──
+    {
+      label: `RSI Overbought (${flags.rsi14?.toFixed(0)})`, color: 'orange',
+      show: flags.rsi14 != null && flags.rsi14 > 70,
+      info: 'RSI(14) is above 70 — the market has rallied hard enough that up-moves dominate recent trading sessions. This is "overbought" territory.\n\nIt doesn\'t mean a reversal is imminent — strong trends can stay overbought for weeks. But it means the easy upside is done; new longs carry more risk, and a pause or pullback becomes increasingly likely.',
+    },
+    {
+      label: `RSI Oversold (${flags.rsi14?.toFixed(0)})`, color: 'blue',
+      show: flags.rsi14 != null && flags.rsi14 < 30,
+      info: 'RSI(14) is below 30 — the market has sold off hard enough that down-moves dominate recent sessions. This is "oversold" territory.\n\nOversold can persist in genuine bear markets, but in an uptrending regime (above 200 DMA) it often marks short-term capitulation — a point where selling exhaustion creates a bounce opportunity.',
+    },
+    {
+      label: 'Momentum divergence', color: 'orange', show: flags.divergence,
+      info: 'Price is making a new 20-day high (or low) but RSI is not confirming — it\'s printing a lower high (or higher low). This divergence means the move is losing internal momentum even as price pushes further.\n\nDivergence doesn\'t time reversals precisely, but it\'s a reliable warning that the current leg is running out of fuel. Watch for a follow-through reversal bar to confirm.',
     },
     {
       label: flags.streak > 0 ? `${flags.streak}-day winning streak` : `${Math.abs(flags.streak)}-day losing streak`,
       color: flags.streak > 0 ? 'green' : 'red',
       show: Math.abs(flags.streak) >= 3,
+      info: 'The market has closed in the same direction for 3 or more consecutive days.\n\nStreaks of 3–4 days are common and often continue. Streaks of 5+ days are statistically unusual and tend to mean-revert — but in strong trends they can extend. The streak itself is context, not a signal: combine it with RSI and ADX to judge whether it\'s exhaustion or trend strength.',
     },
+
+    // ── Volatility ──
+    {
+      label: 'Bollinger Squeeze — low vol', color: 'violet', show: flags.bb_squeeze,
+      info: 'Bollinger Bandwidth (the gap between upper and lower bands) is at its lowest point in the last 60 trading days. The bands have "squeezed" together, meaning daily price swings have compressed to an unusually narrow range.\n\nSqueezes precede breakouts — volatility is cyclical, and a compression almost always resolves into an expansion. The squeeze doesn\'t tell you which direction; it tells you a big move is loading. Watch the band breach chips and EMA crosses for direction.',
+    },
+    {
+      label: 'Price above upper band', color: 'orange',
+      show: flags.bb_pct_b != null && flags.bb_pct_b > 1.0,
+      info: 'Price has closed above the upper Bollinger Band — a 2-standard-deviation move above the 20-day average. Statistically, price should be inside the bands ~95% of the time.\n\nIn a squeeze-then-breakout context, this confirms the breakout direction is up. In isolation, it means the rally is stretched — not necessarily reversing, but extended beyond normal range.',
+    },
+    {
+      label: 'Price below lower band', color: 'blue',
+      show: flags.bb_pct_b != null && flags.bb_pct_b < 0.0,
+      info: 'Price has closed below the lower Bollinger Band — a 2-standard-deviation move below the 20-day average.\n\nIn a downtrend, this can mark acceleration (panic selling). In an uptrend, it often marks the climax of a pullback — price tends to snap back toward the middle band. Context matters: check the 200 DMA regime chip to judge which interpretation applies.',
+    },
+    {
+      label: `Strong trend (ADX ${flags.adx?.toFixed(0)})`, color: 'blue',
+      show: flags.adx != null && flags.adx > 30,
+      info: 'ADX is above 30 — a strong, sustained trend is in place (direction doesn\'t matter, ADX only measures strength). At this level, trend-following signals (MA crossovers, RSI direction) are more reliable, and mean-reversion strategies are more dangerous.\n\nADX above 40-50 is rare and usually marks the final acceleration phase of a trend — powerful but increasingly likely to exhaust.',
+    },
+    {
+      label: `Choppy (ADX ${flags.adx?.toFixed(0)})`, color: 'gray',
+      show: flags.adx != null && flags.adx < 15,
+      info: 'ADX is below 15 — there is no meaningful trend in either direction. The market is range-bound and choppy. Moving average crossovers will whipsaw and produce false signals.\n\nThis is a "sit on hands" regime for trend followers. Range-bound strategies (buy support, sell resistance, fade extremes) work better here. Watch for ADX to rise above 20-25 to signal a new trend emerging.',
+    },
+    {
+      label: `VIX Spike ${flags.vix_day_chg != null && flags.vix_day_chg > 0 ? '+' : ''}${flags.vix_day_chg?.toFixed(1)}%`,
+      color: 'red',
+      show: flags.vix_day_chg != null && flags.vix_day_chg > 10,
+      info: 'India VIX jumped more than 10% in a single day — a sharp spike in implied volatility. Options traders are pricing in significantly more forward risk than yesterday.\n\nVIX spikes often precede or accompany sharp market drops. But VIX is mean-reverting: after a spike, it tends to decay back down over the following days/weeks, which historically coincides with market stabilization.',
+    },
+    {
+      label: `VIX Crush ${flags.vix_day_chg?.toFixed(1)}%`,
+      color: 'green',
+      show: flags.vix_day_chg != null && flags.vix_day_chg < -10,
+      info: 'India VIX dropped more than 10% in a single day — a sharp collapse in implied volatility. Fear is unwinding rapidly.\n\nThis often follows a resolution of uncertainty (event passing, support holding, policy clarity). It\'s generally positive for equities in the short term, but if VIX was already low, the crush can signal complacency.',
+    },
+
+    // ── Context ──
     {
       label: `Gap ${flags.gap_pct != null && flags.gap_pct > 0 ? '+' : ''}${flags.gap_pct?.toFixed(2)}% today`,
       color: flags.gap_pct != null && flags.gap_pct > 0 ? 'green' : 'red',
       show: flags.gap_pct != null && Math.abs(flags.gap_pct) >= 0.5,
+      info: 'Today\'s open was more than 0.5% away from yesterday\'s close — a significant overnight gap driven by global cues, news, or sentiment shift.\n\nGap ups in uptrends and gap downs in downtrends tend to hold (continuation). Gaps against the trend tend to fill (price returns to yesterday\'s close) more often. The size of the gap matters: >1% gaps are harder to fill same-day.',
+    },
+    {
+      label: `Underwater ${flags.underwater_days} days`, color: 'orange',
+      show: flags.underwater_days > 20,
+      info: 'The market has been below its all-time high for more than 20 trading days. The number shows how long the current drawdown has lasted — not how deep it is (that\'s in the table above).\n\nShort drawdowns (< 20 days) are normal pullbacks in uptrends. Extended drawdowns (40-60+ days) change market character: sentiment shifts, defensive sectors lead, and recovery rallies tend to fail at prior highs. Duration often matters more than depth.',
     },
   ]
 
   const active = items.filter((i) => i.show)
   if (active.length === 0) return null
 
-  const hasGap = active.some((i) => i.label.startsWith('Gap'))
-
   return (
     <Group gap="xs" wrap="wrap" align="center">
       {active.map((item) => (
-        <Badge key={item.label} color={item.color} variant="light" size="sm" fz="0.825rem">
-          {item.label}
-        </Badge>
+        <FlagChip key={item.label} label={item.label} color={item.color} info={item.info} />
       ))}
-      {hasGap && <ChartInfo text={EXPLANATIONS.gap} />}
     </Group>
   )
 }

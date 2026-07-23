@@ -53,6 +53,14 @@ export interface SentimentFlags {
   days_since_cross: number | null
   streak: number
   gap_pct: number | null
+  rsi14: number | null
+  above_200dma: boolean | null
+  adx: number | null
+  bb_squeeze: boolean
+  bb_pct_b: number | null
+  ema_cross: 'bullish' | 'bearish' | null
+  underwater_days: number
+  vix_day_chg: number | null
 }
 
 export interface SentimentSummary {

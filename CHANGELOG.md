@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-07-23 — Expanded FlagsBanner with 8 new indicator chips
+
+- `app/services/market_sentiment.py` — added `_detect_ema_cross()` helper; extended `get_sentiment_summary` to compute Bollinger bands, EMA 9/20, and surface 8 new flags: `rsi14`, `above_200dma`, `adx`, `bb_squeeze`, `bb_pct_b`, `ema_cross`, `underwater_days`, `vix_day_chg`
+- `frontend/src/types/marketSentiment.ts` — added 8 new fields to `SentimentFlags`
+- `frontend/src/pages/MarketSentiment.tsx` — added `FlagChip` component (Badge + Popover); replaced `FlagsBanner` items with full 13-chip set grouped by Regime / Cross / Momentum / Volatility / Context; every chip is clickable and opens an explanation popover; removed standalone gap `ChartInfo` icon (gap chip's own popover replaces it)
+
+---
+
 ## 2026-07-23 — Code review: readability & maintainability
 
 - `app/routers/portfolio.py` — XIRR recompute now runs unconditionally after each sync/fetch-OHLC flow, not only when the LTP update fails
