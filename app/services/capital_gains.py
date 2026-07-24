@@ -45,7 +45,7 @@ BUCKET_META: dict[str, dict] = {
     "equity_ltcg_125":      {"label": "Equity LTCG (12.5%) §112A",        "rate": 12.5,  "term": "long",  "is_112a": True},
     "debt_slab":            {"label": "Debt / Specified MF — Slab rate",  "rate": None,  "term": "short"},
     "debt_ltcg_20_indexed": {"label": "Debt LTCG (20% + indexation)",     "rate": 20.0,  "term": "long",  "indexed": True},
-    "debt_ltcg_125":        {"label": "Debt LTCG (12.5%)",                "rate": 12.5,  "term": "long"},
+    "debt_ltcg_125":        {"label": "Debt/Non-Equity LTCG (12.5%)",     "rate": 12.5,  "term": "long"},
     "bond_stcg_slab":       {"label": "Bond STCG — Slab rate",            "rate": None,  "term": "short"},
     "bond_ltcg_10":         {"label": "Bond LTCG (10%)",                  "rate": 10.0,  "term": "long"},
     "bond_ltcg_125":        {"label": "Bond LTCG (12.5%)",                "rate": 12.5,  "term": "long"},
@@ -62,10 +62,19 @@ _EQUITY_MF_RE = re.compile(
     r"aggressive.?hybrid|balanced.?advantage|nifty|sensex|arbitrage)",
     re.IGNORECASE,
 )
+_INTL_FUND_RE = re.compile(
+    r"\b(nasdaq|fang|hang.?seng|global|international|overseas|world|"
+    r"us\s+equity|us\s+fund|emerging\s+market|asia\s+pacific|europe|china|japan)\b",
+    re.IGNORECASE,
+)
 _DEBT_MF_RE = re.compile(
     r"\b(debt|liquid|gilt|money.?market|low.?duration|ultra.?short|banking.?and.?psu|"
     r"credit.?risk|conservative.?hybrid|overnight|savings|floater|dynamic.?bond|"
     r"short.?duration|medium.?duration|long.?duration|corporate.?bond|psu.?bond)\b",
+    re.IGNORECASE,
+)
+_GOLD_RE = re.compile(
+    r"\b(gold|silver|commodity|precious.?metal)\b",
     re.IGNORECASE,
 )
 
@@ -74,6 +83,10 @@ def _classify_mf_orientation(name: str | None, tradingsymbol: str | None) -> str
     combined = f"{tradingsymbol or ''} {name or ''}"
     if _EQUITY_MF_RE.search(combined):
         return "equity"
+    if _GOLD_RE.search(combined):
+        return "gold"
+    if _INTL_FUND_RE.search(combined):
+        return "intl_fund"
     if _DEBT_MF_RE.search(combined):
         return "debt_mf"
     return "unknown_mf"
@@ -112,7 +125,7 @@ def _holding_months(buy: date, sell: date) -> int:
 def classify_lot(asset_category: str, buy_date: date, sell_date: date) -> str:
     """Map (asset_category, buy_date, sell_date) → tax bucket key.
 
-    asset_category: 'equity' | 'debt_mf' | 'bond' | 'unknown_mf'
+    asset_category: 'equity' | 'debt_mf' | 'intl_etf' | 'intl_fund' | 'gold_etf' | 'gold_mf' | 'bond' | 'unknown_mf'
     """
     months = _holding_months(buy_date, sell_date)
 
@@ -128,6 +141,25 @@ def classify_lot(asset_category: str, buy_date: date, sell_date: date) -> str:
         if sell_date < _BUDGET_2024:
             return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
         return "debt_ltcg_125" if months >= 24 else "debt_slab"
+
+    if asset_category in ("intl_fund", "gold_mf"):
+        # Unlisted / fund-of-fund: 24m LTCG threshold post-Budget 2024.
+        # Pre-Budget 2024: §50AA (if bought ≥ Apr 2023) or old 36m/indexed rule.
+        # No §112A exemption.
+        if sell_date < _BUDGET_2024:
+            if buy_date >= _DEBT_50AA_BOUNDARY:
+                return "debt_slab"
+            return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
+        return "debt_ltcg_125" if months >= 24 else "debt_slab"
+
+    if asset_category in ("gold_etf", "intl_etf"):
+        # Listed non-equity ETF: 12m LTCG threshold post-Budget 2024, slab STCG.
+        # Pre-Budget 2024: same §50AA / old rules as debt funds.
+        if sell_date < _BUDGET_2024:
+            if buy_date >= _DEBT_50AA_BOUNDARY:
+                return "debt_slab"
+            return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
+        return "debt_ltcg_125" if months >= 12 else "debt_slab"
 
     if asset_category == "bond":
         is_lt = months >= 12
@@ -449,12 +481,23 @@ async def get_capital_gains(db: AsyncSession, fy: str) -> dict:
     for instr_id, (instrument, trades) in by_instrument.items():
         itype = instrument.instrument_type  # STOCK / ETF / BOND / MF
 
-        if itype in ("STOCK", "ETF"):
+        if itype == "STOCK":
             asset_category = "equity"
+        elif itype == "ETF":
+            orientation = _classify_mf_orientation(instrument.name, instrument.tradingsymbol)
+            if orientation == "equity":
+                asset_category = "equity"
+            elif orientation == "gold":
+                asset_category = "gold_etf"
+            elif orientation == "intl_fund":
+                asset_category = "intl_etf"
+            else:
+                asset_category = "debt_mf"
         elif itype == "BOND":
             asset_category = "bond"
         elif itype == "MF":
-            asset_category = _classify_mf_orientation(instrument.name, instrument.tradingsymbol)
+            orientation = _classify_mf_orientation(instrument.name, instrument.tradingsymbol)
+            asset_category = "gold_mf" if orientation == "gold" else orientation
         else:
             asset_category = "equity"  # fallback
 

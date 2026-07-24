@@ -383,6 +383,121 @@ class TestMFClassification:
     def test_unknown(self):
         assert _classify_mf_orientation("Aditya Birla Sun Life Special Opportunities Fund", None) == "unknown_mf"
 
+    def test_international_etf_not_equity(self):
+        # MON100 / Nasdaq 100 ETF — invests in US equities, NOT domestic equity-oriented.
+        # Must NOT return "equity" so it doesn't incorrectly receive the §112A exemption.
+        assert _classify_mf_orientation("Motilal Oswal Nasdaq 100 ETF", "MON100") != "equity"
+        assert _classify_mf_orientation("Mirae Asset NYSE FANG Plus ETF", None) != "equity"
+
+    def test_international_fund_classification(self):
+        assert _classify_mf_orientation("Motilal Oswal Nasdaq 100 ETF", "MON100") == "intl_fund"
+        assert _classify_mf_orientation("Mirae Asset NYSE FANG Plus ETF", None) == "intl_fund"
+        assert _classify_mf_orientation("DSP World Gold Fund", None) != "intl_fund"  # gold, not intl
+
+    def test_gold_fund_classification(self):
+        assert _classify_mf_orientation("SBI Gold ETF", None) == "gold"
+        assert _classify_mf_orientation("HDFC Gold Fund", None) == "gold"
+        assert _classify_mf_orientation("Nippon India Silver ETF", None) == "gold"
+        # World Gold Fund has "gold" keyword → gold, not intl (order matters in regex priority)
+        assert _classify_mf_orientation("DSP World Gold Fund", None) == "gold"
+
+
+class TestIntlETFClassification:
+    """intl_etf: listed international ETF (MON100, FANG+) — 12m LTCG threshold post-Budget 2024."""
+
+    def test_pre_budget_50aa(self):
+        assert classify_lot("intl_etf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_pre_budget_old_buy_long(self):
+        assert classify_lot("intl_etf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+
+    def test_post_budget_short(self):
+        # Listed ETF: 12m threshold; held 11m → slab
+        assert classify_lot("intl_etf", date(2023, 9, 1), date(2024, 7, 23)) == "debt_slab"
+
+    def test_post_budget_long(self):
+        # Held ≥ 12m → LTCG 12.5% (no §112A exemption)
+        assert classify_lot("intl_etf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+
+    def test_post_budget_exactly_12m(self):
+        buy, sell = date(2023, 7, 23), date(2024, 7, 23)
+        assert _holding_months(buy, sell) == 12
+        assert classify_lot("intl_etf", buy, sell) == "debt_ltcg_125"
+
+
+class TestIntlFundClassification:
+    """intl_fund: unlisted international MF (fund-of-fund) — 24m LTCG threshold post-Budget 2024."""
+
+    def test_pre_budget_50aa(self):
+        # Bought Apr 2023 (§50AA boundary), sold before Budget 2024 → slab
+        assert classify_lot("intl_fund", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_pre_budget_old_buy_short(self):
+        # Old buy, sold pre-budget, held < 36m → slab
+        assert classify_lot("intl_fund", date(2022, 1, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_pre_budget_old_buy_long(self):
+        # Old buy, sold pre-budget, held > 36m → indexed LTCG
+        assert classify_lot("intl_fund", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+
+    def test_post_budget_short(self):
+        # Sold post-budget, held < 24m → slab (no §112A)
+        assert classify_lot("intl_fund", date(2023, 6, 1), date(2024, 7, 23)) == "debt_slab"
+
+    def test_post_budget_long(self):
+        # Sold post-budget, held ≥ 24m → LTCG 12.5% (no §112A exemption)
+        assert classify_lot("intl_fund", date(2022, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+
+    def test_intl_etf_vs_fund_differ_post_budget(self):
+        # intl_etf uses 12m; intl_fund uses 24m. 13m holding: ETF is LTCG, MF is slab.
+        buy, sell = date(2023, 6, 1), date(2024, 7, 23)
+        assert classify_lot("intl_etf", buy, sell) == "debt_ltcg_125"
+        assert classify_lot("intl_fund", buy, sell) == "debt_slab"
+
+
+class TestGoldETFClassification:
+    def test_pre_budget_50aa(self):
+        assert classify_lot("gold_etf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_pre_budget_old_buy_long(self):
+        assert classify_lot("gold_etf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+
+    def test_post_budget_short(self):
+        # Listed ETF: 12m threshold; held 11m → slab
+        assert classify_lot("gold_etf", date(2023, 9, 1), date(2024, 7, 23)) == "debt_slab"
+
+    def test_post_budget_long(self):
+        # Listed ETF: held ≥ 12m → LTCG 12.5%
+        assert classify_lot("gold_etf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+
+    def test_post_budget_exactly_12m(self):
+        buy = date(2023, 7, 23)
+        sell = date(2024, 7, 23)
+        assert _holding_months(buy, sell) == 12
+        assert classify_lot("gold_etf", buy, sell) == "debt_ltcg_125"
+
+
+class TestGoldMFClassification:
+    def test_pre_budget_50aa(self):
+        assert classify_lot("gold_mf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_pre_budget_old_buy_long(self):
+        assert classify_lot("gold_mf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+
+    def test_post_budget_short(self):
+        # Fund-of-fund: 24m threshold; held 13m → slab
+        assert classify_lot("gold_mf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_slab"
+
+    def test_post_budget_long(self):
+        # Held ≥ 24m → LTCG 12.5%
+        assert classify_lot("gold_mf", date(2022, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+
+    def test_gold_etf_vs_mf_differ_post_budget(self):
+        # gold_etf uses 12m; gold_mf uses 24m. 13m holding: ETF is LTCG, MF is slab.
+        buy, sell = date(2023, 6, 1), date(2024, 7, 23)
+        assert classify_lot("gold_etf", buy, sell) == "debt_ltcg_125"
+        assert classify_lot("gold_mf", buy, sell) == "debt_slab"
+
 
 # ── CII helpers ───────────────────────────────────────────────────────────────
 

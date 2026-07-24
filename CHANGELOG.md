@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-07-24 17:30 — Fix session
+
+- `app/services/capital_gains.py` — added `intl_fund`, `gold_etf`, `gold_mf` asset categories with correct post-Budget 2024 tax rules: international MFs and gold MFs (FoF/unlisted) use 24m LTCG threshold at 12.5% with no §112A exemption; gold ETFs (listed) use 12m LTCG threshold at 12.5%; all three fall back to pre-Budget 2024 §50AA / indexed debt rules when sold before 23 Jul 2024
+- `app/services/capital_gains.py` — added `_GOLD_RE` regex (gold/silver/commodity/precious metal); `_classify_mf_orientation` now returns `"gold"` for gold/silver instruments; gold check runs before international check so "DSP World Gold Fund" is correctly identified as gold not international
+- `app/services/capital_gains.py` — ETF classification now passes `"gold_etf"` and `"intl_fund"` through instead of collapsing all non-equity ETFs to `"debt_mf"`; MF classification converts orientation `"gold"` → `"gold_mf"`
+- `tests/test_capital_gains.py` — added 17 new tests covering intl_fund / gold_etf / gold_mf classify_lot branches and gold/international orientation detection; 67 tests total, all passing
+- `frontend/src/pages/CapitalGains.tsx` — bucket card label font size increased by 10% (`calc(var(--mantine-font-size-xs) * 1.1)`); color changed from dimmed to default (black)
+- `app/services/capital_gains.py` — renamed `debt_ltcg_125` label from "Debt LTCG (12.5%)" to "Debt/Non-Equity LTCG (12.5%)"
+- `frontend/src/pages/CapitalGains.tsx` — added persistent slab rate input (NumberInput, 0–42%, default 30%, saved to localStorage via `usePersistentState`); slab-rate bucket cards now show "Est. tax @ X%: ₹Y" instead of a generic "Slab rate" badge when a rate is set; totals card est. tax now includes slab-rate gains computed with the user's rate; footnote text adapts based on whether a slab rate is set
+
+---
+
+## 2026-07-24 — Fix session
+
+- `frontend/src/pages/CapitalGains.tsx` — replaced bucket-grouped lots table with a symbol-grouped expandable table; each row shows total STCG, LTCG, and total P&L for that symbol; clicking a row expands to show the opening position (lots bought before the FY start, aggregated as qty/avg cost/total cost) and individual realized lots sorted by sell date, each with an ST/LT badge and buy→sell dates + days held; FY totals card now breaks out short-term and long-term gains as separate labelled rows above the total
+
+- `app/services/capital_gains.py` — ETFs (instrument_type=ETF) now run `_classify_mf_orientation` instead of unconditionally mapping to `"equity"`; non-domestic-equity ETFs (MON100, international funds, gold ETFs etc.) resolve to `"debt_mf"` and are no longer eligible for the §112A LTCG exemption or §111A flat rate; domestic index ETFs (NIFTYBEES, SENSEXBEES etc.) still map to `"equity"` via the existing name regex
+- `tests/test_capital_gains.py` — added `test_international_etf_not_equity` asserting MON100 / FANG+ ETF names do not classify as equity
+
+- `frontend/src/pages/CapitalGains.tsx` — expanded detail rows: font size increased from `xs` to `sm` (~20% larger) across all text, headers, and the inner table's `fz` prop; date cell changed from stacked multi-line layout to a single `nowrap` line (`buy_date → sell_date · Nd`) to prevent wrapping
+
+- `frontend/src/pages/CapitalGains.tsx` — `TermBadge`: added `fz="calc(var(--mantine-font-size-xs) * 1.1)"` to increase ST/LT chip text by 10%
+
 ## 2026-07-24 — Capital Gains page
 
 - `app/services/capital_gains.py` (new) — FIFO matcher, Indian tax rule table (Budget 2024/2023/pre), CII indexation, §112A grandfathering, set-off and exemption engine; pure computation over existing `trades` + `price_history` tables, no new DB schema
