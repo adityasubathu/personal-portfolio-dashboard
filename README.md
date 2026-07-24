@@ -8,7 +8,6 @@
 
 ## Planned Features
 
-- Capital gains reporting for the current and prior financial year
 - Tax-loss harvesting opportunity detection
 - Crypto portfolio support — spot, dated futures, perpetuals, and options
 - Automated scraping of mutual fund factsheets and portfolio disclosures
@@ -77,6 +76,7 @@ portfolio-mac-arm/
 │   │   ├── mf.py
 │   │   ├── mf_breakdown.py
 │   │   ├── charts.py
+│   │   ├── capital_gains.py
 │   │   └── settings.py
 │   ├── models/
 │   │   ├── __init__.py          # Re-exports all models (for Alembic / metadata)
@@ -102,7 +102,8 @@ portfolio-mac-arm/
 │   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   ├── settings.py          # Danger-zone bulk deletes, DB info
-│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth
+│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth; POST /refresh-indices
+│   │   ├── capital_gains.py     # GET /api/v1/capital-gains/years, /api/v1/capital-gains/{fy}
 │   │   └── demo.py              # GET /api/v1/status, POST /api/v1/demo/reset
 │   └── services/
 │       ├── csv_importer.py      # Multi-format CSV parser (Kite legacy/current, generic)
@@ -122,6 +123,7 @@ portfolio-mac-arm/
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
 │       ├── market_indicators.py  # Pure indicator functions: EMA/SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger, drawdown, vol
 │       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth
+│       ├── capital_gains.py      # FIFO matching, Indian tax rules (FY 2020-21+), CII indexation, §112A grandfathering + exemption
 │       └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── frontend/
 │   ├── Dockerfile               # node:20-alpine, Vite dev server
@@ -130,7 +132,7 @@ portfolio-mac-arm/
 │   ├── tsconfig.json
 │   └── src/
 │       ├── main.tsx             # MantineProvider, QueryClientProvider, BrowserRouter
-│       ├── App.tsx              # Routes (12 pages under AppLayout)
+│       ├── App.tsx              # Routes (13 pages under AppLayout)
 │       ├── api/                 # Typed fetch client + per-domain React Query hooks
 │       │   ├── client.ts        # request<T>() wrapper; VITE_API_BASE_URL
 │       │   ├── portfolio.ts
@@ -141,11 +143,12 @@ portfolio-mac-arm/
 │       │   ├── manualAssets.ts
 │       │   ├── charts.ts
 │       │   ├── settings.ts
-│       │   ├── marketSentiment.ts # useSentimentSummary(), useSentimentSeries(days)
+│       │   ├── marketSentiment.ts # useSentimentSummary(), useSentimentSeries(days), useRefreshIndicesMutation()
+│       │   ├── capitalGains.ts  # useCapitalGainsYears(), useCapitalGains(fy)
 │       │   └── status.ts        # useAppStatus(), useResetDemoMutation()
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
 │       ├── components/
-│       │   ├── AppLayout.tsx    # Mantine AppShell + nav (11 routes); orange dot on Policy when actions pending
+│       │   ├── AppLayout.tsx    # Mantine AppShell + nav (13 routes); orange dot on Policy when actions pending
 │       │   ├── DonutChart.tsx   # react-chartjs-2 Doughnut, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
@@ -163,6 +166,7 @@ portfolio-mac-arm/
 │       │   ├── Import.tsx       # CSV upload, import history, rollback, split-credit
 │       │   ├── Kite.tsx         # Config form, OAuth login, token status, one-click sync
 │       │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags, breadth table + ratio chart, candlestick + overlays, oscillator + volatility panels
+│       │   ├── CapitalGains.tsx # Realized gains by FY: FIFO lots grouped by tax bucket, set-off, §112A exemption, attention items
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
@@ -353,6 +357,12 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 |---|---|
 | `GET /status` | `{demo_mode: bool}` — whether the app is running in demo mode |
 | `POST /demo/reset` | Wipe all data and re-seed demo portfolio (only active when `DEMO_MODE=true`) |
+
+### Capital Gains (`/api/v1/capital-gains`)
+| Endpoint | Description |
+|---|---|
+| `GET /years` | Indian FYs (2020-21+) with at least one sell trade |
+| `GET /{fy}` | Full FIFO-matched gains for that FY: buckets, lots, set-off, §112A exemption, attention items, intraday footnote |
 
 ### Settings (`/api/v1/settings`)
 | Endpoint | Description |

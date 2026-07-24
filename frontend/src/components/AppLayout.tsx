@@ -28,6 +28,7 @@ import {
   IconSettings,
   IconEye,
   IconEyeOff,
+  IconReceipt2,
 } from '@tabler/icons-react'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { usePolicyTracker } from '../api/policyTracker'
@@ -38,6 +39,7 @@ const NAV_ITEMS = [
   { to: '/portfolio/nav-history', label: 'NAV History', icon: IconChartLine },
   { to: '/portfolio/breakdown', label: 'Breakdown', icon: IconChartDonut },
   { to: '/market/sentiment', label: 'Market Sentiment', icon: IconGauge },
+  { to: '/portfolio/capital-gains', label: 'Capital Gains', icon: IconReceipt2 },
   { to: '/portfolio/fund-breakdown', label: 'Fund Detail', icon: IconBuildingBank },
   { to: '/charts/price', label: 'Price Chart', icon: IconChartCandle },
   { to: '/charts/nav', label: 'Fund NAV Chart', icon: IconChartHistogram },

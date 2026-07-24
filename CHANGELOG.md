@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-07-24 — Capital Gains page
+
+- `app/services/capital_gains.py` (new) — FIFO matcher, Indian tax rule table (Budget 2024/2023/pre), CII indexation, §112A grandfathering, set-off and exemption engine; pure computation over existing `trades` + `price_history` tables, no new DB schema
+- `app/schemas/capital_gains.py` (new) — Pydantic response models: `GainBucket`, `RealizedLot`, `AttentionItem`, `CapitalGainsResponse`, `AvailableFYsResponse`
+- `app/routers/capital_gains.py` (new) — `GET /api/v1/capital-gains/years` and `GET /api/v1/capital-gains/{fy}`
+- `app/main.py` — registered `capital_gains` router
+- `tests/test_capital_gains.py` (new) — 49 tests covering FIFO matching, all tax classification boundaries (22 Jul vs 23 Jul 2024, 31 Mar vs 1 Apr 2023, 12/24/36m thresholds), grandfathering higher-of/lower-of logic, CII indexation arithmetic, set-off ordering, §112A exemption cap
+- `frontend/src/types/capitalGains.ts` (new) — TS interfaces mirroring the Python schemas 1:1
+- `frontend/src/api/capitalGains.ts` (new) — `useCapitalGainsYears()`, `useCapitalGains(fy)` React Query hooks
+- `frontend/src/pages/CapitalGains.tsx` (new) — FY selector (persisted), per-bucket summary cards, lots table grouped by bucket with section headers, attention section for missing basis / FMV flags, intraday footnote, help popover; route `/portfolio/capital-gains`
+- `frontend/src/App.tsx` — added `/portfolio/capital-gains` route
+- `frontend/src/components/AppLayout.tsx` — added "Capital Gains" nav link (`IconReceipt2`)
+
 ## 2026-07-23 — Fix session
 
 - `app/routers/market_sentiment.py` — added `POST /api/v1/market-sentiment/refresh-indices` endpoint; calls `sync_index_history` to fetch the latest candle for all 5 index instruments; before market open Kite returns no new candle (0 rows added), handled gracefully
