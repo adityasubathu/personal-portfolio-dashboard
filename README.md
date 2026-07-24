@@ -48,7 +48,7 @@ Launch with a fully pre-populated fictional portfolio (no Kite account needed):
 DEMO_MODE=true docker compose up --build
 ```
 
-On first start the app auto-seeds ~17 instruments, ~70 trades, 2 years of price/NAV history, MF scheme breakdowns, manual assets, allocation targets, and USDINR rate. Kite integration is disabled. A **Reset Demo Data** button on the Settings page re-seeds from scratch without a restart.
+On first start the app auto-seeds ~23 instruments, ~70 trades, 2 years of price/NAV history for 11 indices (Nifty 50, Nifty 500, Bank, IT, Pharma, Auto, FMCG + breadth indices), MF scheme breakdowns, manual assets, allocation targets, and USDINR rate. Kite integration is disabled. A **Reset Demo Data** button on the Settings page re-seeds from scratch without a restart.
 
 To refresh the fixture data (e.g. to extend the date range):
 ```bash
@@ -102,7 +102,7 @@ portfolio-mac-arm/
 │   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   ├── settings.py          # Danger-zone bulk deletes, DB info
-│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth; POST /refresh-indices
+│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth, /sector-trends; POST /refresh-indices
 │   │   ├── capital_gains.py     # GET /api/v1/capital-gains/years, /api/v1/capital-gains/{fy}
 │   │   └── demo.py              # GET /api/v1/status, POST /api/v1/demo/reset
 │   └── services/
@@ -122,7 +122,7 @@ portfolio-mac-arm/
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
 │       ├── market_indicators.py  # Pure indicator functions: EMA/SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger, drawdown, vol
-│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth
+│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth/get_sector_trends
 │       ├── capital_gains.py      # FIFO matching, Indian tax rules (FY 2020-21+), CII indexation, §112A grandfathering + exemption
 │       └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── frontend/
@@ -143,7 +143,7 @@ portfolio-mac-arm/
 │       │   ├── manualAssets.ts
 │       │   ├── charts.ts
 │       │   ├── settings.ts
-│       │   ├── marketSentiment.ts # useSentimentSummary(), useSentimentSeries(days), useRefreshIndicesMutation()
+│   │   ├── marketSentiment.ts # useSentimentSummary(), useSentimentSeries(days), useMarketBreadth(), useSectorTrends(), useRefreshIndicesMutation()
 │       │   ├── capitalGains.ts  # useCapitalGainsYears(), useCapitalGains(fy)
 │       │   └── status.ts        # useAppStatus(), useResetDemoMutation()
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
@@ -165,7 +165,7 @@ portfolio-mac-arm/
 │       │   ├── Trades.tsx       # Debounced search + paginated trade list
 │       │   ├── Import.tsx       # CSV upload, import history, rollback, split-credit
 │       │   ├── Kite.tsx         # Config form, OAuth login, token status, one-click sync
-│       │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags, breadth table + ratio chart, candlestick + overlays, oscillator + volatility panels
+│   │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags banner, breadth table + ratio chart, sector trends table (CAGR + vs-benchmark, clickable trend chips), candlestick + overlays, oscillator + volatility panels
 │       │   ├── CapitalGains.tsx # Realized gains by FY: FIFO lots grouped by tax bucket, set-off, §112A exemption, attention items
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/

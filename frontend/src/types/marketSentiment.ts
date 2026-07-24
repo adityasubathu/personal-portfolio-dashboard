@@ -118,6 +118,37 @@ export interface BreadthDrawdowns {
   stress_flag: boolean
 }
 
+export interface SectorTrendPerf {
+  cagr_2y: number | null
+  cagr_5y: number | null
+  cagr_10y: number | null
+  vs_n50_2y: number | null
+  vs_n50_5y: number | null
+  vs_n50_10y: number | null
+  vs_n500_2y: number | null
+  vs_n500_5y: number | null
+  vs_n500_10y: number | null
+}
+
+export interface SectorTrendHorizon {
+  label: string
+  signals: Record<string, boolean>
+}
+
+export interface SectorTrendRow {
+  symbol: string
+  label: string
+  is_benchmark: boolean
+  trend: { short: SectorTrendHorizon; mid: SectorTrendHorizon; long: SectorTrendHorizon } | null
+  perf: SectorTrendPerf
+}
+
+export interface SectorTrends {
+  no_data?: boolean
+  as_of?: string | null
+  rows?: SectorTrendRow[]
+}
+
 export interface MarketBreadth {
   no_data?: boolean
   as_of?: string

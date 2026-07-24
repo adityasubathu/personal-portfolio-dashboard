@@ -254,6 +254,96 @@ def _segment_drawdown(dfs: dict) -> dict:
     return result
 
 
+# ── Sector trend scoring (close-only, no OHLC required) ─────────────────────
+
+SECTOR_INDICES: list[tuple[str, str]] = [
+    ("NIFTY AUTO",        "Auto"),
+    ("NIFTY BANK",        "Bank"),
+    ("NIFTY FIN SERVICE", "Fin Services"),
+    ("NIFTY FMCG",        "FMCG"),
+    ("NIFTY HEALTHCARE",  "Healthcare"),
+    ("NIFTY IT",          "IT"),
+    ("NIFTY MEDIA",       "Media"),
+    ("NIFTY METAL",       "Metal"),
+    ("NIFTY PHARMA",      "Pharma"),
+    ("NIFTY PVT BANK",    "Pvt Bank"),
+    ("NIFTY PSU BANK",    "PSU Bank"),
+    ("NIFTY REALTY",      "Realty"),
+    ("NIFTY CONSR DURBL", "Consumer Durables"),
+    ("NIFTY OIL AND GAS", "Oil & Gas"),
+    ("NIFTY MIDCAP 150",  "Midcap 150"),
+    ("NIFTY SMLCAP 250",  "Smallcap 250"),
+]
+BENCHMARKS: list[tuple[str, str]] = [
+    ("NIFTY 50",  "Nifty 50"),
+    ("NIFTY 500", "Nifty 500"),
+]
+
+
+def _sector_short(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
+    e20 = mi.ema(df, 20).iloc[-1]
+    rsi_val = mi.rsi(df).iloc[-1]
+    ret_1m = mi.rolling_return(df, 21).iloc[-1]
+    sig_ema20 = bool(pd.notna(e20) and close > float(e20))
+    sig_rsi50 = bool(pd.notna(rsi_val) and float(rsi_val) > 50)
+    sig_ret1m = bool(pd.notna(ret_1m) and float(ret_1m) > 0)
+    score = sum([sig_ema20, sig_rsi50, sig_ret1m])
+    return {
+        "label": {3: "Bullish", 2: "Leaning Bullish", 1: "Leaning Bearish", 0: "Bearish"}[score],
+        "signals": {"ema20": sig_ema20, "rsi50": sig_rsi50, "ret_1m": sig_ret1m},
+    }
+
+
+def _sector_mid(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
+    s50 = mi.sma(df, 50).iloc[-1]
+    s100 = mi.sma(df, 100).iloc[-1]
+    ret_3m = mi.rolling_return(df, 63).iloc[-1]
+    sig_sma50 = bool(pd.notna(s50) and close > float(s50))
+    sig_sma100 = bool(pd.notna(s100) and close > float(s100))
+    sig_ret3m = bool(pd.notna(ret_3m) and float(ret_3m) > 0)
+    score = sum([sig_sma50, sig_sma100, sig_ret3m])
+    return {
+        "label": {3: "Bullish", 2: "Leaning Bullish", 1: "Mixed", 0: "Bearish"}[score],
+        "signals": {"sma50": sig_sma50, "sma100": sig_sma100, "ret_3m": sig_ret3m},
+    }
+
+
+def _sector_long(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
+    s200 = mi.sma(df, 200)
+    s200_val = s200.iloc[-1]
+    slope = mi.sma_slope(s200).iloc[-1]
+    ret_1y = mi.rolling_return(df, 252).iloc[-1]
+    sig_sma200 = bool(pd.notna(s200_val) and close > float(s200_val))
+    sig_slope = slope == "rising"
+    sig_ret1y = bool(pd.notna(ret_1y) and float(ret_1y) > 0)
+    score = sum([sig_sma200, sig_slope, sig_ret1y])
+    return {
+        "label": {3: "Strong Uptrend", 2: "Uptrend Bias", 1: "Mixed", 0: "Downtrend"}[score],
+        "signals": {"sma200": sig_sma200, "sma200_slope": sig_slope, "ret_1y": sig_ret1y},
+    }
+
+
+def _cagr(df: pd.DataFrame | None, years: int) -> float | None:
+    if df is None or len(df) < 2:
+        return None
+    end = df.index[-1]
+    target_start = end - pd.DateOffset(years=years)
+    candidates = df[df.index >= target_start]
+    if candidates.empty:
+        return None
+    actual_years = (end - candidates.index[0]).days / 365.25
+    if actual_years < years * 0.75:
+        return None
+    start_price = float(candidates['close'].iloc[0])
+    end_price = float(df['close'].iloc[-1])
+    if start_price <= 0:
+        return None
+    return round(((end_price / start_price) ** (1.0 / actual_years) - 1) * 100, 1)
+
+
 # ── API-facing functions ──────────────────────────────────────────────────────
 
 async def get_sentiment_summary(db: AsyncSession) -> dict:
@@ -435,3 +525,72 @@ async def get_sentiment_series(db: AsyncSession, days: int) -> dict:
             "realized_vol_60": _s(rv60),
         },
     }
+
+
+async def get_sector_trends(db: AsyncSession) -> dict:
+    benchmark_dfs = {sym: await _load_index_df(db, sym) for sym, _ in BENCHMARKS}
+    sector_dfs = {sym: await _load_index_df(db, sym) for sym, _ in SECTOR_INDICES}
+
+    n50_df = benchmark_dfs.get("NIFTY 50")
+    n500_df = benchmark_dfs.get("NIFTY 500")
+    n50_cagr = {y: _cagr(n50_df, y) for y in (2, 5, 10)}
+    n500_cagr = {y: _cagr(n500_df, y) for y in (2, 5, 10)}
+
+    def _vs(index_cagr: float | None, base: float | None) -> float | None:
+        if index_cagr is None or base is None:
+            return None
+        return round(index_cagr - base, 1)
+
+    def _perf(df: pd.DataFrame | None, is_n50: bool = False, is_n500: bool = False) -> dict:
+        c = {y: _cagr(df, y) for y in (2, 5, 10)}
+        return {
+            "cagr_2y": c[2], "cagr_5y": c[5], "cagr_10y": c[10],
+            "vs_n50_2y":  None if is_n50  else _vs(c[2], n50_cagr[2]),
+            "vs_n50_5y":  None if is_n50  else _vs(c[5], n50_cagr[5]),
+            "vs_n50_10y": None if is_n50  else _vs(c[10], n50_cagr[10]),
+            "vs_n500_2y":  None if is_n500 else _vs(c[2], n500_cagr[2]),
+            "vs_n500_5y":  None if is_n500 else _vs(c[5], n500_cagr[5]),
+            "vs_n500_10y": None if is_n500 else _vs(c[10], n500_cagr[10]),
+        }
+
+    def _trend(df: pd.DataFrame | None) -> dict | None:
+        if df is None or len(df) < 21:
+            return None
+        return {
+            "short": _sector_short(df),
+            "mid": _sector_mid(df),
+            "long": _sector_long(df),
+        }
+
+    rows: list[dict] = []
+
+    for sym, label in BENCHMARKS:
+        df = benchmark_dfs.get(sym)
+        if df is None or len(df) < 5:
+            continue
+        rows.append({
+            "symbol": sym, "label": label, "is_benchmark": True,
+            "trend": _trend(df),
+            "perf": _perf(df, is_n50=(sym == "NIFTY 50"), is_n500=(sym == "NIFTY 500")),
+        })
+
+    for sym, label in SECTOR_INDICES:
+        df = sector_dfs.get(sym)
+        if df is None or len(df) < 5:
+            continue
+        rows.append({
+            "symbol": sym, "label": label, "is_benchmark": False,
+            "trend": _trend(df),
+            "perf": _perf(df),
+        })
+
+    if len(rows) < 2:
+        return {"no_data": True}
+
+    as_of = max(
+        (df.index[-1].strftime('%Y-%m-%d')
+         for df in [*benchmark_dfs.values(), *sector_dfs.values()]
+         if df is not None and not df.empty),
+        default=None,
+    )
+    return {"as_of": as_of, "rows": rows}

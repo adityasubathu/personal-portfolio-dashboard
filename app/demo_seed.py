@@ -62,11 +62,18 @@ _BONDS = [
 ]
 
 _INDICES = [
-    {"tradingsymbol": "NIFTY 50",         "exchange": "NSE", "name": "Nifty 50",          "ohlc_key": "NIFTY50"},
-    {"tradingsymbol": "NIFTY NEXT 50",    "exchange": "NSE", "name": "Nifty Next 50",     "ohlc_key": "NIFTYNXT50"},
-    {"tradingsymbol": "NIFTY MIDCAP 150", "exchange": "NSE", "name": "Nifty Midcap 150",  "ohlc_key": "NIFTYMIDCAP150"},
-    {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250","ohlc_key": "NIFTYSMLCAP250"},
-    {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX",          "ohlc_key": "INDIAVIX"},
+    {"tradingsymbol": "NIFTY 50",         "exchange": "NSE", "name": "Nifty 50",                 "ohlc_key": "NIFTY50"},
+    {"tradingsymbol": "NIFTY NEXT 50",    "exchange": "NSE", "name": "Nifty Next 50",            "ohlc_key": "NIFTYNXT50"},
+    {"tradingsymbol": "NIFTY MIDCAP 150", "exchange": "NSE", "name": "Nifty Midcap 150",         "ohlc_key": "NIFTYMIDCAP150"},
+    {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250",       "ohlc_key": "NIFTYSMLCAP250"},
+    {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX",                "ohlc_key": "INDIAVIX"},
+    # Sector indices — demo OHLC generated synthetically
+    {"tradingsymbol": "NIFTY 500",        "exchange": "NSE", "name": "Nifty 500",                "ohlc_key": "NIFTY500"},
+    {"tradingsymbol": "NIFTY BANK",       "exchange": "NSE", "name": "Nifty Bank",               "ohlc_key": "NIFTYBANK"},
+    {"tradingsymbol": "NIFTY IT",         "exchange": "NSE", "name": "Nifty IT",                 "ohlc_key": "NIFTYIT"},
+    {"tradingsymbol": "NIFTY PHARMA",     "exchange": "NSE", "name": "Nifty Pharma",             "ohlc_key": "NIFTYPHARMA"},
+    {"tradingsymbol": "NIFTY AUTO",       "exchange": "NSE", "name": "Nifty Auto",               "ohlc_key": "NIFTYAUTO"},
+    {"tradingsymbol": "NIFTY FMCG",       "exchange": "NSE", "name": "Nifty FMCG",              "ohlc_key": "NIFTYFMCG"},
 ]
 
 # ---------------------------------------------------------------------------

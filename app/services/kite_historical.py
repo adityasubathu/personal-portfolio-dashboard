@@ -36,11 +36,28 @@ EQUITY_TYPES = ("STOCK", "BOND", "ETF", "INDEX")
 KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
 
 INDEX_INSTRUMENTS = [
-    {"tradingsymbol": "NIFTY 50",         "exchange": "NSE", "name": "Nifty 50"},
-    {"tradingsymbol": "NIFTY NEXT 50",    "exchange": "NSE", "name": "Nifty Next 50"},
-    {"tradingsymbol": "NIFTY MIDCAP 150", "exchange": "NSE", "name": "Nifty Midcap 150"},
-    {"tradingsymbol": "NIFTY SMLCAP 250", "exchange": "NSE", "name": "Nifty Smallcap 250"},
-    {"tradingsymbol": "INDIA VIX",        "exchange": "NSE", "name": "India VIX"},
+    {"tradingsymbol": "NIFTY 50",          "exchange": "NSE", "name": "Nifty 50"},
+    {"tradingsymbol": "NIFTY NEXT 50",     "exchange": "NSE", "name": "Nifty Next 50"},
+    {"tradingsymbol": "NIFTY MIDCAP 150",  "exchange": "NSE", "name": "Nifty Midcap 150"},
+    {"tradingsymbol": "NIFTY SMLCAP 250",  "exchange": "NSE", "name": "Nifty Smallcap 250"},
+    {"tradingsymbol": "INDIA VIX",         "exchange": "NSE", "name": "India VIX"},
+    # Broad benchmark
+    {"tradingsymbol": "NIFTY 500",         "exchange": "NSE", "name": "Nifty 500"},
+    # Sectoral indices (tradingsymbols verified against Kite NSE instruments dump)
+    {"tradingsymbol": "NIFTY AUTO",        "exchange": "NSE", "name": "Nifty Auto"},
+    {"tradingsymbol": "NIFTY BANK",        "exchange": "NSE", "name": "Nifty Bank"},
+    {"tradingsymbol": "NIFTY FIN SERVICE", "exchange": "NSE", "name": "Nifty Financial Services"},
+    {"tradingsymbol": "NIFTY FMCG",        "exchange": "NSE", "name": "Nifty FMCG"},
+    {"tradingsymbol": "NIFTY HEALTHCARE",  "exchange": "NSE", "name": "Nifty Healthcare"},
+    {"tradingsymbol": "NIFTY IT",          "exchange": "NSE", "name": "Nifty IT"},
+    {"tradingsymbol": "NIFTY MEDIA",       "exchange": "NSE", "name": "Nifty Media"},
+    {"tradingsymbol": "NIFTY METAL",       "exchange": "NSE", "name": "Nifty Metal"},
+    {"tradingsymbol": "NIFTY PHARMA",      "exchange": "NSE", "name": "Nifty Pharma"},
+    {"tradingsymbol": "NIFTY PVT BANK",    "exchange": "NSE", "name": "Nifty Private Bank"},
+    {"tradingsymbol": "NIFTY PSU BANK",    "exchange": "NSE", "name": "Nifty PSU Bank"},
+    {"tradingsymbol": "NIFTY REALTY",      "exchange": "NSE", "name": "Nifty Realty"},
+    {"tradingsymbol": "NIFTY CONSR DURBL", "exchange": "NSE", "name": "Nifty Consumer Durables"},
+    {"tradingsymbol": "NIFTY OIL AND GAS", "exchange": "NSE", "name": "Nifty Oil & Gas"},
 ]
 HISTORY_START = date(2015, 1, 1)  # Kite historical data available from ~2015
 

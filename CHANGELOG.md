@@ -2,6 +2,33 @@
 
 ---
 
+## 2026-07-24 20:00 — Sector trends table: dual performance columns
+
+- `frontend/src/pages/MarketSentiment.tsx` — table now shows 6 performance columns: CAGR 2Y/5Y/10Y (always) + Excess vs benchmark 2Y/5Y/10Y (always); selector switches the benchmark between Nifty 50 and Nifty 500 instead of toggling between CAGR and comparison modes; sort keys updated to distinguish the two column groups; heatmap computed separately per group
+
+---
+
+## 2026-07-24 19:30 — Trend chip popovers
+
+- `app/services/market_sentiment.py` — `_sector_short/mid/long` now return `{label, signals}` dicts instead of bare strings; `signals` carries per-condition booleans (e.g. `ema20`, `rsi50`, `sma200_slope`)
+- `frontend/src/types/marketSentiment.ts` — added `SectorTrendHorizon` interface; updated `SectorTrendRow.trend` to use it instead of plain strings
+- `frontend/src/pages/MarketSentiment.tsx` — added `SIGNAL_LABELS` map and `TrendChip` component; clicking a Short/Mid/Long badge opens a Mantine `Popover` showing each signal with ✓/✗ pass/fail
+
+---
+
+## 2026-07-24 18:00 — Sector Indices Trends
+
+- `app/services/kite_historical.py` — added 15 sectoral indices (Auto, Bank, Fin Services, FMCG, Healthcare, IT, Media, Metal, Pharma, Pvt Bank, PSU Bank, Realty, Consumer Durables, Oil & Gas) and NIFTY 500 to `INDEX_INSTRUMENTS`
+- `app/services/market_sentiment.py` — added `SECTOR_INDICES`, `BENCHMARKS`, close-only `_sector_short/mid/long` trend scorers, `_cagr` helper, and `get_sector_trends` service function
+- `app/routers/market_sentiment.py` — added `GET /api/v1/market-sentiment/sector-trends`
+- `frontend/src/types/marketSentiment.ts` — added `SectorTrendPerf`, `SectorTrendRow`, `SectorTrends`
+- `frontend/src/api/marketSentiment.ts` — added `sentimentKeys.sectorTrends`, `useSectorTrends()`; Refresh invalidates sector-trends cache
+- `frontend/src/pages/MarketSentiment.tsx` — added `SectorTrendsTable`: mode toggle (CAGR / vs Nifty 50 / vs Nifty 500), sortable horizon columns, per-column heatmap, benchmark rows pinned at top, trend badges, info popover; wired below Volatility section
+- `app/demo_seed.py` — added NIFTY 500 + Bank, IT, Pharma, Auto, FMCG to `_INDICES`
+- `data/demo/ohlc/` — generated synthetic OHLC for NIFTY500, NIFTYBANK, NIFTYIT, NIFTYPHARMA, NIFTYAUTO, NIFTYFMCG
+
+---
+
 ## 2026-07-24 17:30 — Fix session
 
 - `app/services/capital_gains.py` — added `intl_fund`, `gold_etf`, `gold_mf` asset categories with correct post-Budget 2024 tax rules: international MFs and gold MFs (FoF/unlisted) use 24m LTCG threshold at 12.5% with no §112A exemption; gold ETFs (listed) use 12m LTCG threshold at 12.5%; all three fall back to pre-Budget 2024 §50AA / indexed debt rules when sold before 23 Jul 2024

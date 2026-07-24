@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Popover,
+  ScrollArea,
   SegmentedControl,
   Stack,
   Table,
@@ -17,10 +18,11 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-react'
-import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation } from '../api/marketSentiment'
+import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
-import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow } from '../types/marketSentiment'
+import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ const EXPLANATIONS = {
   segmentDrawdown: `How far each segment has fallen from its own 1-year rolling high (252 trading days).\n\n0% = the segment is currently at a 52-week high. Larger negative values = deeper correction from recent peak.\n\nThe orange "Smallcap drawdown disproportionate" flag appears when the Small250 drawdown is more than 2.5× the Nifty50 drawdown and greater than 5% absolute — a sign that risk appetite has specifically dried up at the smaller end of the market, even if large-caps are holding up.`,
 
   breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to the Nifty 50 over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while Nifty50 is rising, that is the chart version of a Narrow Rally: the headline index propped up by a handful of large-caps while the broader market weakens.`,
+
+  sectorTrends: `Trend labels for each sectoral index, scored on close-only signals:\n\n• Short — EMA20 position, RSI14 > 50, 1-month return positive (3 signals → Bullish … 0 → Bearish)\n• Mid — SMA50/100 position, 3-month return positive\n• Long — SMA200 position, SMA200 slope rising, 1-year return positive\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
 }
 
 function ChartInfo({ text }: { text: string }) {
@@ -506,6 +510,208 @@ const OVERLAY_DEFS = [
 
 type OverlayKey = typeof OVERLAY_DEFS[number]['key']
 
+// ── Sector Trends Table ───────────────────────────────────────────────────────
+
+const SIGNAL_LABELS: Record<string, string> = {
+  ema20:       'Close > EMA(20)',
+  rsi50:       'RSI(14) > 50',
+  ret_1m:      '1-month return > 0',
+  sma50:       'Close > SMA(50)',
+  sma100:      'Close > SMA(100)',
+  ret_3m:      '3-month return > 0',
+  sma200:      'Close > SMA(200)',
+  sma200_slope:'SMA(200) slope rising',
+  ret_1y:      '1-year return > 0',
+}
+
+function TrendChip({ horizon }: { horizon: { label: string; signals: Record<string, boolean> } }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover opened={open} onChange={setOpen} withArrow shadow="md" width={230} position="bottom">
+      <Popover.Target>
+        <Badge
+          size="xs"
+          color={trendColor(horizon.label)}
+          variant="light"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setOpen(o => !o)}
+        >
+          {horizon.label}
+        </Badge>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap={4}>
+          {Object.entries(horizon.signals).map(([key, passed]) => (
+            <Group key={key} gap={6} wrap="nowrap">
+              <Text size="xs" c={passed ? 'green' : 'red'} fw={600}>{passed ? '✓' : '✗'}</Text>
+              <Text size="xs" c={passed ? undefined : 'dimmed'}>{SIGNAL_LABELS[key] ?? key}</Text>
+            </Group>
+          ))}
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
+
+type SectorBench = 'vs_n50' | 'vs_n500'
+type SortKey = 'cagr_2y' | 'cagr_5y' | 'cagr_10y' | 'vs_2y' | 'vs_5y' | 'vs_10y' | null
+
+function cagrVal(row: SectorTrendRow, horizon: '2y' | '5y' | '10y'): number | null {
+  return row.perf[`cagr_${horizon}`]
+}
+
+function vsVal(row: SectorTrendRow, bench: SectorBench, horizon: '2y' | '5y' | '10y'): number | null {
+  return bench === 'vs_n50' ? row.perf[`vs_n50_${horizon}`] : row.perf[`vs_n500_${horizon}`]
+}
+
+function rowSortVal(row: SectorTrendRow, key: SortKey, bench: SectorBench): number {
+  if (!key) return 0
+  if (key === 'cagr_2y') return cagrVal(row, '2y') ?? -Infinity
+  if (key === 'cagr_5y') return cagrVal(row, '5y') ?? -Infinity
+  if (key === 'cagr_10y') return cagrVal(row, '10y') ?? -Infinity
+  if (key === 'vs_2y') return vsVal(row, bench, '2y') ?? -Infinity
+  if (key === 'vs_5y') return vsVal(row, bench, '5y') ?? -Infinity
+  return vsVal(row, bench, '10y') ?? -Infinity
+}
+
+function SectorTrendsTable() {
+  const { data } = useSectorTrends()
+  const [bench, setBench] = usePersistentState<SectorBench>('sector-trends-bench', 'vs_n50')
+  const [sortKey, setSortKey] = useState<SortKey>(null)
+  const [sortAsc, setSortAsc] = useState(false)
+
+  if (!data || data.no_data || !data.rows || data.rows.length < 2) return null
+
+  const benchmarks = data.rows.filter(r => r.is_benchmark)
+  const sectors = data.rows.filter(r => !r.is_benchmark)
+
+  const sorted = sortKey
+    ? [...sectors].sort((a, b) => {
+        const av = rowSortVal(a, sortKey, bench)
+        const bv = rowSortVal(b, sortKey, bench)
+        return sortAsc ? av - bv : bv - av
+      })
+    : sectors
+
+  const allRows = [...benchmarks, ...sorted]
+
+  // Per-column min/max for heatmap (sector rows only), 3 CAGR cols + 3 vs cols
+  const horizons = ['2y', '5y', '10y'] as const
+  const cagrColVals = horizons.map(h => sectors.map(r => cagrVal(r, h)).filter((v): v is number => v !== null))
+  const vsColVals   = horizons.map(h => sectors.map(r => vsVal(r, bench, h)).filter((v): v is number => v !== null))
+  const cagrMin = cagrColVals.map(vs => vs.length ? Math.min(...vs) : null)
+  const cagrMax = cagrColVals.map(vs => vs.length ? Math.max(...vs) : null)
+  const vsMin   = vsColVals.map(vs => vs.length ? Math.min(...vs) : null)
+  const vsMax   = vsColVals.map(vs => vs.length ? Math.max(...vs) : null)
+
+  function handleSort(key: SortKey) {
+    if (!key) return
+    if (sortKey === key) setSortAsc(a => !a)
+    else { setSortKey(key); setSortAsc(false) }
+  }
+
+  function sortInd(key: SortKey) {
+    if (sortKey !== key) return ' ↕'
+    return sortAsc ? ' ↑' : ' ↓'
+  }
+
+  const benchLabel = bench === 'vs_n50' ? 'Nifty 50' : 'Nifty 500'
+
+  const thStyle: React.CSSProperties = { textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
+  const tdRight: React.CSSProperties = { textAlign: 'right' }
+  const subHd: React.CSSProperties = { textAlign: 'center', color: 'var(--mantine-color-dimmed)', fontWeight: 400, fontSize: 'var(--mantine-font-size-xs)' }
+
+  return (
+    <Box px={128}>
+      <Group justify="space-between" align="center" mb="xs" wrap="wrap" gap="xs">
+        <Group gap={6} align="center">
+          <Text fw={600}>Sector Trends</Text>
+          {data.as_of && <Text size="xs" c="dimmed">as of {data.as_of}</Text>}
+          <ChartInfo text={EXPLANATIONS.sectorTrends} />
+        </Group>
+        <SegmentedControl
+          size="xs"
+          value={bench}
+          onChange={v => { setBench(v as SectorBench); setSortKey(null) }}
+          data={[
+            { value: 'vs_n50',  label: 'vs Nifty 50' },
+            { value: 'vs_n500', label: 'vs Nifty 500' },
+          ]}
+        />
+      </Group>
+      <ScrollArea>
+        <Table withTableBorder withColumnBorders fz="sm" style={{ minWidth: 820 }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Index</Table.Th>
+              <Table.Th style={{ textAlign: 'center' }}>Short</Table.Th>
+              <Table.Th style={{ textAlign: 'center' }}>Mid</Table.Th>
+              <Table.Th style={{ textAlign: 'center' }}>Long</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</Table.Th>
+              <Table.Th style={thStyle} onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</Table.Th>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Th colSpan={4} />
+              <Table.Th colSpan={3} style={subHd}>Annualised CAGR</Table.Th>
+              <Table.Th colSpan={3} style={subHd}>Excess vs {benchLabel} (pp)</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {allRows.map((row, idx) => {
+              const isBench = row.is_benchmark
+              const sepAfterBench = !isBench && idx > 0 && allRows[idx - 1].is_benchmark
+              return (
+                <Table.Tr
+                  key={row.symbol}
+                  style={{
+                    fontWeight: isBench ? 600 : undefined,
+                    borderTop: sepAfterBench ? '2px solid var(--mantine-color-gray-3)' : undefined,
+                  }}
+                >
+                  <Table.Td>
+                    <Text size="sm" fw={isBench ? 600 : undefined}>{row.label}</Text>
+                  </Table.Td>
+                  {(['short', 'mid', 'long'] as const).map(h => (
+                    <Table.Td key={h} style={{ textAlign: 'center' }}>
+                      {row.trend ? (
+                        <TrendChip horizon={row.trend[h]} />
+                      ) : <Text c="dimmed" size="xs">—</Text>}
+                    </Table.Td>
+                  ))}
+                  {horizons.map((h, ci) => {
+                    const v = cagrVal(row, h)
+                    const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci])
+                    const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci])
+                    return (
+                      <Table.Td key={`cagr_${h}`} style={{ ...tdRight, background: bg, color: fg }}>
+                        {v != null ? pct(v, 1) : <Text c="dimmed" size="xs" component="span">—</Text>}
+                      </Table.Td>
+                    )
+                  })}
+                  {horizons.map((h, ci) => {
+                    const v = vsVal(row, bench, h)
+                    const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci])
+                    const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci])
+                    return (
+                      <Table.Td key={`vs_${h}`} style={{ ...tdRight, background: bg, color: fg }}>
+                        {v != null ? pct(v, 1, true) : <Text c="dimmed" size="xs" component="span">—</Text>}
+                      </Table.Td>
+                    )
+                  })}
+                </Table.Tr>
+              )
+            })}
+          </Table.Tbody>
+        </Table>
+      </ScrollArea>
+    </Box>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function MarketSentiment() {
@@ -788,6 +994,9 @@ export function MarketSentiment() {
           </Stack>
         </>
       )}
+
+      <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Sector Trends</Title>} labelPosition="center" />
+      <SectorTrendsTable />
     </Stack>
   )
 }
