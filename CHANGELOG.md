@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-07-24 21:00 — Sector trends table polish
+
+- `frontend/src/pages/MarketSentiment.tsx` — Nifty Bank, Midcap 150, Smallcap 250 pinned below benchmarks in that order; remaining sectors follow
+- `frontend/src/pages/MarketSentiment.tsx` — black 2px dividers separate the three column groups (Trends | CAGR | Excess CAGR vs benchmark) across header and all body rows
+- `frontend/src/pages/MarketSentiment.tsx` — comparison column group header renamed to "Excess CAGR vs … (pp)" for clarity
+
+---
+
+## 2026-07-24 20:30 — Sector trends table polish
+
+- `frontend/src/pages/MarketSentiment.tsx` — Nifty Bank, Midcap 150, Smallcap 250 pinned below benchmarks in that order; remaining sectors follow sorted below
+- `frontend/src/pages/MarketSentiment.tsx` — column group header renamed from "Excess vs … (pp)" to "Excess CAGR vs … (pp)" for clarity
+
+---
+
 ## 2026-07-24 20:00 — Sector trends table: dual performance columns
 
 - `frontend/src/pages/MarketSentiment.tsx` — table now shows 6 performance columns: CAGR 2Y/5Y/10Y (always) + Excess vs benchmark 2Y/5Y/10Y (always); selector switches the benchmark between Nifty 50 and Nifty 500 instead of toggling between CAGR and comparison modes; sort keys updated to distinguish the two column groups; heatmap computed separately per group

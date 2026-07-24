@@ -582,8 +582,10 @@ function SectorTrendsTable() {
 
   if (!data || data.no_data || !data.rows || data.rows.length < 2) return null
 
+  const PINNED = ['NIFTY BANK', 'NIFTY MIDCAP 150', 'NIFTY SMLCAP 250']
   const benchmarks = data.rows.filter(r => r.is_benchmark)
-  const sectors = data.rows.filter(r => !r.is_benchmark)
+  const pinned = PINNED.map(sym => data.rows!.find(r => r.symbol === sym)).filter(Boolean) as typeof data.rows
+  const sectors = data.rows.filter(r => !r.is_benchmark && !PINNED.includes(r.symbol))
 
   const sorted = sortKey
     ? [...sectors].sort((a, b) => {
@@ -593,12 +595,13 @@ function SectorTrendsTable() {
       })
     : sectors
 
-  const allRows = [...benchmarks, ...sorted]
+  const allRows = [...benchmarks, ...pinned, ...sorted]
 
-  // Per-column min/max for heatmap (sector rows only), 3 CAGR cols + 3 vs cols
+  // Per-column min/max for heatmap (non-benchmark rows only), 3 CAGR cols + 3 vs cols
+  const nonBench = [...pinned, ...sectors]
   const horizons = ['2y', '5y', '10y'] as const
-  const cagrColVals = horizons.map(h => sectors.map(r => cagrVal(r, h)).filter((v): v is number => v !== null))
-  const vsColVals   = horizons.map(h => sectors.map(r => vsVal(r, bench, h)).filter((v): v is number => v !== null))
+  const cagrColVals = horizons.map(h => nonBench.map(r => cagrVal(r, h)).filter((v): v is number => v !== null))
+  const vsColVals   = horizons.map(h => nonBench.map(r => vsVal(r, bench, h)).filter((v): v is number => v !== null))
   const cagrMin = cagrColVals.map(vs => vs.length ? Math.min(...vs) : null)
   const cagrMax = cagrColVals.map(vs => vs.length ? Math.max(...vs) : null)
   const vsMin   = vsColVals.map(vs => vs.length ? Math.min(...vs) : null)
@@ -619,6 +622,7 @@ function SectorTrendsTable() {
 
   const thStyle: React.CSSProperties = { textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
   const tdRight: React.CSSProperties = { textAlign: 'right' }
+  const groupDivider = '2px solid black'
   const subHd: React.CSSProperties = { textAlign: 'center', color: 'var(--mantine-color-dimmed)', fontWeight: 400, fontSize: 'var(--mantine-font-size-xs)' }
 
   return (
@@ -647,17 +651,17 @@ function SectorTrendsTable() {
               <Table.Th style={{ textAlign: 'center' }}>Short</Table.Th>
               <Table.Th style={{ textAlign: 'center' }}>Mid</Table.Th>
               <Table.Th style={{ textAlign: 'center' }}>Long</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</Table.Th>
+              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</Table.Th>
               <Table.Th style={thStyle} onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</Table.Th>
               <Table.Th style={thStyle} onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</Table.Th>
+              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</Table.Th>
               <Table.Th style={thStyle} onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</Table.Th>
               <Table.Th style={thStyle} onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</Table.Th>
             </Table.Tr>
             <Table.Tr>
               <Table.Th colSpan={4} />
-              <Table.Th colSpan={3} style={subHd}>Annualised CAGR</Table.Th>
-              <Table.Th colSpan={3} style={subHd}>Excess vs {benchLabel} (pp)</Table.Th>
+              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Annualised CAGR</Table.Th>
+              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Excess CAGR vs {benchLabel} (pp)</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -687,7 +691,7 @@ function SectorTrendsTable() {
                     const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci])
                     return (
-                      <Table.Td key={`cagr_${h}`} style={{ ...tdRight, background: bg, color: fg }}>
+                      <Table.Td key={`cagr_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
                         {v != null ? pct(v, 1) : <Text c="dimmed" size="xs" component="span">—</Text>}
                       </Table.Td>
                     )
@@ -697,7 +701,7 @@ function SectorTrendsTable() {
                     const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci])
                     return (
-                      <Table.Td key={`vs_${h}`} style={{ ...tdRight, background: bg, color: fg }}>
+                      <Table.Td key={`vs_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
                         {v != null ? pct(v, 1, true) : <Text c="dimmed" size="xs" component="span">—</Text>}
                       </Table.Td>
                     )
