@@ -4,6 +4,12 @@
 
 ## 2026-07-25 — Fix session
 
+- `frontend/src/pages/MarketSentiment.tsx` — Momentum column width increased from 220→260px; Volatility (implied) column reduced from 260→220px to prevent long-term row momentum text wrapping
+
+---
+
+## 2026-07-25 — Fix session
+
 - `frontend/src/components/LwChart.tsx` — added `priceScaleWidth` prop (sets `rightPriceScale.minimumWidth`) and `onPriceScaleWidth` callback (measures actual rendered right price scale `<td>` width via DOM after each data load)
 - `frontend/src/pages/MarketSentiment.tsx` — all 7 charts report their natural price scale width; parent tracks the max and feeds it back as `priceScaleWidth`, forcing all scales to the same width so x-axes align exactly
 
