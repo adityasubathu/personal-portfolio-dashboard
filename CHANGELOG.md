@@ -4,8 +4,8 @@
 
 ## 2026-07-25 — Fix session
 
-- `frontend/src/components/LwChart.tsx` — added `priceScaleWidth` prop; sets `rightPriceScale.minimumWidth` so all charts can share a fixed axis width
-- `frontend/src/pages/MarketSentiment.tsx` — all 7 `LwChart` instances given `priceScaleWidth={60}` so date axes align across price, oscillator, and volatility charts
+- `frontend/src/components/LwChart.tsx` — added `priceScaleWidth` prop; sets `rightPriceScale.minimumWidth` at chart creation and re-applies via `priceScale('right').applyOptions()` after data loads so the override takes effect post-layout
+- `frontend/src/pages/MarketSentiment.tsx` — all 7 `LwChart` instances given `priceScaleWidth={80}` (80px safely exceeds the natural width of any chart on the page including the 5-digit price scale) so date axes align
 
 ---
 

@@ -395,7 +395,12 @@ export function LwChart({
         markersPluginRef.current = createSeriesMarkers(s, toMarkers(markers))
       }
     }
-  }, [candles, line, markers, seriesType])
+
+    // Re-apply minimumWidth after data is set so it overrides the natural scale width
+    if (priceScaleWidth != null) {
+      chartRef.current?.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
+    }
+  }, [candles, line, markers, seriesType, priceScaleWidth])
 
   // Add compare series
   useEffect(() => {
