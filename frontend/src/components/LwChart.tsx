@@ -38,6 +38,7 @@ interface LwChartProps {
   showOhlcInfo?: boolean
   hideControls?: boolean
   hideMainTag?: boolean
+  priceScaleWidth?: number
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -139,6 +140,7 @@ export function LwChart({
   showOhlcInfo = false,
   hideControls = false,
   hideMainTag = false,
+  priceScaleWidth,
 }: LwChartProps) {
   const { privacyMode } = usePrivacy()
   const privacyModeRef = useRef(privacyMode)
@@ -181,7 +183,7 @@ export function LwChart({
         horzLines: { color: '#e5e7eb', style: LineStyle.Dotted },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#d1d5db' },
+      rightPriceScale: { borderColor: '#d1d5db', ...(priceScaleWidth != null ? { minimumWidth: priceScaleWidth } : {}) },
       timeScale: { borderColor: '#d1d5db', timeVisible: true },
       localization: {
         priceFormatter: privacyModeRef.current ? () => '•••' : (priceFormatter ?? undefined),

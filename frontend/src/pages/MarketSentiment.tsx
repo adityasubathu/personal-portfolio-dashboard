@@ -844,6 +844,7 @@ export function MarketSentiment() {
               persistKey="market-sentiment-breadth-ratio"
               defaultHeight={180}
               priceFormatter={(p) => p.toFixed(1)}
+              priceScaleWidth={60}
               hideControls
             />
           </Box>
@@ -901,6 +902,7 @@ export function MarketSentiment() {
             persistKey="market-sentiment-price"
             defaultHeight={440}
             priceFormatter={numFormatter}
+            priceScaleWidth={60}
             showOhlcInfo
             hideMainTag
           />
@@ -926,6 +928,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-rsi"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -941,6 +944,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-macd"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -956,6 +960,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-adx"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -975,6 +980,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-atr"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -992,6 +998,7 @@ export function MarketSentiment() {
                 persistKey="market-sentiment-vol"
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
+                priceScaleWidth={60}
                 hideControls
               />
             </Box>
