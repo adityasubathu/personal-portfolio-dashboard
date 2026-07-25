@@ -39,6 +39,7 @@ interface LwChartProps {
   hideControls?: boolean
   hideMainTag?: boolean
   priceScaleWidth?: number
+  onPriceScaleWidth?: (width: number) => void
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -141,6 +142,7 @@ export function LwChart({
   hideControls = false,
   hideMainTag = false,
   priceScaleWidth,
+  onPriceScaleWidth,
 }: LwChartProps) {
   const { privacyMode } = usePrivacy()
   const privacyModeRef = useRef(privacyMode)
@@ -396,11 +398,24 @@ export function LwChart({
       }
     }
 
-    // Re-apply minimumWidth after data is set so it overrides the natural scale width
-    if (priceScaleWidth != null) {
-      chartRef.current?.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
-    }
-  }, [candles, line, markers, seriesType, priceScaleWidth])
+    // After the browser lays out the chart, measure and/or enforce price scale width
+    requestAnimationFrame(() => {
+      const chart = chartRef.current
+      const container = containerRef.current
+      if (!chart || !container) return
+
+      if (priceScaleWidth != null) {
+        chart.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
+      }
+
+      if (onPriceScaleWidth) {
+        // lightweight-charts renders a <table> where the last <td> of the first <tr>
+        // is the right price scale cell — measure its actual rendered width
+        const td = container.querySelector('table tr td:last-child') as HTMLElement | null
+        if (td) onPriceScaleWidth(td.offsetWidth)
+      }
+    })
+  }, [candles, line, markers, seriesType, priceScaleWidth, onPriceScaleWidth])
 
   // Add compare series
   useEffect(() => {

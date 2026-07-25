@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useCallback } from 'react'
 import {
   ActionIcon,
   Alert,
@@ -723,6 +723,16 @@ export function MarketSentiment() {
   const { data: summary, isLoading: summaryLoading } = useSentimentSummary()
   const { data: breadthData } = useMarketBreadth()
 
+  // Sync price scale widths across all charts so x-axes align perfectly.
+  // Each chart reports its natural rendered width; we enforce the max on all.
+  const [chartPriceScaleWidth, setChartPriceScaleWidth] = useState<number | undefined>(undefined)
+  const reportedScaleWidths = useRef<Record<string, number>>({})
+  const reportScaleWidth = useCallback((key: string, w: number) => {
+    reportedScaleWidths.current[key] = w
+    const max = Math.max(...Object.values(reportedScaleWidths.current))
+    setChartPriceScaleWidth(prev => (max !== prev ? max : prev))
+  }, [])
+
   const [rangeLabel, setRangeLabel] = usePersistentState<string>('market-sentiment-range', '1Y')
   const [enabledOverlays, setEnabledOverlays] = usePersistentState<OverlayKey[]>(
     'market-sentiment-overlays',
@@ -842,9 +852,10 @@ export function MarketSentiment() {
               label="Mid150 / Nifty50"
               compareLines={[{ label: 'Small250 / Nifty50', color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250_nifty50) }]}
               persistKey="market-sentiment-breadth-ratio"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('breadth-ratio', w)}
               defaultHeight={180}
               priceFormatter={(p) => p.toFixed(1)}
-              priceScaleWidth={60}
               hideControls
             />
           </Box>
@@ -900,9 +911,10 @@ export function MarketSentiment() {
             candles={filteredCandles}
             compareLines={compareLines}
             persistKey="market-sentiment-price"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('price', w)}
             defaultHeight={440}
             priceFormatter={numFormatter}
-            priceScaleWidth={60}
             showOhlcInfo
             hideMainTag
           />
@@ -926,9 +938,10 @@ export function MarketSentiment() {
                 label="Daily RSI"
                 compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
                 persistKey="market-sentiment-rsi"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('rsi', w)}
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
-                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -942,9 +955,10 @@ export function MarketSentiment() {
                 seriesType="histogram"
                 line={oscData.macd_hist}
                 persistKey="market-sentiment-macd"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('macd', w)}
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
-                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -958,9 +972,10 @@ export function MarketSentiment() {
                 seriesType="line"
                 line={oscData.adx}
                 persistKey="market-sentiment-adx"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('adx', w)}
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
-                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -978,9 +993,10 @@ export function MarketSentiment() {
                 seriesType="line"
                 line={oscData.atr_pct}
                 persistKey="market-sentiment-atr"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('atr', w)}
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
-                priceScaleWidth={60}
                 hideControls
               />
             </Box>
@@ -996,9 +1012,10 @@ export function MarketSentiment() {
                 label="RV 20"
                 compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
                 persistKey="market-sentiment-vol"
+              priceScaleWidth={chartPriceScaleWidth}
+              onPriceScaleWidth={(w) => reportScaleWidth('vol', w)}
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
-                priceScaleWidth={60}
                 hideControls
               />
             </Box>
