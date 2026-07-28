@@ -256,7 +256,7 @@ function OverviewTab() {
               {isAnchored ? (
                 <>Equity allocation targets <Text component="span" size="xs" fw={400}>(% of domestic equity)</Text></>
               ) : (
-                <>Allocation targets <Text component="span" size="xs" fw={400}>(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund)</Text></>
+                <>Allocation targets <Text component="span" size="xs" fw={400}>(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund & cash)</Text></>
               )}
             </Text>
             {modeToggle}
