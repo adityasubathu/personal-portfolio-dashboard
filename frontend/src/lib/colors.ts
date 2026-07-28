@@ -11,6 +11,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Gold': '#fcba03',
   'Silver': '#a8a9ad',
   'Debt': '#d926a7',
+  'Emergency Fund': '#DEA9D5',
   'Cash': '#8cdcae',
   'Other': '#e0291f',
 }

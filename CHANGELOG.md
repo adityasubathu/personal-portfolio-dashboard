@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-07-28 — Fix session
+
+- `frontend/src/pages/Breakdown.tsx` — Asset Allocation donut: merged Equity - Foreign into Equity, merged Equity - Arbitrage into Debt, split Emergency Fund out of Debt as its own segment; Category Breakdown donut: Emergency Fund carved out of Debt and shown as a separate segment; both charts use `excluded.emergency_fund` from `useAssetClassComparison`
+- `frontend/src/lib/colors.ts` — added Emergency Fund color #DEA9D5
+- `frontend/src/pages/Breakdown.tsx` — Asset Allocation donut order: Equity, Debt, Precious Metals, Emergency Fund, Cash, Real Estate Trust, Others; Category Breakdown donut order: Large, Mid, Small, Foreign, Debt, Equity Arbitrage, Gold, Silver, Emergency Fund, Cash, Real Estate Trust, Others
+- `frontend/src/pages/Breakdown.tsx` — fixed Others bucket inflating by 21L: added Unclassified Equity to CAT_ORDER, fixed fallback index bug (was using filtered-array index against original chart.values)
+
+---
+
 ## 2026-07-28 — Free float allocation overhaul
 
 - `alembic/versions/f6a1b2c3d4e5_allocation_target_mode.py` (new) — migration adds `alloc_mode` column to `allocation_targets`, changes unique constraint to `(category, alloc_mode)`, seeds free_float defaults (Large 26%, Mid 18.2%, Small 7.8%, Foreign 13%, Debt 25%, PM 10%)

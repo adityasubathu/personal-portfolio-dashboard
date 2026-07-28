@@ -146,6 +146,7 @@ function AssetClassTargetsSection() {
 
 function OverviewTab() {
   const { data: chart } = useBreakdownChart()
+  const { data: ac } = useAssetClassComparison()
   const [mode, setMode] = usePersistentState<'anchored' | 'free_float'>('allocationMode', 'anchored')
   const { data: comparison, refetch: refetchComp } = useAllocationComparison(mode)
   const saveMut = useSaveAllocationTargetsMutation()
@@ -178,25 +179,46 @@ function OverviewTab() {
 
   if (!chart) return <Text size="sm" c="dimmed">Loading…</Text>
 
-  // High-level allocation aggregation for donut charts
+  // High-level allocation donut — order: Equity, Debt, Precious Metals, Emergency Fund, Cash, Real Estate Trust, Others
+  const emergencyFund = ac?.excluded.emergency_fund ?? 0
   const valueMap = Object.fromEntries(chart.labels.map((l, i) => [l, chart.values[i]]))
-  const hlGroups: Record<string, string[]> = {
-    'Equity': ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity'],
-    'Equity - Foreign': ['Equity - Foreign'],
-    'Equity - Arbitrage': ['Equity - Arbitrage'],
-    'Real Estate Trust': ['Real Estate Trust'],
-    'Precious Metals': ['Gold', 'Silver'],
-    'Debt': ['Debt'],
-    'Cash': ['Cash'],
-  }
-  const coveredCats = new Set(Object.values(hlGroups).flat())
-  const hlEntries = Object.entries(hlGroups)
-    .map(([group, cats]) => [group, cats.reduce((s, c) => s + (valueMap[c] ?? 0), 0)] as [string, number])
+  const hlGroups: Array<[string, string[]]> = [
+    ['Equity',          ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign']],
+    ['Debt',            ['Debt', 'Equity - Arbitrage']],
+    ['Precious Metals', ['Gold', 'Silver']],
+    ['Emergency Fund',  []],
+    ['Cash',            ['Cash']],
+    ['Real Estate Trust', ['Real Estate Trust']],
+  ]
+  const coveredCats = new Set(hlGroups.flatMap(([, cats]) => cats))
+  const hlEntries: [string, number][] = hlGroups
+    .map(([group, cats]) => {
+      let v = cats.reduce((s, c) => s + (valueMap[c] ?? 0), 0)
+      if (group === 'Debt') v = Math.max(0, v - emergencyFund)
+      if (group === 'Emergency Fund') v = emergencyFund
+      return [group, v] as [string, number]
+    })
     .filter(([, v]) => v > 0)
   const otherSum = chart.labels.reduce((s, l, i) => coveredCats.has(l) ? s : s + chart.values[i], 0)
   if (otherSum > 0) hlEntries.push(['Other', otherSum])
   const hlLabels = hlEntries.map(([l]) => l)
   const hlValues = hlEntries.map(([, v]) => v)
+
+  // Category breakdown donut — order: Large, Mid, Small, Foreign, Debt, Equity Arbitrage, Gold, Silver, Emergency Fund, Cash, Real Estate Trust, Others
+  const CAT_ORDER = ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign', 'Debt', 'Equity - Arbitrage', 'Gold', 'Silver', 'Emergency Fund', 'Cash', 'Real Estate Trust']
+  const rawCatMap = Object.fromEntries(chart.labels.map((l, i) => [l, chart.values[i]]))
+  rawCatMap['Emergency Fund'] = emergencyFund
+  rawCatMap['Debt'] = Math.max(0, (rawCatMap['Debt'] ?? 0) - emergencyFund)
+  const coveredCatOrder = new Set(CAT_ORDER)
+  const catEntries: [string, number][] = [
+    ...CAT_ORDER.map((l) => [l, rawCatMap[l] ?? 0] as [string, number]).filter(([, v]) => v > 0),
+    ...chart.labels
+      .filter((l) => !coveredCatOrder.has(l))
+      .map((l) => [l, rawCatMap[l] ?? 0] as [string, number])
+      .filter(([, v]) => v > 0),
+  ]
+  const catLabels = catEntries.map(([l]) => l)
+  const catValues = catEntries.map(([, v]) => v)
 
   const modeToggle = (
     <SegmentedControl
@@ -220,7 +242,7 @@ function OverviewTab() {
           </Stack>
           <Stack gap={4}>
             <Text fw={600} size="sm">Category Breakdown</Text>
-            <DonutChart labels={chart.labels} values={chart.values} total={chart.total} />
+            <DonutChart labels={catLabels} values={catValues} total={chart.total} />
           </Stack>
         </Group>
       )}
