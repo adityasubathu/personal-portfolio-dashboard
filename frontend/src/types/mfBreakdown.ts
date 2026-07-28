@@ -56,6 +56,7 @@ export interface AllocationComparison {
   current_equity: number
   invested_equity: number
   domestic_equity: number
+  pool?: number
   mode: 'anchored' | 'free_float'
 }
 

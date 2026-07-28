@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-07-28 — Free float allocation overhaul
+
+- `alembic/versions/f6a1b2c3d4e5_allocation_target_mode.py` (new) — migration adds `alloc_mode` column to `allocation_targets`, changes unique constraint to `(category, alloc_mode)`, seeds free_float defaults (Large 26%, Mid 18.2%, Small 7.8%, Foreign 13%, Debt 25%, PM 10%)
+- `app/models/allocation_target.py` — added `alloc_mode` field; unique constraint now covers `(category, alloc_mode)`; renamed from `mode` to avoid PostgreSQL reserved-word conflict
+- `app/services/allocation.py` — `DEFAULT_TARGETS` split into anchored/free_float dicts; `get_allocation_targets` and `save_allocation_targets` accept `mode`; free_float comparison uses `investable_total` (pool) as denominator and returns Debt + Precious Metals rows in fixed order; fixed `get_asset_class_comparison` to filter `AllocationTarget` by `alloc_mode='anchored'` to avoid MultipleResultsFound after seeding
+- `app/routers/mf_breakdown.py` — `/allocation-targets` GET/POST now accept `mode` param
+- `frontend/src/types/mfBreakdown.ts` — added optional `pool` field to `AllocationComparison`
+- `frontend/src/api/mfBreakdown.ts` — `useSaveAllocationTargetsMutation` now takes `{ targets, mode }` and posts `mode` in form
+- `frontend/src/pages/Breakdown.tsx` — free float mode shows single unified table (Large, Mid, Small, Foreign, Debt, PM all as % of pool); hides separate `AssetClassTargetsSection`; mode toggle clears local target edits
+
+---
+
 ## 2026-07-25 — Fix session
 
 - `frontend/src/pages/MarketSentiment.tsx` — Momentum column width increased from 220→260px; Volatility (implied) column reduced from 260→220px to prevent long-term row momentum text wrapping

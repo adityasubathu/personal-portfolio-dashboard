@@ -122,14 +122,15 @@ async def allocation_comparison(mode: str = "anchored", db: AsyncSession = Depen
 
 
 @router.get("/allocation-targets")
-async def allocation_targets(db: AsyncSession = Depends(get_db)):
-    targets = await get_allocation_targets(db)
+async def allocation_targets(mode: str = "anchored", db: AsyncSession = Depends(get_db)):
+    targets = await get_allocation_targets(db, mode=mode)
     return JSONResponse(targets)
 
 
 @router.post("/allocation-targets")
 async def update_allocation_targets(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
+    mode = form.get("mode", "anchored")
     targets: dict[str, float] = {}
     for key, val in form.items():
         if key.startswith("target_"):
@@ -138,7 +139,7 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
                 targets[cat] = float(val)
             except ValueError:
                 continue
-    await save_allocation_targets(db, targets)
+    await save_allocation_targets(db, targets, mode=str(mode))
     return {"ok": True}
 
 

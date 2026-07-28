@@ -223,33 +223,49 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
     }
 
 
-DEFAULT_TARGETS = {
-    "Large Cap": 50.0,
-    "Mid Cap": 30.0,
-    "Small Cap": 20.0,
-    "Equity - Foreign": 0.0,
+DEFAULT_TARGETS: dict[str, dict[str, float]] = {
+    "anchored": {
+        "Large Cap": 50.0,
+        "Mid Cap": 30.0,
+        "Small Cap": 20.0,
+        "Equity - Foreign": 0.0,
+    },
+    "free_float": {
+        "Large Cap": 26.0,
+        "Mid Cap": 18.2,
+        "Small Cap": 7.8,
+        "Equity - Foreign": 13.0,
+        "Debt": 25.0,
+        "Precious Metals": 10.0,
+    },
 }
 
 
-async def get_allocation_targets(db: AsyncSession) -> dict[str, float]:
-    rows = (await db.execute(select(AllocationTarget))).scalars().all()
+async def get_allocation_targets(db: AsyncSession, mode: str = "anchored") -> dict[str, float]:
+    rows = (await db.execute(
+        select(AllocationTarget).where(AllocationTarget.alloc_mode == mode)
+    )).scalars().all()
     if not rows:
-        return dict(DEFAULT_TARGETS)
+        return dict(DEFAULT_TARGETS.get(mode, DEFAULT_TARGETS["anchored"]))
     return {r.category: float(r.target_pct) for r in rows}
 
 
-async def save_allocation_targets(db: AsyncSession, targets: dict[str, float]):
+async def save_allocation_targets(db: AsyncSession, targets: dict[str, float], mode: str = "anchored"):
     for category, pct in targets.items():
         existing = (await db.execute(
-            select(AllocationTarget).where(AllocationTarget.category == category)
+            select(AllocationTarget).where(
+                AllocationTarget.category == category,
+                AllocationTarget.alloc_mode == mode,
+            )
         )).scalar_one_or_none()
         if existing:
             existing.target_pct = pct
         else:
-            db.add(AllocationTarget(category=category, target_pct=pct))
+            db.add(AllocationTarget(category=category, alloc_mode=mode, target_pct=pct))
     await db.execute(
         delete(AllocationTarget).where(
-            AllocationTarget.category.notin_(list(targets.keys()))
+            AllocationTarget.alloc_mode == mode,
+            AllocationTarget.category.notin_(list(targets.keys())),
         )
     )
     await db.commit()
@@ -321,7 +337,10 @@ async def get_asset_class_comparison(db: AsyncSession) -> dict:
     targets = await get_asset_class_targets(db)
 
     foreign_target_row = (await db.execute(
-        select(AllocationTarget).where(AllocationTarget.category == "Equity - Foreign")
+        select(AllocationTarget).where(
+            AllocationTarget.category == "Equity - Foreign",
+            AllocationTarget.alloc_mode == "anchored",
+        )
     )).scalar_one_or_none()
     foreign_equity_target = float(foreign_target_row.target_pct) if foreign_target_row else 20.0
 
@@ -378,7 +397,9 @@ def _foreign_anchor_ratio(foreign_target: float, large_target: float) -> float:
 
 
 async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") -> dict:
-    targets = await get_allocation_targets(db)
+    from app.services.manual_assets import get_manual_assets_summary
+
+    targets = await get_allocation_targets(db, mode=mode)
 
     result = await db.execute(
         select(Holding, Instrument)
@@ -405,34 +426,28 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
     cur_large = current_totals.get("Large Cap", 0)
     inv_large = invested_totals.get("Large Cap", 0)
 
-    # ── Domestic market-cap rows ──────────────────────────────────────────────
+    if mode == "free_float":
+        return await _get_free_float_comparison(
+            db, targets, current_totals, invested_totals,
+            current_equity, invested_equity,
+            foreign_cur, foreign_inv, domestic_cur, domestic_inv,
+        )
+
+    # ── Anchored mode ─────────────────────────────────────────────────────────
     domestic_categories = sorted(c for c in targets if c in DOMESTIC_EQUITY_CATS)
     rows = []
     for cat in domestic_categories:
         target_pct = targets[cat]
         cur_val = current_totals.get(cat, 0)
         inv_val = invested_totals.get(cat, 0)
-
-        if mode == "anchored":
-            # Percentages relative to domestic equity; ideal anchored on large cap
-            cur_pct = (cur_val / domestic_cur * 100) if domestic_cur > 0 else 0
-            inv_pct = (inv_val / domestic_inv * 100) if domestic_inv > 0 else 0
-            if cat == "Large Cap":
-                cur_ideal_val = cur_large
-                inv_ideal_val = inv_large
-            else:
-                cur_ideal_val = cur_large * (target_pct / large_target) if large_target > 0 else 0
-                inv_ideal_val = inv_large * (target_pct / large_target) if large_target > 0 else 0
-        else:  # free_float
-            # Percentages relative to total equity; ideal = total_equity × target_of_total
-            domestic_share = 1.0 - foreign_target / 100
-            target_of_total = target_pct * domestic_share
-            cur_pct = (cur_val / current_equity * 100) if current_equity > 0 else 0
-            inv_pct = (inv_val / invested_equity * 100) if invested_equity > 0 else 0
-            cur_ideal_val = current_equity * target_of_total / 100
-            inv_ideal_val = invested_equity * target_of_total / 100
-            target_pct = round(target_of_total, 2)  # expose as % of total equity in this mode
-
+        cur_pct = (cur_val / domestic_cur * 100) if domestic_cur > 0 else 0
+        inv_pct = (inv_val / domestic_inv * 100) if domestic_inv > 0 else 0
+        if cat == "Large Cap":
+            cur_ideal_val = cur_large
+            inv_ideal_val = inv_large
+        else:
+            cur_ideal_val = cur_large * (target_pct / large_target) if large_target > 0 else 0
+            inv_ideal_val = inv_large * (target_pct / large_target) if large_target > 0 else 0
         rows.append({
             "category": cat,
             "target_pct": target_pct,
@@ -448,25 +463,17 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
             "invested_value_diff": round(inv_val - inv_ideal_val, 2),
         })
 
-    # ── Foreign row (merged into rows) ───────────────────────────────────────
+    anchor_ratio = _foreign_anchor_ratio(foreign_target, large_target)
+    cur_foreign_ideal = cur_large * anchor_ratio
+    inv_foreign_ideal = inv_large * anchor_ratio
     foreign_cur_pct = (foreign_cur / current_equity * 100) if current_equity > 0 else 0
     foreign_inv_pct = (foreign_inv / invested_equity * 100) if invested_equity > 0 else 0
-
-    if mode == "anchored":
-        anchor_ratio = _foreign_anchor_ratio(foreign_target, large_target)
-        cur_foreign_ideal = cur_large * anchor_ratio
-        inv_foreign_ideal = inv_large * anchor_ratio
-        # target_pct is the equivalent % of total equity for display
-        foreign_display_target = round(cur_foreign_ideal / current_equity * 100, 2) if current_equity > 0 else 0
-    else:
-        cur_foreign_ideal = current_equity * foreign_target / 100
-        inv_foreign_ideal = invested_equity * foreign_target / 100
-        foreign_display_target = foreign_target
+    foreign_display_target = round(cur_foreign_ideal / current_equity * 100, 2) if current_equity > 0 else 0
 
     rows.append({
         "category": "Equity - Foreign",
         "target_pct": foreign_display_target,
-        "anchor_note": f"{anchor_ratio * 100:.1f}% of LC" if mode == "anchored" else None,
+        "anchor_note": f"{anchor_ratio * 100:.1f}% of LC",
         "current_pct": round(foreign_cur_pct, 2),
         "current_value": round(foreign_cur, 2),
         "current_diff": round(foreign_cur_pct - foreign_display_target, 2),
@@ -479,11 +486,10 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
         "invested_value_diff": round(foreign_inv - inv_foreign_ideal, 2),
     })
 
-    # ── Domestic / foreign split summaries (kept for backward compat) ─────────
     domestic_cur_pct = (domestic_cur / current_equity * 100) if current_equity > 0 else 0
     domestic_inv_pct = (domestic_inv / invested_equity * 100) if invested_equity > 0 else 0
     domestic_cur_ideal = current_equity * domestic_target / 100
-    foreign = {
+    foreign_summary = {
         "target_pct": foreign_target,
         "current_pct": round(foreign_cur_pct, 2),
         "current_value": round(foreign_cur, 2),
@@ -492,7 +498,7 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
         "invested_pct": round(foreign_inv_pct, 2),
         "invested_value": round(foreign_inv, 2),
     }
-    domestic = {
+    domestic_summary = {
         "target_pct": domestic_target,
         "current_pct": round(domestic_cur_pct, 2),
         "current_value": round(domestic_cur, 2),
@@ -504,11 +510,92 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
 
     return {
         "rows": rows,
-        "foreign": foreign,
-        "domestic": domestic,
+        "foreign": foreign_summary,
+        "domestic": domestic_summary,
         "targets": targets,
         "current_equity": round(current_equity, 2),
         "invested_equity": round(invested_equity, 2),
         "domestic_equity": round(domestic_cur, 2),
         "mode": mode,
+    }
+
+
+async def _get_free_float_comparison(
+    db,
+    targets: dict[str, float],
+    current_totals: dict[str, float],
+    invested_totals: dict[str, float],
+    current_equity: float,
+    invested_equity: float,
+    foreign_cur: float,
+    foreign_inv: float,
+    domestic_cur: float,
+    domestic_inv: float,
+) -> dict:
+    from app.services.manual_assets import get_manual_assets_summary
+
+    manual = await get_manual_assets_summary(db)
+    savings_cash = manual.get("total_cash", 0)
+    emergency_fund = manual.get("emergency_total", 0)
+
+    # Pool = investable total (everything except savings cash, USD cash, emergency fund)
+    # USD cash is already excluded from manual_assets total_cash vs total_foreign_equity_inr split,
+    # but if stored under a separate key, handle it. USD equity is in Equity - Foreign already.
+    mf_cash = max(0.0, current_totals.get("Cash", 0) - savings_cash)
+    debt_cur = sum(current_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund
+    debt_cur = max(0.0, debt_cur)
+    debt_inv = sum(invested_totals.get(c, 0) for c in _AC_DEBT)
+    pm_cur = sum(current_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
+    pm_inv = sum(invested_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
+
+    pool_cur = current_equity + debt_cur + pm_cur
+    pool_inv = invested_equity + debt_inv + pm_inv
+
+    # Row order: Large, Mid, Small, Foreign, Debt, Precious Metals
+    ff_cats = [
+        ("Large Cap",        current_totals.get("Large Cap", 0),        invested_totals.get("Large Cap", 0)),
+        ("Mid Cap",          current_totals.get("Mid Cap", 0),          invested_totals.get("Mid Cap", 0)),
+        ("Small Cap",        current_totals.get("Small Cap", 0),        invested_totals.get("Small Cap", 0)),
+        ("Equity - Foreign", foreign_cur,                                foreign_inv),
+        ("Debt",             debt_cur,                                   debt_inv),
+        ("Precious Metals",  pm_cur,                                     pm_inv),
+    ]
+
+    rows = []
+    for cat, cur_val, inv_val in ff_cats:
+        target_pct = targets.get(cat, 0.0)
+        cur_pct = (cur_val / pool_cur * 100) if pool_cur > 0 else 0
+        inv_pct = (inv_val / pool_inv * 100) if pool_inv > 0 else 0
+        cur_ideal = pool_cur * target_pct / 100
+        inv_ideal = pool_inv * target_pct / 100
+        rows.append({
+            "category": cat,
+            "target_pct": target_pct,
+            "anchor_note": None,
+            "current_pct": round(cur_pct, 2),
+            "current_value": round(cur_val, 2),
+            "current_diff": round(cur_pct - target_pct, 2),
+            "invested_pct": round(inv_pct, 2),
+            "invested_value": round(inv_val, 2),
+            "invested_diff": round(inv_pct - target_pct, 2),
+            "current_ideal_value": round(cur_ideal, 2),
+            "current_value_diff": round(cur_val - cur_ideal, 2),
+            "invested_ideal_value": round(inv_ideal, 2),
+            "invested_value_diff": round(inv_val - inv_ideal, 2),
+        })
+
+    foreign_cur_pct = (foreign_cur / pool_cur * 100) if pool_cur > 0 else 0
+    return {
+        "rows": rows,
+        "foreign": {"target_pct": targets.get("Equity - Foreign", 0), "current_pct": round(foreign_cur_pct, 2),
+                    "current_value": round(foreign_cur, 2), "current_diff": 0,
+                    "current_value_diff": 0, "invested_pct": 0, "invested_value": round(foreign_inv, 2)},
+        "domestic": {"target_pct": 0, "current_pct": 0, "current_value": round(domestic_cur, 2),
+                     "current_diff": 0, "current_value_diff": 0, "invested_pct": 0, "invested_value": round(domestic_inv, 2)},
+        "targets": targets,
+        "current_equity": round(current_equity, 2),
+        "invested_equity": round(invested_equity, 2),
+        "domestic_equity": round(domestic_cur, 2),
+        "pool": round(pool_cur, 2),
+        "mode": "free_float",
     }

@@ -125,8 +125,9 @@ export function useSaveAssetClassTargetsMutation() {
 export function useSaveAllocationTargetsMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (targets: Record<string, number>) => {
+    mutationFn: ({ targets, mode }: { targets: Record<string, number>; mode: string }) => {
       const form = new URLSearchParams()
+      form.append('mode', mode)
       Object.entries(targets).forEach(([cat, val]) => form.append(`target_${cat}`, String(val)))
       return requestForm<{ ok: boolean }>('/api/v1/mf-breakdown/allocation-targets', form)
     },

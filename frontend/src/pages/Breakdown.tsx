@@ -151,14 +151,24 @@ function OverviewTab() {
   const saveMut = useSaveAllocationTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
 
+  const isAnchored = mode === 'anchored'
+
   async function handleSaveTargets() {
+    if (!comparison) return
     try {
-      const domesticRows = (comparison?.rows ?? []).filter((r) => r.category !== 'Equity - Foreign')
-      const allTargets = Object.fromEntries([
-        ...domesticRows.map((r) => [r.category, targets[r.category] ?? r.target_pct] as [string, number]),
-        ['Equity - Foreign', targets['Equity - Foreign'] ?? (comparison?.foreign.target_pct ?? 0)],
-      ])
-      await saveMut.mutateAsync(allTargets)
+      let allTargets: Record<string, number>
+      if (isAnchored) {
+        const domesticRows = comparison.rows.filter((r) => r.category !== 'Equity - Foreign')
+        allTargets = Object.fromEntries([
+          ...domesticRows.map((r) => [r.category, targets[r.category] ?? r.target_pct] as [string, number]),
+          ['Equity - Foreign', targets['Equity - Foreign'] ?? comparison.foreign.target_pct],
+        ])
+      } else {
+        allTargets = Object.fromEntries(
+          comparison.rows.map((r) => [r.category, targets[r.category] ?? r.target_pct])
+        )
+      }
+      await saveMut.mutateAsync({ targets: allTargets, mode })
       notifications.show({ color: 'green', message: 'Targets saved.' })
       refetchComp()
     } catch (e) {
@@ -168,7 +178,7 @@ function OverviewTab() {
 
   if (!chart) return <Text size="sm" c="dimmed">Loading…</Text>
 
-  // High-level allocation aggregation
+  // High-level allocation aggregation for donut charts
   const valueMap = Object.fromEntries(chart.labels.map((l, i) => [l, chart.values[i]]))
   const hlGroups: Record<string, string[]> = {
     'Equity': ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity'],
@@ -188,8 +198,17 @@ function OverviewTab() {
   const hlLabels = hlEntries.map(([l]) => l)
   const hlValues = hlEntries.map(([, v]) => v)
 
-  const isAnchored = mode === 'anchored'
-  const targetPctLabel = isAnchored ? '% of domestic equity' : '% of total equity'
+  const modeToggle = (
+    <SegmentedControl
+      size="xs"
+      value={mode}
+      onChange={(v) => { setMode(v as 'anchored' | 'free_float'); setTargets({}) }}
+      data={[
+        { label: 'Large Cap Anchored', value: 'anchored' },
+        { label: 'Free Float', value: 'free_float' },
+      ]}
+    />
+  )
 
   return (
     <Stack gap="lg">
@@ -206,24 +225,19 @@ function OverviewTab() {
         </Group>
       )}
 
-      <AssetClassTargetsSection />
+      {isAnchored && <AssetClassTargetsSection />}
 
       {comparison && (
         <Box>
           <Group justify="space-between" align="center" mb="xs">
             <Text fw={600}>
-              Equity allocation targets{' '}
-              <Text component="span" size="xs" fw={400}>({targetPctLabel})</Text>
+              {isAnchored ? (
+                <>Equity allocation targets <Text component="span" size="xs" fw={400}>(% of domestic equity)</Text></>
+              ) : (
+                <>Allocation targets <Text component="span" size="xs" fw={400}>(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />)</Text></>
+              )}
             </Text>
-            <SegmentedControl
-              size="xs"
-              value={mode}
-              onChange={(v) => setMode(v as 'anchored' | 'free_float')}
-              data={[
-                { label: 'Large Cap Anchored', value: 'anchored' },
-                { label: 'Free Float', value: 'free_float' },
-              ]}
-            />
+            {modeToggle}
           </Group>
 
           <Table fz="sm" withColumnBorders={false}>
@@ -242,10 +256,9 @@ function OverviewTab() {
               {comparison.rows.map((r) => {
                 const isForeign = r.category === 'Equity - Foreign'
                 const isAnchor = isAnchored && r.category === 'Large Cap'
-                // In anchored mode, shortfall is only meaningful for mid/small/foreign
                 const showShortfall = !isAnchor
-                // In anchored mode, foreign target input is hidden (always 50% of LC)
                 const showTargetInput = !(isAnchored && isForeign)
+                const inputVal = targets[r.category] ?? (isAnchored && isForeign ? comparison.foreign.target_pct : r.target_pct)
                 return (
                   <Table.Tr key={r.category}>
                     <Table.Td>
@@ -274,11 +287,11 @@ function OverviewTab() {
                         <NumberInput
                           size="xs"
                           w={80}
-                          value={targets[r.category] ?? (isForeign ? comparison.foreign.target_pct : r.target_pct)}
+                          value={inputVal}
                           onChange={(v) => setTargets((p) => ({ ...p, [r.category]: Number(v) }))}
                           min={0}
                           max={100}
-                          step={1}
+                          step={0.1}
                         />
                       ) : (
                         <Text size="xs">50% of LC</Text>
