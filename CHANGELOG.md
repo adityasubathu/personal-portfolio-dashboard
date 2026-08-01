@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-08-01 — Dashboard holdings table: independent heatmap gradients
+
+- `app/services/holdings_engine.py` — computes `day_chg_pct_min`/`max` from actual data via `_range()`, same as every other heatmap column
+- `app/schemas/portfolio.py` — `day_chg_pct_min`, `day_chg_pct_max` on `DirectHoldingsResponse`
+- `frontend/src/types/portfolio.ts` — mirrored fields
+- `frontend/src/pages/Dashboard.tsx` — Day % heatmap now uses the data-driven range instead of a hardcoded ±5% scale, so its gradient no longer looks tied to the Total gain % column's very different range
+
+---
+
 ## 2026-08-01 — Rebalance calculator: explain the driving bucket
 
 - `app/services/allocation.py` — `_zero_drift_plan` now identifies the "binding" bucket (the one whose `value/target%` ratio sets `cash_to_zero_drift`) and returns a `binding_note` explaining it; a modest overweight in a low-target-% bucket (e.g. Small Cap 2.6pp over a 7.8% target) can otherwise inflate the headline cash figure with no visible explanation, since diluting a small-target bucket back down requires growing the whole pool. Anchored mode's `get_rebalance_plan` picks whichever of domestic-dilution or foreign-catch-up is the larger driver for its note; asset-class plan gets its own `asset_class_binding_note`

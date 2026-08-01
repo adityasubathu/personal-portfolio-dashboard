@@ -165,10 +165,10 @@ function HoldingsTable() {
   if (isLoading) return <Text size="sm" c="dimmed">Loading holdings…</Text>
   if (!data) return null
 
-  const { groups, pnl_min, pnl_max, pnl_pct_min, pnl_pct_max, xirr_min, xirr_max, day_chg_abs_min, day_chg_abs_max } = data
+  const { groups, pnl_min, pnl_max, pnl_pct_min, pnl_pct_max, xirr_min, xirr_max, day_chg_abs_min, day_chg_abs_max, day_chg_pct_min, day_chg_pct_max } = data
 
   function row(r: HoldingRow) {
-    const dayPctBg = heatmapBg(r.day_chg_pct, -5, 5, 'rg')
+    const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rg')
     const dayAbsBg = heatmapBg(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb')
     const pnlBg = heatmapBg(r.pnl, pnl_min, pnl_max, 'rb')
     const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg')
@@ -180,7 +180,7 @@ function HoldingsTable() {
         <Table.Td style={{ textAlign: 'right' }}><NumQty value={r.qty} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.avg_price} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.cost} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, -5, 5, 'rg') }}>
+        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rg') }}>
           <NumPct value={r.day_chg_pct} />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', background: dayAbsBg, color: heatmapTextColor(r.day_chg_abs, day_chg_abs_min, day_chg_abs_max, 'rb') }}>

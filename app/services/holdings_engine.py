@@ -222,6 +222,7 @@ async def get_direct_holdings(
     pnl_pct_min, pnl_pct_max = _range([r["pnl_pct"] for r in enriched])
     xirr_min, xirr_max = _range([r["xirr"] for r in enriched])
     day_chg_abs_min, day_chg_abs_max = _range([r["day_chg_abs"] for r in enriched])
+    day_chg_pct_min, day_chg_pct_max = _range([r["day_chg_pct"] for r in enriched])
 
     reverse = direction == "desc"
     enriched.sort(key=lambda r: r["symbol"].lower())
@@ -252,6 +253,7 @@ async def get_direct_holdings(
         pnl_pct_min=pnl_pct_min, pnl_pct_max=pnl_pct_max,
         xirr_min=xirr_min, xirr_max=xirr_max,
         day_chg_abs_min=day_chg_abs_min, day_chg_abs_max=day_chg_abs_max,
+        day_chg_pct_min=day_chg_pct_min, day_chg_pct_max=day_chg_pct_max,
     )
 
 

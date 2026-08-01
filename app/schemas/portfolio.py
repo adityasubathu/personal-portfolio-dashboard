@@ -59,6 +59,8 @@ class DirectHoldingsResponse(BaseModel):
     xirr_max: Optional[float] = None
     day_chg_abs_min: Optional[float] = None
     day_chg_abs_max: Optional[float] = None
+    day_chg_pct_min: Optional[float] = None
+    day_chg_pct_max: Optional[float] = None
 
 
 class InstrumentListItem(BaseModel):

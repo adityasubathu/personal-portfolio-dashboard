@@ -55,6 +55,8 @@ export interface DirectHoldingsResponse {
   xirr_max: number | null
   day_chg_abs_min: number | null
   day_chg_abs_max: number | null
+  day_chg_pct_min: number | null
+  day_chg_pct_max: number | null
 }
 
 export interface InstrumentListItem {
