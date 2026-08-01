@@ -135,7 +135,6 @@ async def sync(db: AsyncSession) -> dict:
     )
     db.add(log)
     await db.commit()
-    await recompute_and_store_xirr(db)
 
     return {
         "synced_at": synced_at.isoformat(),

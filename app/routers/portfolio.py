@@ -13,7 +13,6 @@ from app.database import get_db
 from app.sse import sse_stream
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.kite import KiteSyncLog
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.schemas.portfolio import DirectHoldingsResponse, InstrumentListItem, SummaryCards
@@ -128,12 +127,6 @@ async def summary_cards(db: AsyncSession = Depends(get_db)):
             ltp = None
         total_value += float(h.quantity) * ltp if ltp else cost
 
-    last_sync_row = (
-        await db.execute(
-            select(KiteSyncLog).order_by(KiteSyncLog.synced_at.desc()).limit(1)
-        )
-    ).scalar_one_or_none()
-
     last_ltp_row = (await db.execute(
         select(func.max(Holding.last_price_at))
         .join(Instrument, Holding.instrument_id == Instrument.id)
@@ -146,7 +139,6 @@ async def summary_cards(db: AsyncSession = Depends(get_db)):
         total_cost=total_cost,
         total_value=total_value,
         total_pnl=total_value - total_cost,
-        last_sync=last_sync_row.synced_at.isoformat() if last_sync_row else None,
         last_ltp_update=last_ltp_row.isoformat() if last_ltp_row else None,
         xirr=xirr_value,
     )

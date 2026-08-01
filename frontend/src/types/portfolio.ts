@@ -2,7 +2,6 @@ export interface SummaryCards {
   total_cost: number
   total_value: number
   total_pnl: number
-  last_sync: string | null
   last_ltp_update: string | null
   xirr: number | null
 }

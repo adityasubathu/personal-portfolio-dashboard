@@ -54,9 +54,6 @@ function SummaryCards() {
         <Text fw={700} size="lg" c={data.xirr != null && data.xirr >= 0 ? 'green' : 'red'}>
           {data.xirr != null ? pct(data.xirr * 100) : '—'}
         </Text>
-        {data.last_sync && (
-          <Text size="xs" c="dimmed">Synced {new Date(data.last_sync).toLocaleDateString('en-IN')}</Text>
-        )}
       </Paper>
     </SimpleGrid>
   )
