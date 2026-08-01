@@ -20,6 +20,7 @@ from app.services.mf_breakdown import (
     get_breakdown_chart_data,
     get_category_composition,
     get_direct_trade_breakdown,
+    get_rebalance_plan,
     get_scheme_breakdown,
     get_sector_composition,
     get_sector_list,
@@ -141,6 +142,16 @@ async def update_allocation_targets(request: Request, db: AsyncSession = Depends
                 continue
     await save_allocation_targets(db, targets, mode=str(mode))
     return {"ok": True}
+
+
+@router.get("/rebalance-plan")
+async def rebalance_plan(
+    mode: str = "anchored",
+    cash: float | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    data = await get_rebalance_plan(db, mode=mode, cash_amount=cash)
+    return JSONResponse(data)
 
 
 @router.get("/asset-class-comparison")

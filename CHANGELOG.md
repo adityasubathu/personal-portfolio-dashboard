@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-08-01 — Rebalance calculator: explain the driving bucket
+
+- `app/services/allocation.py` — `_zero_drift_plan` now identifies the "binding" bucket (the one whose `value/target%` ratio sets `cash_to_zero_drift`) and returns a `binding_note` explaining it; a modest overweight in a low-target-% bucket (e.g. Small Cap 2.6pp over a 7.8% target) can otherwise inflate the headline cash figure with no visible explanation, since diluting a small-target bucket back down requires growing the whole pool. Anchored mode's `get_rebalance_plan` picks whichever of domestic-dilution or foreign-catch-up is the larger driver for its note; asset-class plan gets its own `asset_class_binding_note`
+- `frontend/src/types/mfBreakdown.ts` — `binding_note`, `asset_class_binding_note` on `RebalancePlan`
+- `frontend/src/pages/Breakdown.tsx` — `RebalanceControls` shows the binding note under the cash input on both the asset-class and category rebalance tables
+
+---
+
+## 2026-08-01 — Rebalance calculator
+
+- `app/services/allocation.py` — `_zero_drift_plan` (core cash-injection formula) and `get_rebalance_plan(db, mode, cash_amount)`: computes how much to invest per category/asset-class to bring every allocation drift to 0%, clamped so over-allocated buckets get 0; supports a custom cash amount (proportional distribution below the zero-drift amount, pro-rata excess distribution above it); anchored mode layers domestic-pool rebalance with a foreign-equity top-up derived from the post-rebalance Large Cap anchor value; adds a `conflict_note` when the asset-class plan calls for Debt/PM that an equity-only plan can't fix
+- `app/routers/mf_breakdown.py` — `GET /rebalance-plan?mode=&cash=`
+- `app/services/mf_breakdown.py` — re-exports `get_rebalance_plan`
+- `frontend/src/types/mfBreakdown.ts` — `RebalanceBucket`, `RebalancePlan`
+- `frontend/src/api/mfBreakdown.ts` — `useRebalancePlan(mode, cash?)`
+- `frontend/src/pages/Breakdown.tsx` — "Shortfall / Surplus" vs "Rebalance" toggle (shared, persisted) on the asset-class targets table and the category targets table; rebalance view swaps in an Invest/New %/Remaining drift table, a debounced custom cash input, and a "zero all drifts" shortcut
+
+---
+
 ## 2026-07-28 — Fix session
 
 - `frontend/src/pages/Breakdown.tsx` — Asset Allocation donut: merged Equity - Foreign into Equity, merged Equity - Arbitrage into Debt, split Emergency Fund out of Debt as its own segment; Category Breakdown donut: Emergency Fund carved out of Debt and shown as a separate segment; both charts use `excluded.emergency_fund` from `useAssetClassComparison`

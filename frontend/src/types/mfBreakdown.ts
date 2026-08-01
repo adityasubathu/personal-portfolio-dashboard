@@ -60,6 +60,31 @@ export interface AllocationComparison {
   mode: 'anchored' | 'free_float'
 }
 
+export interface RebalanceBucket {
+  category: string
+  current_value: number
+  target_pct: number
+  current_pct: number
+  invest: number
+  new_value: number
+  new_pct: number
+  remaining_drift: number
+}
+
+export interface RebalancePlan {
+  mode: 'anchored' | 'free_float'
+  pool: number
+  cash_to_zero_drift: number
+  cash_applied: number
+  new_pool: number
+  buckets: RebalanceBucket[]
+  asset_class: RebalanceBucket[]
+  asset_class_cash_to_zero_drift: number
+  asset_class_binding_note: string | null
+  conflict_note: string | null
+  binding_note: string | null
+}
+
 export interface SchemeHolding {
   name: string
   type: string

@@ -520,6 +520,228 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
     }
 
 
+def _zero_drift_plan(buckets: list[dict], pool: float, cash_amount: float | None) -> dict:
+    """Given buckets [{key fields..., "current_value", "target_pct"}] with target_pct
+    summing to 100 across the pool, compute the cash injection that brings every
+    bucket to its target % (clamped at 0 — cash can only be added, not withdrawn).
+
+    See plans/2026-08-01-rebalance-cash-allocation.md section 1 for the derivation.
+    """
+    eligible = [b for b in buckets if b["target_pct"] > 0]
+    binding_note = None
+    if not eligible or pool <= 0:
+        c_min = 0.0
+    else:
+        binding = max(eligible, key=lambda b: b["current_value"] * 100 / b["target_pct"])
+        c_min = binding["current_value"] * 100 / binding["target_pct"] - pool
+        c_min = max(0.0, c_min)
+        if c_min > 0:
+            drift = binding.get("current_pct", 0) - binding["target_pct"]
+            binding_note = (
+                f"Driven by {binding['category']}: only {drift:+.2f}pp over its {binding['target_pct']:.1f}% "
+                f"target, but diluting it back down requires growing the whole pool."
+            )
+
+    def _invest_at(total_cash: float) -> dict[int, float]:
+        new_pool = pool + total_cash
+        return {
+            id(b): max(0.0, new_pool * b["target_pct"] / 100 - b["current_value"])
+            for b in buckets
+        }
+
+    full_invest = _invest_at(c_min)
+
+    if cash_amount is None:
+        cash_applied = c_min
+        invest_map = full_invest
+    elif cash_amount <= 0:
+        cash_applied = 0.0
+        invest_map = {id(b): 0.0 for b in buckets}
+    elif cash_amount < c_min and c_min > 0:
+        cash_applied = cash_amount
+        scale = cash_amount / c_min
+        invest_map = {k: v * scale for k, v in full_invest.items()}
+    elif cash_amount > c_min:
+        cash_applied = cash_amount
+        excess = cash_amount - c_min
+        invest_map = dict(full_invest)
+        for b in buckets:
+            invest_map[id(b)] += excess * b["target_pct"] / 100
+    else:
+        cash_applied = cash_amount
+        invest_map = full_invest
+
+    new_pool = pool + cash_applied
+    result_buckets = []
+    for b in buckets:
+        invest = invest_map[id(b)]
+        new_value = b["current_value"] + invest
+        new_pct = (new_value / new_pool * 100) if new_pool > 0 else 0.0
+        result_buckets.append({
+            **b,
+            "invest": round(invest, 2),
+            "new_value": round(new_value, 2),
+            "new_pct": round(new_pct, 2),
+            "remaining_drift": round(new_pct - b["target_pct"], 2),
+        })
+
+    return {
+        "cash_to_zero_drift": round(c_min, 2),
+        "cash_applied": round(cash_applied, 2),
+        "new_pool": round(new_pool, 2),
+        "buckets": result_buckets,
+        "binding_note": binding_note,
+    }
+
+
+async def get_rebalance_plan(db: AsyncSession, mode: str = "anchored", cash_amount: float | None = None) -> dict:
+    comparison = await get_allocation_comparison(db, mode)
+    asset_class_comparison = await get_asset_class_comparison(db)
+
+    asset_class_buckets = [
+        {
+            "category": r["asset_class"],
+            "current_value": r["current_value"],
+            "target_pct": r["target_pct"],
+            "current_pct": r["current_pct"],
+        }
+        for r in asset_class_comparison["rows"]
+    ]
+    asset_class_plan = _zero_drift_plan(
+        asset_class_buckets, asset_class_comparison["investable_total"], cash_amount
+    )
+
+    if mode == "free_float":
+        buckets = [
+            {
+                "category": r["category"],
+                "current_value": r["current_value"],
+                "target_pct": r["target_pct"],
+                "current_pct": r["current_pct"],
+            }
+            for r in comparison["rows"]
+        ]
+        category_plan = _zero_drift_plan(buckets, comparison["pool"], cash_amount)
+        pool = comparison["pool"]
+        conflict_note = _conflict_note(asset_class_plan, category_plan)
+        return {
+            "mode": mode,
+            "pool": round(pool, 2),
+            "cash_to_zero_drift": category_plan["cash_to_zero_drift"],
+            "cash_applied": category_plan["cash_applied"],
+            "new_pool": category_plan["new_pool"],
+            "buckets": category_plan["buckets"],
+            "asset_class": asset_class_plan["buckets"],
+            "asset_class_cash_to_zero_drift": asset_class_plan["cash_to_zero_drift"],
+            "asset_class_binding_note": asset_class_plan["binding_note"],
+            "conflict_note": conflict_note,
+            "binding_note": category_plan["binding_note"],
+        }
+
+    # ── Anchored mode: domestic categories share one pool, foreign scales off the
+    # (possibly rebalanced) Large Cap anchor. See plan section 3.2. ──────────────
+    domestic_rows = [r for r in comparison["rows"] if r["category"] != FOREIGN_CAT]
+    foreign_row = next(r for r in comparison["rows"] if r["category"] == FOREIGN_CAT)
+
+    domestic_buckets = [
+        {
+            "category": r["category"],
+            "current_value": r["current_value"],
+            "target_pct": r["target_pct"],
+            "current_pct": r["current_pct"],
+        }
+        for r in domestic_rows
+    ]
+    domestic_pool = comparison["domestic_equity"]
+    domestic_full_plan = _zero_drift_plan(domestic_buckets, domestic_pool, None)
+    domestic_c_min = domestic_full_plan["cash_to_zero_drift"]
+
+    targets = comparison["targets"]
+    large_target = targets.get("Large Cap", 50)
+    foreign_target_pct = targets.get(FOREIGN_CAT, 0)
+    anchor_ratio = _foreign_anchor_ratio(foreign_target_pct, large_target)
+
+    new_large_full = next(b for b in domestic_full_plan["buckets"] if b["category"] == "Large Cap")["new_value"]
+    foreign_cur = foreign_row["current_value"]
+    foreign_need = max(0.0, new_large_full * anchor_ratio - foreign_cur)
+    total_c_min = domestic_c_min + foreign_need
+
+    if cash_amount is None:
+        domestic_cash, foreign_cash = domestic_c_min, foreign_need
+    elif cash_amount <= domestic_c_min:
+        domestic_cash, foreign_cash = cash_amount, 0.0
+    elif cash_amount <= total_c_min:
+        domestic_cash = domestic_c_min
+        foreign_cash = cash_amount - domestic_c_min
+    else:
+        leftover = cash_amount - total_c_min
+        domestic_target_total = 100.0 - foreign_target_pct
+        domestic_cash = domestic_c_min + leftover * (domestic_target_total / 100)
+        foreign_cash = foreign_need + leftover * (foreign_target_pct / 100)
+
+    domestic_plan = _zero_drift_plan(domestic_buckets, domestic_pool, domestic_cash)
+    new_large = next(b for b in domestic_plan["buckets"] if b["category"] == "Large Cap")["new_value"]
+    foreign_new_value = foreign_cur + foreign_cash
+    new_total_equity = domestic_plan["new_pool"] + foreign_new_value
+    foreign_new_ideal = new_large * anchor_ratio
+    foreign_target_display = round(foreign_new_ideal / new_total_equity * 100, 2) if new_total_equity > 0 else 0.0
+    foreign_new_pct = round(foreign_new_value / new_total_equity * 100, 2) if new_total_equity > 0 else 0.0
+
+    foreign_bucket = {
+        "category": FOREIGN_CAT,
+        "current_value": round(foreign_cur, 2),
+        "target_pct": foreign_target_display,
+        "current_pct": foreign_row["current_pct"],
+        "invest": round(foreign_cash, 2),
+        "new_value": round(foreign_new_value, 2),
+        "new_pct": foreign_new_pct,
+        "remaining_drift": round(foreign_new_pct - foreign_target_display, 2),
+    }
+
+    category_plan = {
+        "cash_to_zero_drift": round(total_c_min, 2),
+        "cash_applied": round(domestic_cash + foreign_cash, 2),
+        "new_pool": round(new_total_equity, 2),
+        "buckets": domestic_plan["buckets"] + [foreign_bucket],
+    }
+    conflict_note = _conflict_note(asset_class_plan, category_plan)
+
+    if foreign_need > domestic_c_min and foreign_need > 0:
+        binding_note = (
+            f"Driven by Equity - Foreign catching up to {anchor_ratio * 100:.1f}% of Large Cap "
+            f"(₹{foreign_need:,.0f} needed there alone)."
+        )
+    else:
+        binding_note = domestic_full_plan["binding_note"]
+
+    return {
+        "mode": mode,
+        "pool": round(domestic_pool + foreign_cur, 2),
+        "cash_to_zero_drift": category_plan["cash_to_zero_drift"],
+        "cash_applied": category_plan["cash_applied"],
+        "new_pool": category_plan["new_pool"],
+        "buckets": category_plan["buckets"],
+        "asset_class": asset_class_plan["buckets"],
+        "asset_class_cash_to_zero_drift": asset_class_plan["cash_to_zero_drift"],
+        "asset_class_binding_note": asset_class_plan["binding_note"],
+        "conflict_note": conflict_note,
+        "binding_note": binding_note,
+    }
+
+
+def _conflict_note(asset_class_plan: dict, category_plan: dict) -> str | None:
+    non_equity_need = sum(
+        b["invest"] for b in asset_class_plan["buckets"]
+        if b["category"] != "Equity" and b["invest"] > 0
+    )
+    if non_equity_need > 0 and category_plan["cash_to_zero_drift"] > 0:
+        return (
+            f"Asset-class rebalance also calls for ₹{non_equity_need:,.0f} in Debt/Precious Metals — "
+            "an equity-only investment won't fix that."
+        )
+    return None
+
+
 async def _get_free_float_comparison(
     db,
     targets: dict[str, float],

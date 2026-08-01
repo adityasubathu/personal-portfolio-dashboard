@@ -4,6 +4,7 @@ import {
   Table, Tabs, Text, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useDebouncedValue } from '@mantine/hooks'
 import { IconRefresh } from '@tabler/icons-react'
 import {
   useBreakdownChart,
@@ -12,6 +13,7 @@ import {
   useCategoryComposition,
   useAllocationComparison,
   useAssetClassComparison,
+  useRebalancePlan,
   useSaveAllocationTargetsMutation,
   useSaveAssetClassTargetsMutation,
   useClassifyBatchMutation,
@@ -27,16 +29,111 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
-import type { IngestDonePayload } from '../types/mfBreakdown'
+import type { IngestDonePayload, RebalanceBucket } from '../types/mfBreakdown'
 
 function diffColor(diff: number): string | undefined {
   return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
 }
 
-function AssetClassTargetsSection() {
+// ── Rebalance calculator — shared by asset-class and category tables ────────────
+
+function RebalanceControls({
+  cashToZeroDrift,
+  cash,
+  onCashChange,
+  bindingNote,
+}: {
+  cashToZeroDrift: number
+  cash: number | ''
+  onCashChange: (v: number | '') => void
+  bindingNote?: string | null
+}) {
+  return (
+    <Stack gap={2} mb="xs">
+      <Group gap="sm" align="center">
+        <Text size="sm">Cash to deploy:</Text>
+        <NumberInput
+          size="xs"
+          w={140}
+          value={cash}
+          onChange={(v) => onCashChange(v === '' ? '' : Number(v))}
+          placeholder={cashToZeroDrift.toFixed(0)}
+          min={0}
+          prefix="₹"
+          thousandSeparator=","
+        />
+        <Button size="xs" variant="subtle" onClick={() => onCashChange('')}>
+          Zero all drifts: <MoneyText value={cashToZeroDrift} compact />
+        </Button>
+        <Text size="xs" c="dimmed">
+          Only adds to under-allocated buckets. Over-allocated buckets need sells or time to correct.
+        </Text>
+      </Group>
+      {bindingNote && <Text size="xs" c="dimmed">{bindingNote}</Text>}
+    </Stack>
+  )
+}
+
+function RebalanceRows({ buckets }: { buckets: RebalanceBucket[] }) {
+  return (
+    <>
+      {buckets.map((b) => {
+        const overAllocated = b.invest === 0 && b.remaining_drift < -0.01
+        return (
+          <Table.Tr key={b.category} style={overAllocated ? { opacity: 0.6 } : undefined}>
+            <Table.Td>
+              <Group gap={6}>
+                <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(b.category) }} />
+                {b.category}
+                {overAllocated && <Text size="xs" c="dimmed">over-allocated — no action</Text>}
+              </Group>
+            </Table.Td>
+            <Table.Td style={{ textAlign: 'right' }}>{b.target_pct.toFixed(1)}%</Table.Td>
+            <Table.Td style={{ textAlign: 'right' }}>{b.current_pct.toFixed(2)}%</Table.Td>
+            <Table.Td style={{ textAlign: 'right' }}>
+              {b.invest > 0
+                ? <MoneyText value={b.invest} compact style={{ color: 'var(--mantine-color-green-6)' }} />
+                : '—'}
+            </Table.Td>
+            <Table.Td style={{ textAlign: 'right' }}>{b.new_pct.toFixed(2)}%</Table.Td>
+            <Table.Td style={{ textAlign: 'right', color: overAllocated ? 'var(--mantine-color-red-5)' : 'var(--mantine-color-green-6)' }}>
+              {b.remaining_drift >= 0 ? '+' : ''}{b.remaining_drift.toFixed(2)}%
+            </Table.Td>
+          </Table.Tr>
+        )
+      })}
+    </>
+  )
+}
+
+function RebalanceTableHead() {
+  return (
+    <Table.Thead>
+      <Table.Tr>
+        <Table.Th>Category</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Invest</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>New %</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Remaining drift</Table.Th>
+      </Table.Tr>
+    </Table.Thead>
+  )
+}
+
+function AssetClassTargetsSection({
+  rebalanceView,
+  onToggleRebalanceView,
+}: {
+  rebalanceView: boolean
+  onToggleRebalanceView: (v: boolean) => void
+}) {
   const { data: ac, refetch } = useAssetClassComparison()
   const saveMut = useSaveAssetClassTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
+  const [cashInput, setCashInput] = useState<number | ''>('')
+  const [debouncedCash] = useDebouncedValue(cashInput, 500)
+  const { data: plan } = useRebalancePlan('anchored', debouncedCash === '' ? undefined : debouncedCash)
 
   if (!ac) return null
 
@@ -58,13 +155,33 @@ function AssetClassTargetsSection() {
 
   return (
     <Box>
-      <Text fw={600} mb="xs">
-        Asset class targets{' '}
-        <Text component="span" size="xs" c="dimmed" fw={400}>
-          (% of invested portfolio · <MoneyText value={ac.investable_total} compact />)
+      <Group justify="space-between" align="center" mb="xs">
+        <Text fw={600}>
+          Asset class targets{' '}
+          <Text component="span" size="xs" c="dimmed" fw={400}>
+            (% of invested portfolio · <MoneyText value={ac.investable_total} compact />)
+          </Text>
         </Text>
-      </Text>
+        <SegmentedControl
+          size="xs"
+          value={rebalanceView ? 'rebalance' : 'shortfall'}
+          onChange={(v) => onToggleRebalanceView(v === 'rebalance')}
+          data={[
+            { label: 'Shortfall / Surplus', value: 'shortfall' },
+            { label: 'Rebalance', value: 'rebalance' },
+          ]}
+        />
+      </Group>
+      {rebalanceView && plan && (
+        <RebalanceControls
+          cashToZeroDrift={plan.asset_class_cash_to_zero_drift}
+          cash={cashInput}
+          onCashChange={setCashInput}
+          bindingNote={plan.asset_class_binding_note}
+        />
+      )}
       <Table fz="sm" withColumnBorders={false}>
+        {rebalanceView ? <RebalanceTableHead /> : (
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Asset class</Table.Th>
@@ -76,8 +193,11 @@ function AssetClassTargetsSection() {
             <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
           </Table.Tr>
         </Table.Thead>
+        )}
         <Table.Tbody>
-          {ac.rows.map((r) => (
+          {rebalanceView && plan ? (
+            <RebalanceRows buckets={plan.asset_class} />
+          ) : ac.rows.map((r) => (
             <Table.Tr key={r.asset_class}>
               <Table.Td>
                 <Group gap={6}>
@@ -107,6 +227,7 @@ function AssetClassTargetsSection() {
               </Table.Td>
             </Table.Tr>
           ))}
+          {!rebalanceView && (
           <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
             <Table.Td>
               <Group gap={6}>
@@ -128,8 +249,10 @@ function AssetClassTargetsSection() {
               />
             </Table.Td>
           </Table.Tr>
+          )}
         </Table.Tbody>
       </Table>
+      {!rebalanceView && (
       <Group gap="lg" mt="xs" align="center">
         <Button size="xs" loading={saveMut.isPending} onClick={handleSave}>
           Save targets
@@ -140,6 +263,7 @@ function AssetClassTargetsSection() {
           {cash > 0 && <>Savings {inrCompact(cash)}</>}
         </Text>
       </Group>
+      )}
     </Box>
   )
 }
@@ -151,6 +275,10 @@ function OverviewTab() {
   const { data: comparison, refetch: refetchComp } = useAllocationComparison(mode)
   const saveMut = useSaveAllocationTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
+  const [rebalanceView, setRebalanceView] = usePersistentState('rebalanceView', false)
+  const [cashInput, setCashInput] = useState<number | ''>('')
+  const [debouncedCash] = useDebouncedValue(cashInput, 500)
+  const { data: plan } = useRebalancePlan(mode, debouncedCash === '' ? undefined : debouncedCash)
 
   const isAnchored = mode === 'anchored'
 
@@ -247,7 +375,9 @@ function OverviewTab() {
         </Group>
       )}
 
-      {isAnchored && <AssetClassTargetsSection />}
+      {isAnchored && (
+        <AssetClassTargetsSection rebalanceView={rebalanceView} onToggleRebalanceView={setRebalanceView} />
+      )}
 
       {comparison && (
         <Box>
@@ -259,10 +389,34 @@ function OverviewTab() {
                 <>Allocation targets <Text component="span" size="xs" fw={400}>(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund & cash)</Text></>
               )}
             </Text>
-            {modeToggle}
+            <Group gap="sm">
+              <SegmentedControl
+                size="xs"
+                value={rebalanceView ? 'rebalance' : 'shortfall'}
+                onChange={(v) => setRebalanceView(v === 'rebalance')}
+                data={[
+                  { label: 'Shortfall / Surplus', value: 'shortfall' },
+                  { label: 'Rebalance', value: 'rebalance' },
+                ]}
+              />
+              {modeToggle}
+            </Group>
           </Group>
 
+          {rebalanceView && plan && (
+            <RebalanceControls
+              cashToZeroDrift={plan.cash_to_zero_drift}
+              cash={cashInput}
+              onCashChange={setCashInput}
+              bindingNote={plan.binding_note}
+            />
+          )}
+          {rebalanceView && plan?.conflict_note && (
+            <Text size="xs" c="dimmed" mb="xs">{plan.conflict_note}</Text>
+          )}
+
           <Table fz="sm" withColumnBorders={false}>
+            {rebalanceView ? <RebalanceTableHead /> : (
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Category</Table.Th>
@@ -274,8 +428,11 @@ function OverviewTab() {
                 <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
               </Table.Tr>
             </Table.Thead>
+            )}
             <Table.Tbody>
-              {comparison.rows.map((r) => {
+              {rebalanceView && plan ? (
+                <RebalanceRows buckets={plan.buckets} />
+              ) : comparison.rows.map((r) => {
                 const isForeign = r.category === 'Equity - Foreign'
                 const isAnchor = isAnchored && r.category === 'Large Cap'
                 const showShortfall = !isAnchor
@@ -324,9 +481,11 @@ function OverviewTab() {
               })}
             </Table.Tbody>
           </Table>
-          <Button size="xs" mt="xs" loading={saveMut.isPending} onClick={handleSaveTargets}>
-            Save targets
-          </Button>
+          {!rebalanceView && (
+            <Button size="xs" mt="xs" loading={saveMut.isPending} onClick={handleSaveTargets}>
+              Save targets
+            </Button>
+          )}
         </Box>
       )}
     </Stack>

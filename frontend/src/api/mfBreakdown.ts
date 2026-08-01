@@ -7,6 +7,7 @@ import type {
   CategoryCompositionItem,
   ClassifyResult,
   DirectTradeBreakdown,
+  RebalancePlan,
   SchemeBreakdown,
   SchemeListItem,
   SectorClassifyResult,
@@ -21,6 +22,7 @@ export const breakdownKeys = {
   allocationComparison: ['mf-breakdown', 'allocation-comparison'] as const,
   allocationTargets: ['mf-breakdown', 'allocation-targets'] as const,
   assetClassComparison: ['mf-breakdown', 'asset-class-comparison'] as const,
+  rebalancePlan: ['mf-breakdown', 'rebalance-plan'] as const,
   categoryComposition: ['mf-breakdown', 'category-composition'] as const,
   sectorComposition: ['mf-breakdown', 'sector-composition'] as const,
   sectorStockBreakdown: ['mf-breakdown', 'sector-stock-breakdown'] as const,
@@ -105,6 +107,18 @@ export function useAssetClassComparison() {
   return useQuery({
     queryKey: breakdownKeys.assetClassComparison,
     queryFn: () => request<AssetClassComparison>('/api/v1/mf-breakdown/asset-class-comparison'),
+  })
+}
+
+export function useRebalancePlan(mode: 'anchored' | 'free_float', cash?: number) {
+  return useQuery({
+    queryKey: [...breakdownKeys.rebalancePlan, mode, cash ?? null],
+    queryFn: () => {
+      const params = new URLSearchParams({ mode })
+      if (cash != null) params.set('cash', String(cash))
+      return request<RebalancePlan>(`/api/v1/mf-breakdown/rebalance-plan?${params}`)
+    },
+    placeholderData: (prev) => prev,
   })
 }
 

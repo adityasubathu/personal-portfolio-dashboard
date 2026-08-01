@@ -316,6 +316,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /allocation-targets` | Saved per-category equity targets |
 | `POST /allocation-targets` | Save per-category equity targets |
 | `GET /asset-class-comparison` | Asset class (Equity/Debt/PM) current vs target |
+| `GET /rebalance-plan` | Cash injection needed to zero out allocation drift (`?mode=anchored\|free_float&cash=`) |
 | `GET /asset-class-targets` | Saved asset class targets |
 | `POST /asset-class-targets` | Save asset class targets (also saves `Equity - Foreign` to `allocation_targets`) |
 | `GET /stock-holdings` | Flat list of all equity stocks across schemes |
