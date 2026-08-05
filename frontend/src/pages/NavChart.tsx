@@ -128,6 +128,7 @@ export function NavChart() {
               compareLines={compareLines}
               persistKey={`nav_chart_h_${selectedId}`}
               defaultHeight={520}
+              maskInPrivacy={false}
             />
           ) : (
             <Box>
@@ -139,6 +140,7 @@ export function NavChart() {
                 compareLines={etfCompareLines}
                 persistKey={`nav_chart_h_${selectedId}`}
                 defaultHeight={520}
+                maskInPrivacy={false}
               />
               {etfCompareLines && (
                 <Text size="xs" c="dimmed" mt={4}>

@@ -857,6 +857,7 @@ export function MarketSentiment() {
               defaultHeight={180}
               priceFormatter={(p) => p.toFixed(1)}
               hideControls
+            maskInPrivacy={false}
             />
           </Box>
         </>
@@ -917,6 +918,7 @@ export function MarketSentiment() {
             priceFormatter={numFormatter}
             showOhlcInfo
             hideMainTag
+          maskInPrivacy={false}
           />
         </>
       ) : null}
@@ -943,6 +945,7 @@ export function MarketSentiment() {
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
                 hideControls
+              maskInPrivacy={false}
               />
             </Box>
 
@@ -960,6 +963,7 @@ export function MarketSentiment() {
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
                 hideControls
+              maskInPrivacy={false}
               />
             </Box>
 
@@ -977,6 +981,7 @@ export function MarketSentiment() {
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
                 hideControls
+              maskInPrivacy={false}
               />
             </Box>
           </Stack>
@@ -998,6 +1003,7 @@ export function MarketSentiment() {
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
                 hideControls
+              maskInPrivacy={false}
               />
             </Box>
 
@@ -1017,6 +1023,7 @@ export function MarketSentiment() {
                 defaultHeight={130}
                 priceFormatter={oscFormatter}
                 hideControls
+              maskInPrivacy={false}
               />
             </Box>
           </Stack>

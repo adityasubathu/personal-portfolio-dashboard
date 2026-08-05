@@ -130,6 +130,12 @@ function NumMoney({ value, showSign }: { value: number | null | undefined; showS
   return <DecNum text={text} decWidth="3ch" />
 }
 
+// Per-unit market prices — not masked in privacy mode; harmless without quantity
+function NumPrice({ value }: { value: number | null | undefined }) {
+  if (value == null) return <DecNum text="—" decWidth="3ch" />
+  return <DecNum text={inr(value)} decWidth="3ch" />
+}
+
 // Percentage: pct() always emits 2 dp → decimal slot is '.XX%' = 4ch
 function NumPct({ value }: { value: number | null | undefined }) {
   return <DecNum text={pct(value)} decWidth="4ch" />
@@ -137,6 +143,8 @@ function NumPct({ value }: { value: number | null | undefined }) {
 
 // Quantity: no digit grouping; MF units up to 3 dp → decimal slot is '.XXX' = 4ch
 function NumQty({ value }: { value: number }) {
+  const { privacyMode } = usePrivacy()
+  if (privacyMode) return <DecNum text="•••" decWidth="4ch" />
   const text = Number.isInteger(value) ? String(value) : value.toFixed(3)
   return <DecNum text={text} decWidth="4ch" />
 }
@@ -178,7 +186,7 @@ function HoldingsTable() {
         <Table.Td fw={500}>{r.symbol}</Table.Td>
         <Table.Td style={{ color: 'var(--mantine-color-dimmed)' }}>{r.type}</Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumQty value={r.qty} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.avg_price} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><NumPrice value={r.avg_price} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.cost} /></Table.Td>
         <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rg') }}>
           <NumPct value={r.day_chg_pct} />
@@ -187,11 +195,11 @@ function HoldingsTable() {
           <NumMoney value={r.day_chg_abs} showSign />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <NumMoney value={r.prev_close} />
+          <NumPrice value={r.prev_close} />
           {r.prev_close_date && <Text size="xs" c="dimmed">{r.prev_close_date}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
-          <NumMoney value={r.ltp} />
+          <NumPrice value={r.ltp} />
           {r.as_of && <Text size="xs" c="dimmed">{r.as_of}</Text>}
         </Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.value} /></Table.Td>
@@ -279,6 +287,7 @@ function HoldingsTable() {
 // ── Manual assets ──────────────────────────────────────────────────────────────
 
 function ManualAssets() {
+  const { privacyMode } = usePrivacy()
   const { data } = useManualAssets()
   const addFdMut = useAddFdMutation()
   const ppfMut = useUpsertPpfMutation()
@@ -418,7 +427,7 @@ function ManualAssets() {
           <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" c="dimmed">Foreign Equity</Text>
             <Text fw={600} size="sm"><MoneyText value={data.total_foreign_equity_inr} /></Text>
-            <Text size="xs" c="dimmed">${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+            <Text size="xs" c="dimmed">{privacyMode ? '$•••' : `$${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
           </Paper>
         )}
       </Group>
@@ -467,7 +476,7 @@ function ManualAssets() {
                 const editing = fxEdits[fe.id]
                 const chg = fe.invested_usd > 0 ? fe.value_usd - fe.invested_usd : null
                 const chgPct = fe.invested_usd > 0 ? ((fe.value_usd - fe.invested_usd) / fe.invested_usd) * 100 : null
-                const fmt = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                const fmt = (n: number) => privacyMode ? '$•••' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 const chgColor = chg == null ? undefined : chg >= 0 ? 'green' : 'red'
                 if (editing) {
                   return (

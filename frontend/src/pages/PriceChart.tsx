@@ -37,6 +37,7 @@ export function PriceChart() {
           markers={chartData.markers}
           persistKey={`price_chart_h_${selectedId}`}
           defaultHeight={520}
+          maskInPrivacy={false}
         />
       )}
     </Stack>

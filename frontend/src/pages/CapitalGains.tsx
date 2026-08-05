@@ -21,8 +21,11 @@ import {
 import { IconAlertCircle, IconChevronDown, IconChevronRight, IconInfoCircle } from '@tabler/icons-react'
 import { useCapitalGains, useCapitalGainsYears } from '../api/capitalGains'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { usePrivacy } from '../hooks/usePrivacy'
 import { MoneyText } from '../components/MoneyText'
 import { gainColor, inr } from '../lib/format'
+
+const MASK = '₹•••'
 import type { GainBucket, RealizedLot, AttentionItem } from '../types/capitalGains'
 
 const PAGE_PX = 128
@@ -86,6 +89,8 @@ function InfoPopover({ text }: { text: string }) {
 // ── Bucket summary cards ──────────────────────────────────────────────────────
 
 function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number }) {
+  const { privacyMode } = usePrivacy()
+  const fmt = (v: number) => privacyMode ? MASK : inr(v)
   const isLoss = bucket.gross_gain < 0
   const effectiveRate = bucket.rate ?? (slabRate > 0 ? slabRate : null)
   const effectiveTax = bucket.rate != null
@@ -99,18 +104,18 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
       {(bucket.setoff_applied > 0 || bucket.exemption_applied > 0) && (
         <Stack gap={2} mt={6}>
           {bucket.setoff_applied > 0 && (
-            <Text size="xs" c="dimmed">Set-off: −{inr(bucket.setoff_applied)}</Text>
+            <Text size="xs" c="dimmed">Set-off: −{fmt(bucket.setoff_applied)}</Text>
           )}
           {bucket.exemption_applied > 0 && (
-            <Text size="xs" c="dimmed">Exempt: −{inr(bucket.exemption_applied)}</Text>
+            <Text size="xs" c="dimmed">Exempt: −{fmt(bucket.exemption_applied)}</Text>
           )}
-          <Text size="xs" fw={500}>Taxable: {inr(bucket.taxable)}</Text>
+          <Text size="xs" fw={500}>Taxable: {fmt(bucket.taxable)}</Text>
         </Stack>
       )}
       {!isLoss && effectiveRate != null && effectiveTax != null && (
         <Text size="xs" mt={4} c="dimmed">
           Est. tax @ {effectiveRate}%:{' '}
-          <Text component="span" fw={600} c={gainColor(-1)}>{inr(effectiveTax)}</Text>
+          <Text component="span" fw={600} c={gainColor(-1)}>{fmt(effectiveTax)}</Text>
         </Text>
       )}
       {!isLoss && bucket.rate == null && effectiveRate == null && (
@@ -134,6 +139,8 @@ interface SymbolGroup {
 const EXPAND_COL = 6  // number of columns in the detail table
 
 function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: string }) {
+  const { privacyMode } = usePrivacy()
+  const fmt = (v: number) => privacyMode ? MASK : inr(v)
   // Partition: lots whose buy happened before this FY (carried in) vs acquired this FY
   const carried = lots.filter(l => l.buy_date < fyStart)
   const acquired = lots.filter(l => l.buy_date >= fyStart)
@@ -156,7 +163,7 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
         <Table.Td colSpan={EXPAND_COL} style={{ ...cellStyle, paddingLeft: 32, paddingTop: 10, paddingBottom: 4 }}>
           <Text size="sm" fw={600} c="dimmed">
             Opening position (bought before {fyStart}):
-            {' '}{carriedQty.toLocaleString('en-IN')} units @ avg {inr(avgCost)} = {inr(carriedCost)}
+            {' '}{carriedQty.toLocaleString('en-IN')} units @ avg {inr(avgCost)} = {fmt(carriedCost)}
           </Text>
         </Table.Td>
       </Table.Tr>
@@ -197,10 +204,10 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
         <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>
           {lot.qty.toLocaleString('en-IN')}
         </Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{inr(lot.buy_value)}</Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{inr(lot.sell_value)}</Table.Td>
+        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(lot.buy_value)}</Table.Td>
+        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(lot.sell_value)}</Table.Td>
         <Table.Td style={{ ...cellStyle, textAlign: 'right', color: gainColor(lot.gain), fontWeight: 500 }}>
-          {inr(lot.gain)}
+          {fmt(lot.gain)}
         </Table.Td>
       </Table.Tr>
     )
@@ -211,6 +218,8 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
 
 function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const { privacyMode } = usePrivacy()
+  const fmt = (v: number) => privacyMode ? MASK : inr(v)
 
   if (lots.length === 0) return <Text c="dimmed" size="sm">No realized lots for this FY.</Text>
 
@@ -287,13 +296,13 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
                   )}
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'right', color: sg.stcg !== 0 ? gainColor(sg.stcg) : undefined, fontWeight: sg.stcg !== 0 ? 500 : undefined }}>
-                  {sg.stcg !== 0 ? inr(sg.stcg) : <Text c="dimmed" size="xs">—</Text>}
+                  {sg.stcg !== 0 ? fmt(sg.stcg) : <Text c="dimmed" size="xs">—</Text>}
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'right', color: sg.ltcg !== 0 ? gainColor(sg.ltcg) : undefined, fontWeight: sg.ltcg !== 0 ? 500 : undefined }}>
-                  {sg.ltcg !== 0 ? inr(sg.ltcg) : <Text c="dimmed" size="xs">—</Text>}
+                  {sg.ltcg !== 0 ? fmt(sg.ltcg) : <Text c="dimmed" size="xs">—</Text>}
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'right', color: gainColor(sg.total), fontWeight: 600 }}>
-                  {inr(sg.total)}
+                  {fmt(sg.total)}
                 </Table.Td>
               </Table.Tr>,
               isOpen && (
@@ -329,6 +338,7 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
 // ── Attention section ─────────────────────────────────────────────────────────
 
 function AttentionSection({ items }: { items: AttentionItem[] }) {
+  const { privacyMode } = usePrivacy()
   if (items.length === 0) return null
   return (
     <Stack gap="xs">
@@ -340,7 +350,7 @@ function AttentionSection({ items }: { items: AttentionItem[] }) {
         <Alert key={i} color="orange" variant="light" py="xs">
           <Group gap="xs" wrap="nowrap">
             <Text size="sm" fw={500}>{item.symbol}</Text>
-            <Text size="sm" c="dimmed">sold {item.sell_date} · qty {item.qty} · proceeds {inr(item.sell_value)}</Text>
+            <Text size="sm" c="dimmed">sold {item.sell_date} · qty {item.qty} · proceeds {privacyMode ? MASK : inr(item.sell_value)}</Text>
           </Group>
           <Text size="xs" mt={4}>{item.reason}</Text>
         </Alert>
@@ -352,6 +362,7 @@ function AttentionSection({ items }: { items: AttentionItem[] }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CapitalGains() {
+  const { privacyMode } = usePrivacy()
   const { data: yearsData, isLoading: yearsLoading } = useCapitalGainsYears()
   const fys = yearsData?.fys ?? []
 
@@ -499,7 +510,7 @@ export function CapitalGains() {
                 {data.intraday.trades} intraday trade{data.intraday.trades !== 1 ? 's' : ''} detected
                 (same-day buy+sell) · approx. P&L{' '}
                 <Text component="span" fw={500} style={{ color: gainColor(data.intraday.pnl) }}>
-                  {inr(data.intraday.pnl)}
+                  {privacyMode ? MASK : inr(data.intraday.pnl)}
                 </Text>{' '}
                 — treated as speculative business income, not capital gains.
               </Text>

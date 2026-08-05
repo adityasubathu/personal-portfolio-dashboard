@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-08-05 — Privacy mode: fix Capital Gains leak, mask quantity/foreign-equity, unmask market-data charts
+
+- `frontend/src/pages/CapitalGains.tsx` — bucket cards, opening-position/lot detail rows, per-symbol STCG/LTCG/total, attention items, and the intraday footnote all rendered raw `inr()` regardless of privacy mode; now mask behind `₹•••` like the rest of the app when `usePrivacy().privacyMode` is on
+- `frontend/src/pages/Dashboard.tsx` — holdings table `NumQty` now masks quantity in privacy mode (avg price / prev close / LTP stay visible — a bare per-unit price doesn't reveal position size, but qty × price does); Foreign Equity summary card and per-row table (invested/current/change $) now mask in privacy mode, change % stays visible
+- `frontend/src/components/LwChart.tsx` — new `maskInPrivacy` prop (default `true`, preserves masking on `NavHistory`'s portfolio value/invested chart)
+- `frontend/src/pages/PriceChart.tsx`, `NavChart.tsx`, `MarketSentiment.tsx` — pass `maskInPrivacy={false}`, since these charts show public market/instrument prices, not the user's holding value
+
+---
+
 ## 2026-08-01 — Dashboard holdings table: independent heatmap gradients
 
 - `app/services/holdings_engine.py` — computes `day_chg_pct_min`/`max` from actual data via `_range()`, same as every other heatmap column

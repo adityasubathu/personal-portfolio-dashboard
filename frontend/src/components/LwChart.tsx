@@ -40,6 +40,7 @@ interface LwChartProps {
   hideMainTag?: boolean
   priceScaleWidth?: number
   onPriceScaleWidth?: (width: number) => void
+  maskInPrivacy?: boolean
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -143,8 +144,10 @@ export function LwChart({
   hideMainTag = false,
   priceScaleWidth,
   onPriceScaleWidth,
+  maskInPrivacy = true,
 }: LwChartProps) {
-  const { privacyMode } = usePrivacy()
+  const { privacyMode: privacyModeRaw } = usePrivacy()
+  const privacyMode = privacyModeRaw && maskInPrivacy
   const privacyModeRef = useRef(privacyMode)
   privacyModeRef.current = privacyMode
   const priceFormatterRef = useRef(priceFormatter)
