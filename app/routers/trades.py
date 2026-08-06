@@ -2,16 +2,17 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.import_log import CSVImportLog
 from app.models.instrument import Instrument
 from app.models.trade import Trade
-from app.schemas.trades import ImportBatch, ImportResponse, TradeRow, TradesListResponse
+from app.schemas.trades import ImportBatch, ImportResponse, TradesListResponse
 from app.services.csv_importer import import_csv
 from app.services.holdings_engine import recompute_holdings
+from app.services.trades import list_trades_grouped
 from app.services.xirr import recompute_and_store_xirr
 from app.time_util import now_ist
 
@@ -41,58 +42,7 @@ async def list_trades(
     q: str = Query("", max_length=50),
     db: AsyncSession = Depends(get_db),
 ):
-    offset = (page - 1) * per_page
-    q_stripped = (q or "").strip()
-
-    base = select(Trade, Instrument).join(Instrument, Trade.instrument_id == Instrument.id)
-    if q_stripped:
-        like = f"%{q_stripped}%"
-        base = base.where(or_(Instrument.tradingsymbol.ilike(like), Instrument.isin.ilike(like)))
-
-    total = (
-        await db.execute(
-            select(func.count())
-            .select_from(Trade)
-            .join(Instrument, Trade.instrument_id == Instrument.id)
-            .where(*([or_(Instrument.tradingsymbol.ilike(f"%{q_stripped}%"),
-                          Instrument.isin.ilike(f"%{q_stripped}%"))] if q_stripped else []))
-        )
-    ).scalar_one()
-
-    result = await db.execute(
-        base.order_by(Trade.trade_date.desc(), Trade.id.desc())
-            .offset(offset)
-            .limit(per_page)
-    )
-    rows = result.all()
-
-    return TradesListResponse(
-        rows=[
-            TradeRow(
-                id=t.id,
-                instrument_id=t.instrument_id,
-                symbol=instr.tradingsymbol,
-                isin=instr.isin,
-                trade_date=t.trade_date.isoformat(),
-                trade_type=t.trade_type,
-                quantity=float(t.quantity),
-                price=float(t.price),
-                amount=float(t.amount) if t.amount is not None else None,
-                brokerage=float(t.brokerage),
-                exchange=t.exchange,
-                segment=t.segment,
-                notes=t.notes,
-                source=t.source,
-                import_batch_id=t.import_batch_id,
-            )
-            for t, instr in rows
-        ],
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=(total + per_page - 1) // per_page,
-        q=q_stripped,
-    )
+    return await list_trades_grouped(db, page, per_page, q)
 
 
 @router.post("/import", response_model=ImportResponse)

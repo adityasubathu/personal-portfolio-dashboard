@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-08-06 — Trades page: group by order, expand to see individual fills
+
+- `app/models/trade.py` — new indexed `order_id` column
+- migration `330edc09963d` — adds `trades.order_id`; backfilled existing rows by matching against the original Kite tradebook CSVs in `data/trades_data/`
+- `app/services/csv_importer.py` — captures `Order ID`/`order_id` from Kite legacy, current, and generic CSV formats; fixed a latent bug where optional generic-CSV columns (e.g. `isin`, `notes`) raised `KeyError` instead of falling back when absent
+- `app/services/trades.py` (new) — groups trades by `order_id` and paginates over the groups (trade volume is small enough that grouping in Python is simpler than a grouped SQL query)
+- `app/schemas/trades.py`, `app/routers/trades.py` — `list_trades` now returns one `TradeOrderRow` per order (with summed quantity/amount and a volume-weighted price) carrying a nested `trades` list; a large multi-fill order (e.g. a big sell sliced into dozens of exchange fills) used to show as dozens of separate rows
+- `frontend/src/pages/Trades.tsx` — one row per order; orders with more than one fill show a trade count and expand on click to reveal the individual fills
+- `frontend/src/types/trades.ts` — added `TradeOrderRow`, updated `TradeRow`/`TradesListResponse` to match
+
+---
+
 ## 2026-08-05 — Privacy mode: fix Capital Gains leak, mask quantity/foreign-equity, unmask market-data charts
 
 - `frontend/src/pages/CapitalGains.tsx` — bucket cards, opening-position/lot detail rows, per-symbol STCG/LTCG/total, attention items, and the intraday footnote all rendered raw `inr()` regardless of privacy mode; now mask behind `₹•••` like the rest of the app when `usePrivacy().privacyMode` is on

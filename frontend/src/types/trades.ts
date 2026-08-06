@@ -14,10 +14,27 @@ export interface TradeRow {
   notes: string | null
   source: string
   import_batch_id: string | null
+  order_id: string | null
+}
+
+export interface TradeOrderRow {
+  order_id: string
+  instrument_id: number
+  symbol: string | null
+  isin: string | null
+  trade_date: string
+  trade_type: string
+  quantity: number
+  price: number
+  amount: number
+  exchange: string | null
+  segment: string | null
+  source: string
+  trades: TradeRow[]
 }
 
 export interface TradesListResponse {
-  rows: TradeRow[]
+  rows: TradeOrderRow[]
   page: number
   per_page: number
   total: number

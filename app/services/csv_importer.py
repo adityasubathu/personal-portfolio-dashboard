@@ -108,6 +108,7 @@ def _normalize_kite_legacy(df: pd.DataFrame) -> pd.DataFrame:
     out["price"] = df["Price"].apply(_parse_price)
     out["brokerage"] = 0.0
     out["notes"] = ""
+    out["order_id"] = df.get("Order ID", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
     return out
 
 
@@ -129,6 +130,7 @@ def _normalize_kite_current(df: pd.DataFrame) -> pd.DataFrame:
     out["price"] = df["price"].apply(_parse_price)
     out["brokerage"] = 0.0
     out["notes"] = ""
+    out["order_id"] = df.get("order_id", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
     return out
 
 
@@ -148,10 +150,12 @@ def _normalize_generic(df: pd.DataFrame) -> pd.DataFrame:
     out["price"] = df[col("price", "nav")].apply(_parse_price)
     out["brokerage"] = df.get(col("brokerage"), pd.Series([0.0] * len(df))).fillna(0.0)
     out["notes"] = df.get(col("notes"), pd.Series([""] * len(df))).fillna("")
+    order_id_col = _col_map(df, optional=True)("order_id")
+    out["order_id"] = df[order_id_col].fillna("").astype(str).str.strip() if order_id_col else ""
     return out
 
 
-def _col_map(df: pd.DataFrame):
+def _col_map(df: pd.DataFrame, optional: bool = False):
     """Return a function that finds the first matching column name (case-insensitive)."""
     lower_map = {c.lower().replace(" ", "_"): c for c in df.columns}
 
@@ -159,6 +163,8 @@ def _col_map(df: pd.DataFrame):
         for n in names:
             if n.lower() in lower_map:
                 return lower_map[n.lower()]
+        if optional:
+            return None
         raise KeyError(f"None of {names} found in CSV columns: {list(df.columns)}")
 
     return find
@@ -201,6 +207,7 @@ async def _insert_row(db: AsyncSession, row: pd.Series, batch_id: str) -> None:
         notes=str(row.get("notes", "")) or None,
         source="CSV_IMPORT",
         import_batch_id=batch_id,
+        order_id=str(row.get("order_id", "")) or None,
     )
     db.add(trade)
 

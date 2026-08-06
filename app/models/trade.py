@@ -23,6 +23,7 @@ class Trade(Base):
     notes: Mapped[str | None] = mapped_column(String(500))
     source: Mapped[str] = mapped_column(String(20))  # CSV_IMPORT / MANUAL
     import_batch_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    order_id: Mapped[str | None] = mapped_column(String(50), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)
 
     instrument: Mapped["Instrument"] = relationship(back_populates="trades")

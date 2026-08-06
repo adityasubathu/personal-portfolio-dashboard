@@ -18,10 +18,27 @@ class TradeRow(BaseModel):
     notes: Optional[str] = None
     source: str
     import_batch_id: Optional[str] = None
+    order_id: Optional[str] = None
+
+
+class TradeOrderRow(BaseModel):
+    order_id: str
+    instrument_id: int
+    symbol: Optional[str] = None
+    isin: Optional[str] = None
+    trade_date: str
+    trade_type: str
+    quantity: float
+    price: float
+    amount: float
+    exchange: Optional[str] = None
+    segment: Optional[str] = None
+    source: str
+    trades: list[TradeRow]
 
 
 class TradesListResponse(BaseModel):
-    rows: list[TradeRow]
+    rows: list[TradeOrderRow]
     page: int
     per_page: int
     total: int
