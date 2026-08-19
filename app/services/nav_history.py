@@ -28,9 +28,20 @@ MF_TYPES = {"MF"}
 
 
 async def compute_nav_series(db: AsyncSession) -> list[dict]:
-    """Return [{date, value, invested}] from the earliest trade to today.
+    """Return [{date, value, invested, unit_nav}] from the earliest trade to today.
     Forward-fills missing prices; falls back to trade price when no close
-    is known yet for a newly-bought instrument."""
+    is known yet for a newly-bought instrument.
+
+    `unit_nav` is a daily time-weighted return (Modified Dietz, cash flows
+    counted at day-end) compounded from BASE_NAV — the standard GIPS-style
+    method fund administrators use to report performance independent of
+    contribution/withdrawal timing. Unlike a unit-creation approach keyed to
+    trade price, it never compares a trade's execution price against that
+    day's close, so it isn't thrown off when a data vendor (e.g. Kite)
+    retroactively re-scales historical closes for a later corporate action —
+    each day's return only ever compares consecutive days from the same
+    price series. See plans/2026-08-19-unit-nav-chart.md.
+    """
     trades = list(
         (await db.execute(select(Trade).order_by(Trade.trade_date, Trade.id))).scalars().all()
     )
@@ -86,9 +97,21 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
     last_close: dict[int, float] = {}
     series: list[dict] = []
 
+    BASE_NAV = 100.0
+    prev_value = 0.0   # prior day's end-of-day portfolio value (yesterday's `value`)
+    unit_nav = BASE_NAV
+
     cur = start
     while cur <= end:
-        # Apply trades on this date before valuing.
+        # Update last_close from any price_history row on this date.
+        for iid, day_map in price_lookup.items():
+            close = day_map.get(cur)
+            if close is not None:
+                last_close[iid] = close
+
+        # Apply trades on this date, tracking net cash flow (BUY = contribution,
+        # SELL = withdrawal) for today's TWR calc below.
+        net_cf = 0.0
         for t in trades_by_date.get(cur, []):
             q = float(t.quantity or 0)
             p = float(t.price or 0)
@@ -98,6 +121,7 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
                 cost[t.instrument_id] += q * p + brokerage
                 # Seed last_close from the trade price if no external close is known yet.
                 last_close.setdefault(t.instrument_id, p)
+                net_cf += q * p + brokerage
             else:  # SELL
                 held = qty[t.instrument_id]
                 if held > 0:
@@ -109,12 +133,7 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
                     # Full exit — zero out any residual float dust.
                     qty[t.instrument_id] = 0.0
                     cost[t.instrument_id] = 0.0
-
-        # Update last_close from any price_history row on this date.
-        for iid, day_map in price_lookup.items():
-            close = day_map.get(cur)
-            if close is not None:
-                last_close[iid] = close
+                net_cf -= q * p
 
         value = 0.0
         for iid, q in qty.items():
@@ -126,11 +145,27 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
             value += q * price
 
         invested = sum(c for c in cost.values() if c > 0)
+
+        # Daily time-weighted return: organic gain = end_value - begin_value -
+        # net_cash_flow, scaled by begin_value. On a day with no prior holdings
+        # (fund inception, or re-entry after a full exit) there's no basis to
+        # measure a return against yet — comparing today's contributed cash
+        # (real trade price) to today's mark (price_history close) would just
+        # reintroduce whatever gap exists between the two, e.g. Kite retroactively
+        # rescaling historical closes for a later corporate action. So unit_nav
+        # carries forward unchanged (100 on true inception), and today's
+        # end-of-day value becomes tomorrow's basis instead.
+        if prev_value > 1e-9:
+            numerator = value - prev_value - net_cf
+            unit_nav *= 1.0 + numerator / prev_value
+
         series.append({
             "date": cur.isoformat(),
             "value": round(value, 2),
             "invested": round(invested, 2),
+            "unit_nav": round(unit_nav, 4),
         })
+        prev_value = value
         cur += timedelta(days=1)
 
     return series

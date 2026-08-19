@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Group, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Box, Button, Group, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconPlayerStop, IconRefresh, IconUpload } from '@tabler/icons-react'
@@ -9,7 +9,8 @@ import { LwChart } from '../components/LwChart'
 import { SsePanel } from '../components/SsePanel'
 import { useSse } from '../hooks/useSse'
 import { apiUrl } from '../api/client'
-import type { NavPoint } from '../types/portfolio'
+import type { NavPoint as NavSeriesPoint } from '../types/portfolio'
+import type { NavPoint } from '../types/charts'
 
 function navPriceFormatter(price: number): string {
   const abs = Math.abs(price)
@@ -82,13 +83,17 @@ export function NavHistory() {
   })) ?? []
 
   // Convert nav series to chart format
-  const valueData: NavPoint[] = (navSeries ?? []).map((p: { date: string; value: number }) => ({
+  const valueData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
     time: p.date,
     value: p.value,
   }))
-  const investedData: NavPoint[] = (navSeries ?? []).map((p: { date: string; invested: number }) => ({
+  const investedData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
     time: p.date,
     value: p.invested,
+  }))
+  const unitNavData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
+    time: p.date,
+    value: p.unit_nav,
   }))
 
   async function handleUploadOhlc() {
@@ -105,23 +110,42 @@ export function NavHistory() {
     <Stack gap="lg">
       <Title order={3}>Portfolio NAV History</Title>
 
-      {/* Portfolio value chart */}
       {navLoading && <Text size="sm" c="dimmed">Loading NAV history…</Text>}
-      {valueData.length > 0 && (
-        <Box>
-          <Text size="xs" c="dimmed" mb={4}>Blue = market value · Orange = invested cost</Text>
-          <LwChart
-            seriesType="line"
-            persistKey="portfolio_nav_h"
-            defaultHeight={400}
-            priceFormatter={navPriceFormatter}
-            compareLines={[
-              { data: valueData, label: 'Value', color: '#3b82f6' },
-              { data: investedData, label: 'Invested', color: '#f59e0b' },
-            ]}
-          />
-        </Box>
-      )}
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        {/* Portfolio value chart */}
+        {valueData.length > 0 && (
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>Blue = market value · Orange = invested cost</Text>
+            <LwChart
+              seriesType="line"
+              persistKey="portfolio_nav_h"
+              defaultHeight={400}
+              priceFormatter={navPriceFormatter}
+              compareLines={[
+                { data: valueData, label: 'Value', color: '#3b82f6' },
+                { data: investedData, label: 'Invested', color: '#f59e0b' },
+              ]}
+            />
+          </Box>
+        )}
+
+        {/* Unit NAV chart */}
+        {unitNavData.length > 0 && (
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>
+              Unit NAV — performance excluding cash flows (base = 100)
+            </Text>
+            <LwChart
+              seriesType="line"
+              persistKey="portfolio_unit_nav_h"
+              defaultHeight={300}
+              priceFormatter={(v: number) => v.toFixed(2)}
+              compareLines={[{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }]}
+              maskInPrivacy={false}
+            />
+          </Box>
+        )}
+      </SimpleGrid>
 
       {/* MF NAV sync */}
       <Box>
