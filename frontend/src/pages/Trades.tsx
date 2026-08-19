@@ -4,8 +4,15 @@ import { useDebouncedValue } from '@mantine/hooks'
 import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-react'
 import { useTrades } from '../api/trades'
 import { MoneyText } from '../components/MoneyText'
+import { usePrivacy } from '../hooks/usePrivacy'
+import { inr } from '../lib/format'
 import { apiUrl } from '../api/client'
 import type { TradeOrderRow, TradeRow } from '../types/trades'
+
+function QtyText({ value }: { value: number }) {
+  const { privacyMode } = usePrivacy()
+  return <>{privacyMode ? '•••' : value}</>
+}
 
 function TradeTypeBadge({ type }: { type: string }) {
   return (
@@ -23,8 +30,8 @@ function OrderDetailRow({ trade }: { trade: TradeRow }) {
       <Table.Td><TradeTypeBadge type={trade.trade_type} /></Table.Td>
       <Table.Td><Text size="xs">{trade.symbol ?? '—'}</Text></Table.Td>
       <Table.Td><Text size="xs" c="dimmed">{trade.isin ?? '—'}</Text></Table.Td>
-      <Table.Td style={{ textAlign: 'right' }}>{trade.quantity}</Table.Td>
-      <Table.Td style={{ textAlign: 'right' }}><MoneyText value={trade.price} /></Table.Td>
+      <Table.Td style={{ textAlign: 'right' }}><QtyText value={trade.quantity} /></Table.Td>
+      <Table.Td style={{ textAlign: 'right' }}>{inr(trade.price)}</Table.Td>
       <Table.Td style={{ textAlign: 'right' }}><MoneyText value={trade.amount ?? trade.price * trade.quantity} /></Table.Td>
       <Table.Td>{trade.exchange ?? '—'}</Table.Td>
       <Table.Td><Text size="xs" c="dimmed">{trade.source}</Text></Table.Td>
@@ -53,8 +60,8 @@ function OrderRow({ order, expanded, onToggle }: { order: TradeOrderRow; expande
         <Table.Td><TradeTypeBadge type={order.trade_type} /></Table.Td>
         <Table.Td><Text size="xs" fw={500}>{order.symbol ?? '—'}</Text></Table.Td>
         <Table.Td><Text size="xs" c="dimmed">{order.isin ?? '—'}</Text></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}>{order.quantity}</Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={order.price} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}><QtyText value={order.quantity} /></Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}>{inr(order.price)}</Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><MoneyText value={order.amount} /></Table.Td>
         <Table.Td>{order.exchange ?? '—'}</Table.Td>
         <Table.Td><Text size="xs" c="dimmed">{order.source}</Text></Table.Td>
