@@ -73,6 +73,12 @@ const EXPLANATIONS = {
 
   vol: `Realized volatility is the actual standard deviation of daily returns over the past 20 or 60 trading days, annualized to a yearly percentage.\n\nRV 20 (amber line) reacts faster to regime changes — it'll spike as soon as volatility picks up.\nRV 60 (purple line) is smoother — it shows the sustained volatility environment rather than short bursts.\n\nComparing the two tells you if a volatility spike is fading (RV 20 drops back toward RV 60) or becoming a new regime (RV 60 starts rising to meet RV 20).`,
 
+  trendShort: `Short-term trend scores 3 signals — Close > EMA(20), MACD histogram > 0, RSI(14) > 50 — and labels the result:\n\n3/3 → Bullish\n2/3 → Leaning Bullish\n1/3 → Leaning Bearish\n0/3 → Bearish`,
+
+  trendMid: `Mid-term trend scores 3 signals — Close > SMA(50), Close > SMA(100), +DI > -DI (ADX direction) — and labels the result:\n\n3/3 → Bullish\n2/3 → Leaning Bullish\n1/3 → Mixed\n0/3 → Bearish`,
+
+  trendLong: `Long-term trend scores 3 signals — Close > SMA(200), a Golden Cross is active (50 > 200), 1-year rolling return > 0 — and labels the result:\n\n3/3 → Strong Uptrend\n2/3 → Uptrend Bias\n1/3 → Mixed\n0/3 → Downtrend`,
+
   tableShort: `Short-term momentum uses two indicators:\n\n• RSI(14) — 0–100 oscillator. Above 70 = overbought; below 30 = oversold; ~50 = neutral.\n• MACD histogram — gap between a fast and slow EMA shown as bars. Bars growing above zero = momentum accelerating; shrinking toward zero = fading before price moves.`,
 
   tableMid: `Mid-term momentum uses two indicators:\n\n• ADX — measures trend strength (not direction). Below ~20 = no real trend; above ~25 = trend is in place and MA signals are more reliable.\n• Weekly RSI — same RSI formula on weekly closes. Much smoother than daily; shows the underlying medium-term momentum without day-to-day noise.`,
@@ -173,6 +179,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
     {
       horizon: 'Short-term',
       trend: horizons.short.trend,
+      trendInfo: EXPLANATIONS.trendShort,
       detail1: `RSI(14): ${horizons.short.rsi14 ?? '—'}`,
       detail2: `MACD hist: ${horizons.short.macd_hist ?? '—'}`,
       vol: horizons.short.vol_regime,
@@ -183,6 +190,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
     {
       horizon: 'Mid-term',
       trend: horizons.mid.trend,
+      trendInfo: EXPLANATIONS.trendMid,
       detail1: `ADX: ${horizons.mid.adx ?? '—'}`,
       detail2: `Weekly RSI: ${horizons.mid.weekly_rsi ?? '—'}`,
       vol: horizons.mid.vol_regime,
@@ -193,6 +201,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
     {
       horizon: 'Long-term',
       trend: horizons.long.trend,
+      trendInfo: EXPLANATIONS.trendLong,
       detail1: `SMA200 slope: ${horizons.long.sma200_slope ?? '—'}`,
       detail2: `Drawdown from ATH: ${horizons.long.drawdown_from_ath_pct != null ? `${horizons.long.drawdown_from_ath_pct}%` : '—'}`,
       vol: `Vol pct: ${horizons.long.vol_percentile != null ? `${horizons.long.vol_percentile}%ile` : '—'}`,
@@ -224,9 +233,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
             <Table.Tr key={r.horizon}>
               <Table.Td fw={500}>{r.horizon}</Table.Td>
               <Table.Td>
-                <Badge color={trendColor(r.trend)} variant="light" size="sm" fz="0.825rem">
-                  {r.trend}
-                </Badge>
+                <FlagChip label={r.trend} color={trendColor(r.trend)} info={r.trendInfo} />
               </Table.Td>
               <Table.Td c="dimmed" fz="sm">
                 <Group gap={4} align="center" wrap="nowrap">
@@ -498,7 +505,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
 // ── Overlay toggle config ─────────────────────────────────────────────────────
 
 const OVERLAY_DEFS = [
-  { key: 'ema9',      label: 'EMA 9',    color: '#f59e0b', group: 'EMAs' },
+  { key: 'ema9',      label: 'EMA 9',    color: '#e11d48', group: 'EMAs' },
   { key: 'ema20',     label: 'EMA 20',   color: '#fb923c', group: 'EMAs' },
   { key: 'sma50',     label: 'SMA 50',   color: '#22c55e', group: 'SMAs' },
   { key: 'sma100',    label: 'SMA 100',  color: '#3b82f6', group: 'SMAs' },
