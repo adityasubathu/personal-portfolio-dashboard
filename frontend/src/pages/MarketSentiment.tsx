@@ -946,6 +946,10 @@ export function MarketSentiment() {
                 line={oscData.rsi14}
                 label="Daily RSI"
                 compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
+                horizontalLines={[
+                  { value: 70, color: '#dc2626', label: 'Overbought' },
+                  { value: 30, color: '#2563eb', label: 'Oversold' },
+                ]}
                 persistKey="market-sentiment-rsi"
               priceScaleWidth={chartPriceScaleWidth}
               onPriceScaleWidth={(w) => reportScaleWidth('rsi', w)}

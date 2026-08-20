@@ -9,6 +9,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type IPriceLine,
   type SeriesMarker,
   type Time,
   type CandlestickData,
@@ -41,6 +42,7 @@ interface LwChartProps {
   priceScaleWidth?: number
   onPriceScaleWidth?: (width: number) => void
   maskInPrivacy?: boolean
+  horizontalLines?: Array<{ value: number; color: string; label?: string }>
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -145,6 +147,7 @@ export function LwChart({
   priceScaleWidth,
   onPriceScaleWidth,
   maskInPrivacy = true,
+  horizontalLines,
 }: LwChartProps) {
   const { privacyMode: privacyModeRaw } = usePrivacy()
   const privacyMode = privacyModeRaw && maskInPrivacy
@@ -158,6 +161,7 @@ export function LwChart({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mainSeriesRef = useRef<ISeriesApi<any> | null>(null)
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const priceLinesRef = useRef<IPriceLine[]>([])
 
   // Map from series → {label, color, tagEl} for the crosshair callback
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -419,6 +423,29 @@ export function LwChart({
       }
     })
   }, [candles, line, markers, seriesType, priceScaleWidth, onPriceScaleWidth])
+
+  // Overbought/oversold-style reference lines (e.g. RSI 70/30)
+  useEffect(() => {
+    const s = mainSeriesRef.current
+    if (!s) return
+
+    priceLinesRef.current.forEach((pl) => s.removePriceLine(pl))
+    priceLinesRef.current = (horizontalLines ?? []).map(({ value, color, label }) =>
+      s.createPriceLine({
+        price: value,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: label ?? '',
+      }),
+    )
+
+    return () => {
+      priceLinesRef.current.forEach((pl) => s.removePriceLine(pl))
+      priceLinesRef.current = []
+    }
+  }, [horizontalLines, seriesType])
 
   // Add compare series
   useEffect(() => {
