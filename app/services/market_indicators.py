@@ -62,10 +62,21 @@ def macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> p
 
 
 def weekly_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """RSI on weekly (Fri) closes, forward-filled back onto the daily index."""
+    """RSI on weekly (Fri) closes, mapped back onto the daily index by the
+    calendar week each day falls in.
+
+    The current (in-progress) week's bucket is labeled with a future Friday,
+    so a plain reindex(method='ffill') can't reach that label until the
+    Friday actually arrives — every day mid-week would keep showing last
+    week's already-completed RSI instead of the live in-progress value.
+    Mapping by week membership (not by comparing dates) fixes that.
+    """
     weekly = df['close'].resample('W-FRI').last().dropna()
     wrsi = rsi(pd.DataFrame({'close': weekly}), period)
-    return wrsi.reindex(df.index, method='ffill')
+    wrsi_by_week = wrsi.copy()
+    wrsi_by_week.index = wrsi_by_week.index.to_period('W-FRI')
+    mapped = df.index.to_period('W-FRI').map(wrsi_by_week)
+    return pd.Series(mapped, index=df.index, dtype=float)
 
 
 def streaks(df: pd.DataFrame) -> pd.Series:
