@@ -38,7 +38,11 @@ async def fetch_navs() -> dict[str, dict]:
         if len(parts) < 6:
             continue  # section header / blank
 
-        scheme_code, isin_growth, isin_reinv, scheme_name, nav_str, date_str = parts[:6]
+        # AMFI added "Plan" and "Option" columns between the scheme name and
+        # NAV/date (was 6 columns, now 8: ...;NAV Name;Plan;Option;NAV;Date).
+        # NAV and date are always the last two fields regardless of column count.
+        scheme_code, isin_growth, isin_reinv, scheme_name = parts[:4]
+        nav_str, date_str = parts[-2], parts[-1]
 
         try:
             nav = float(nav_str)
