@@ -24,7 +24,8 @@ export function useSyncNavMutation() {
 export function useSyncNavHistoryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => request<MfSyncResult>('/api/v1/mf/sync-nav-history', { method: 'POST' }),
+    mutationFn: (source: 'mfapi' | 'finapi' = 'mfapi') =>
+      request<MfSyncResult>(`/api/v1/mf/sync-nav-history?source=${source}`, { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['charts'] })

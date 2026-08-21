@@ -301,7 +301,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | Endpoint | Description |
 |---|---|
 | `POST /sync-nav` | Update MF prices from AMFI daily feed |
-| `POST /sync-nav-history` | Download historical NAV from mfapi.in |
+| `POST /sync-nav-history?source=mfapi\|finapi` | Download historical NAV (mfapi.in default, finapi.upvaly.com fallback) |
 | `POST /fetch-nav-by-isin` | Import a single fund by ISIN |
 | `GET /nav-tracked` | List manually tracked funds |
 | `DELETE /nav-tracked/{instrument_id}` | Remove tracking entry |
@@ -429,7 +429,7 @@ venv/bin/alembic downgrade -1
 |---|---|---|
 | Zerodha Kite API | Live prices, holdings, OHLC | OAuth + REST (`kite_client.py`) |
 | AMFI NAVAll.txt | Daily MF NAVs | HTTP fetch (`amfi_nav.py`) |
-| mfapi.in | Historical MF NAVs | REST per scheme (`mfapi_nav.py`) |
+| mfapi.in / finapi.upvaly.com | Historical MF NAVs (user-toggled source) | REST per scheme (`mfapi_nav.py`) |
 | AMFI xlsx (local) | Company → market-cap classification | Manual download into `data/mf_portfolio_breakdown/` |
 | Scheme CSVs (local) | Per-fund holding breakdown | Manual download into `data/mf_portfolio_breakdown/<ISIN>.csv` |
 | sector_master.csv (local) | Company → SEBI sector mapping | NSE index CSV; place in `data/mf_portfolio_breakdown/sector_master.csv` |

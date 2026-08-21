@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-08-21 — NAV source switch: mfapi.in ↔ finapi fallback
+
+- `app/services/mfapi_nav.py` — new `fetch_history_finapi()` (finapi.upvaly.com, ISIN-first with scheme-code fallback); `_sync_one`/`sync_nav_history` take a `source` param; finapi sync runs sequential (semaphore=1) to stay within its 30 req/min free-tier limit
+- `app/routers/mf.py` — `/sync-nav-history` accepts a `source` query param (`mfapi` default)
+- `frontend/src/api/mf.ts` — `useSyncNavHistoryMutation` passes `source` through
+- `frontend/src/pages/NavHistory.tsx` — `SegmentedControl` toggle (mfapi.in / FinAPI), persisted via `usePersistentState('navSource', ...)`
+
+---
+
 ## 2026-08-06 — Trades page: group by order, expand to see individual fills
 
 - `app/models/trade.py` — new indexed `order_id` column

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Group, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Box, Button, Group, Select, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconPlayerStop, IconRefresh, IconUpload } from '@tabler/icons-react'
@@ -8,6 +8,7 @@ import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, 
 import { LwChart } from '../components/LwChart'
 import { SsePanel } from '../components/SsePanel'
 import { useSse } from '../hooks/useSse'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import type { NavPoint as NavSeriesPoint } from '../types/portfolio'
 import type { NavPoint } from '../types/charts'
@@ -55,6 +56,7 @@ export function NavHistory() {
   const removeTrackedMut = useRemoveNavTrackedMutation()
   const syncHistoryMut = useSyncNavHistoryMutation()
   const syncNavMut = useSyncNavMutation()
+  const [navSource, setNavSource] = usePersistentState<'mfapi' | 'finapi'>('navSource', 'mfapi')
 
   const qc = useQueryClient()
   const priceSyncSse = useSse(`${apiUrl('/api/v1/portfolio/sync-price-history/stream')}`)
@@ -150,19 +152,28 @@ export function NavHistory() {
       {/* MF NAV sync */}
       <Box>
         <Text fw={600} mb="xs">Sync MF NAV</Text>
-        <Group gap="xs" mb="xs">
+        <Group gap="xs" mb={4}>
           <Button
             size="xs"
             leftSection={<IconRefresh size={12} />}
             loading={syncHistoryMut.isPending}
             onClick={() =>
-              syncHistoryMut.mutate(undefined, {
+              syncHistoryMut.mutate(navSource, {
                 onError: (e) => notifications.show({ color: 'red', message: String(e) }),
               })
             }
           >
-            Sync NAV History (mfapi.in)
+            Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
           </Button>
+          <SegmentedControl
+            size="xs"
+            value={navSource}
+            onChange={(v) => setNavSource(v as 'mfapi' | 'finapi')}
+            data={[
+              { label: 'mfapi.in', value: 'mfapi' },
+              { label: 'FinAPI', value: 'finapi' },
+            ]}
+          />
           <Button
             size="xs"
             variant="default"
@@ -176,6 +187,9 @@ export function NavHistory() {
             Latest-only (AMFI fallback)
           </Button>
         </Group>
+        {navSource === 'finapi' && (
+          <Text size="xs" c="dimmed" mb="xs">Free tier — 30 req/min, no API key needed</Text>
+        )}
         {syncHistoryMut.data && !syncHistoryMut.data.error && (
           <Text size="xs">
             History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}

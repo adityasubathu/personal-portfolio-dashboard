@@ -27,6 +27,7 @@ from app.models.trade import Trade
 from app.services.amfi_nav import fetch_navs
 
 MFAPI_BASE = "https://api.mfapi.in/mf"
+FINAPI_BASE = "https://finapi.upvaly.com/api/mf"
 
 
 async def resolve_scheme_codes(db: AsyncSession) -> dict:
@@ -86,11 +87,52 @@ async def fetch_history(client: httpx.AsyncClient, scheme_code: str, start_date:
     return rows
 
 
+async def fetch_history_finapi(
+    client: httpx.AsyncClient,
+    scheme_code: str,
+    isin: str | None = None,
+    start_date: date | None = None,
+) -> list[dict]:
+    """Fetch NAV history from finapi.upvaly.com. Prefers the ISIN endpoint if
+    available, falls back to scheme code. Returns the same shape as fetch_history().
+
+    Despite the finapi docs implying endDate is optional, the API 500s without
+    it ("Required request parameter 'endDate' ... is not present") — always send it.
+    """
+    params = {
+        "startDate": (start_date or date(2000, 1, 1)).isoformat(),
+        "endDate": date.today().isoformat(),
+    }
+
+    if isin:
+        url = f"{FINAPI_BASE}/isin/{isin}/nav"
+    else:
+        url = f"{FINAPI_BASE}/scheme-code/{scheme_code}/nav"
+
+    r = await client.get(url, params=params, timeout=30.0)
+    r.raise_for_status()
+    payload = r.json()
+
+    if payload.get("status") != "success":
+        return []
+
+    rows = []
+    for item in payload.get("data", {}).get("navHistory", []):
+        try:
+            d = date.fromisoformat(item["navDate"])
+            nav = float(item["nav"])
+        except (KeyError, ValueError):
+            continue
+        rows.append({"nav_date": d, "nav": nav})
+    return rows
+
+
 async def _sync_one(
     db: AsyncSession,
     client: httpx.AsyncClient,
     instrument: Instrument,
     holding: Holding | None,
+    source: str = "mfapi",
 ) -> dict:
     """Sync history for a single MF/ETF instrument. `holding` may be None for
     sold-out positions — we still want the NAV history, just skip the
@@ -103,14 +145,17 @@ async def _sync_one(
 
     start = None
     if latest_existing:
-        # mfapi.in startDate is inclusive; we already have latest_existing, so ask from the next day.
+        # startDate is inclusive on both sources; we already have latest_existing, so ask from the next day.
         from datetime import timedelta
         start = latest_existing + timedelta(days=1)
 
     try:
-        rows = await fetch_history(client, instrument.amfi_scheme_code, start_date=start)
+        if source == "finapi":
+            rows = await fetch_history_finapi(client, instrument.amfi_scheme_code, instrument.isin, start_date=start)
+        else:
+            rows = await fetch_history(client, instrument.amfi_scheme_code, start_date=start)
     except httpx.HTTPError as e:
-        return {"rows_added": 0, "latest_nav_date": None, "error": f"mfapi: {e}"}
+        return {"rows_added": 0, "latest_nav_date": None, "error": f"{source}: {e}"}
 
     if not rows:
         latest_row = (
@@ -219,7 +264,7 @@ async def fetch_nav_by_isin(db: AsyncSession, isin: str) -> dict:
     }
 
 
-async def sync_nav_history(db: AsyncSession) -> dict:
+async def sync_nav_history(db: AsyncSession, source: str = "mfapi") -> dict:
     """Main entry point. Covers every MF/ETF the user has ever traded, not just
     current holdings — so the NAV-history chart can value positions that have
     since been sold. Returns a summary for rendering in the UI."""
@@ -248,8 +293,9 @@ async def sync_nav_history(db: AsyncSession) -> dict:
     latest_nav_date: date | None = None
 
     async with httpx.AsyncClient(follow_redirects=True, headers={"User-Agent": "portfolio-mac-arm/1.0"}) as client:
-        # mfapi.in is rate-limited; cap concurrency modestly.
-        sem = asyncio.Semaphore(4)
+        # mfapi.in is rate-limited; cap concurrency modestly. finapi's free tier
+        # is 30 req/min per endpoint, so go sequential to stay well within it.
+        sem = asyncio.Semaphore(1 if source == "finapi" else 4)
 
         async def _run(h: Holding | None, i: Instrument) -> None:
             nonlocal total_rows_added, latest_nav_date
@@ -257,7 +303,7 @@ async def sync_nav_history(db: AsyncSession) -> dict:
                 failed.append(f"{i.tradingsymbol or '?'}: no AMFI scheme_code (ISIN not in AMFI feed)")
                 return
             async with sem:
-                outcome = await _sync_one(db, client, i, h)
+                outcome = await _sync_one(db, client, i, h, source=source)
             if outcome.get("error"):
                 failed.append(f"{i.tradingsymbol or i.amfi_scheme_code}: {outcome['error']}")
                 return

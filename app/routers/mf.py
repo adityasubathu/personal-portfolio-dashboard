@@ -50,9 +50,9 @@ async def delete_nav_tracked(instrument_id: int, db: AsyncSession = Depends(get_
 
 
 @router.post("/sync-nav-history")
-async def sync_nav_history_route(db: AsyncSession = Depends(get_db)):
+async def sync_nav_history_route(source: str = "mfapi", db: AsyncSession = Depends(get_db)):
     try:
-        result = await sync_nav_history(db)
+        result = await sync_nav_history(db, source=source)
         await recompute_and_store_xirr(db)
         return JSONResponse({"mode": "history", "error": None, **result})
     except Exception as e:
