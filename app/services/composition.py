@@ -15,7 +15,7 @@ from app.services.allocation import _classify_stock_instrument, _load_amfi_looku
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, _SGB_RE, normalize_company_name
 from app.time_util import now_ist
 
-_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other"]
+_CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Derivatives - Leveraged", "Other"]
 
 _NON_EQUITY_SECTORS = {"Fixed Income", "Liquid / Money Market", "Gold", "Silver"}
 
@@ -78,7 +78,8 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver",
+        "Debt", "Cash", "Derivatives - Leveraged", "Other",
     ]
     category_summary = []
     for cat in order:
@@ -323,6 +324,13 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
             fund_values[i.isin] = val
 
     sector_stocks: dict[str, dict[str, float]] = {}
+    # Names differ across disclosures ("Ltd." vs "Limited") for the same company —
+    # bucket by normalized name, but keep a display name per bucket key.
+    display_name: dict[str, str] = {}
+
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    for a in amfi_all:
+        display_name[a.name_normalized] = a.company_name
 
     if fund_values:
         rows = (await db.execute(
@@ -340,10 +348,11 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
             if contrib <= 0:
                 continue
             sec = row.sector or "Unknown"
+            key = normalize_company_name(row.name)
+            display_name.setdefault(key, row.name)
             bucket = sector_stocks.setdefault(sec, {})
-            bucket[row.name] = bucket.get(row.name, 0) + contrib
+            bucket[key] = bucket.get(key, 0) + contrib
 
-    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
     isin_to_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
     name_to_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
 
@@ -373,14 +382,16 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
             continue
         sec = sec or "Unknown"
         name = i.name or i.tradingsymbol or "Unknown"
+        key = normalize_company_name(name)
+        display_name.setdefault(key, name)
         bucket = sector_stocks.setdefault(sec, {})
-        bucket[name] = bucket.get(name, 0) + val
+        bucket[key] = bucket.get(key, 0) + val
 
     out = []
     for sec, stocks in sorted(sector_stocks.items(), key=lambda x: sum(x[1].values()), reverse=True):
         total = sum(stocks.values())
         holdings = sorted(
-            [{"name": n, "value": round(v, 2), "pct": round(v / total * 100, 1)} for n, v in stocks.items()],
+            [{"name": display_name.get(k, k), "value": round(v, 2), "pct": round(v / total * 100, 1)} for k, v in stocks.items()],
             key=lambda x: x["value"], reverse=True,
         )
         out.append({"sector": sec, "total": round(total, 2), "holdings": holdings})

@@ -9,6 +9,13 @@
 
 ---
 
+## 2026-08-25 — Fix duplicate stock rows from inconsistent disclosure naming
+
+- `app/services/allocation.py` (`get_stock_holdings_table`), `app/services/composition.py` (`get_sector_stock_breakdown`) — these grouped fund holdings by the raw `MfSchemeBreakdown.name` string, so the same company disclosed with different wording across funds ("Ltd." vs "Limited") showed up as separate rows. Now grouped by `normalize_company_name()`, with AMFI's canonical `company_name` preferred as the display name.
+- Verified: Multi Commodity Exchange of India previously appeared as separate rows (one per spelling variant); now merges into a single row with combined value.
+
+---
+
 ## 2026-08-25 — MF breakdown: fix has_holdings flakiness; confirm per-scheme replace
 
 - `app/services/mf_ingest.py` — fixed a bug where OpenFin's catalog response inconsistently omits the `has_holdings` field (present in one fetch, absent in the next); treating a missing key as `False` caused every held fund to be wrongly reported as "not found in OpenFin". Now defaults to `True` when the key is absent.

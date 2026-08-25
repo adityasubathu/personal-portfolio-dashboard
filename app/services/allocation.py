@@ -53,11 +53,16 @@ def _classify_stock_instrument(
 async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
     isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
 
-    # Build ticker lookup from AMFI
+    # Build ticker + canonical-name lookups from AMFI, keyed by normalized name so
+    # differently-worded disclosures of the same company ("Ltd." vs "Limited")
+    # collapse onto one row instead of appearing as separate stocks.
     amfi_rows = (await db.execute(select(AmfiMarketCap))).scalars().all()
     ticker_lookup: dict[str, str] = {}
+    canonical_name: dict[str, str] = {}
     for a in amfi_rows:
-        ticker_lookup[normalize_company_name(a.company_name)] = a.nse_symbol or a.bse_symbol or ""
+        norm = normalize_company_name(a.company_name)
+        ticker_lookup[norm] = a.nse_symbol or a.bse_symbol or ""
+        canonical_name[norm] = a.company_name
 
     # MF/ETF fund holdings
     fund_result = await db.execute(
@@ -87,10 +92,12 @@ async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
         for row in breakdown_rows:
             hv = fund_values.get(row.scheme_isin, 0)
             contribution = hv * (float(row.holdings_pct) / 100.0)
-            if row.name not in stock_totals:
-                ticker = ticker_lookup.get(normalize_company_name(row.name), "")
-                stock_totals[row.name] = {"ticker": ticker, "category": row.category, "value": 0}
-            stock_totals[row.name]["value"] += contribution
+            key = normalize_company_name(row.name)
+            if key not in stock_totals:
+                display_name = canonical_name.get(key, row.name)
+                ticker = ticker_lookup.get(key, "")
+                stock_totals[key] = {"name": display_name, "ticker": ticker, "category": row.category, "value": 0}
+            stock_totals[key]["value"] += contribution
 
     # Direct stock holdings
     stock_result = await db.execute(
@@ -102,23 +109,24 @@ async def get_stock_holdings_table(db: AsyncSession) -> list[dict]:
         ltp = float(h.last_price) if h.last_price else None
         value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
         name = i.name or i.tradingsymbol or "Unknown"
+        key = normalize_company_name(name)
         cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
         ticker = i.tradingsymbol or ""
-        if name in stock_totals:
-            stock_totals[name]["value"] += value
+        if key in stock_totals:
+            stock_totals[key]["value"] += value
         else:
-            stock_totals[name] = {"ticker": ticker, "category": cat, "value": value}
+            stock_totals[key] = {"name": canonical_name.get(key, name), "ticker": ticker, "category": cat, "value": value}
 
     total_equity = sum(s["value"] for s in stock_totals.values())
     if total_equity <= 0:
         return []
 
     stocks = []
-    for name, info in stock_totals.items():
+    for info in stock_totals.values():
         if info["value"] <= 0:
             continue
         stocks.append({
-            "name": name,
+            "name": info["name"],
             "ticker": info["ticker"],
             "category": info["category"],
             "weight_pct": round(info["value"] / total_equity * 100, 4),
@@ -206,7 +214,8 @@ async def get_breakdown_chart_data(db: AsyncSession) -> dict:
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
-        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Other",
+        "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver",
+        "Debt", "Cash", "Derivatives - Leveraged", "Other",
     ]
     labels = []
     values = []
