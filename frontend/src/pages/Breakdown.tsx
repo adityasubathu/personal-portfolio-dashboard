@@ -767,15 +767,20 @@ function IngestResultRenderer(result: IngestDonePayload) {
       ) : null}
       {ingest?.error ? (
         <Text size="xs" c="red">Ingest: {ingest.error}</Text>
+      ) : ingest?.already_current ? (
+        <Text size="xs">All schemes are up to date{ingest.as_of ? ` (as of ${ingest.as_of})` : ''}</Text>
       ) : ingest ? (
-        <Text size="xs">Ingest: {ingest.schemes_processed} scheme(s), {ingest.rows_upserted} row(s)</Text>
+        <Text size="xs">
+          Ingest: {ingest.schemes_processed} scheme(s) updated, {ingest.rows_upserted} row(s)
+          {typeof ingest.schemes_skipped === 'number' && ingest.schemes_skipped > 0 ? ` · ${ingest.schemes_skipped} already current` : ''}
+        </Text>
       ) : null}
       {ingest?.unmatched_equities?.length ? (
         <Text size="xs" c="orange">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</Text>
       ) : null}
       {ingest?.missing_funds?.length ? (
         <Stack gap={2} mt={4}>
-          <Text size="xs" c="red" fw={600}>Missing CSVs for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</Text>
+          <Text size="xs" c="red" fw={600}>Not found in OpenFin for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</Text>
           {ingest.missing_funds.map((f) => (
             <Text key={f.isin} size="xs" c="red">• {f.isin} — {f.name}</Text>
           ))}
@@ -891,7 +896,7 @@ export function Breakdown() {
           loading={ingestSse.status === 'running'}
           disabled={ingestSse.status === 'running'}
         >
-          Ingest portfolios
+          Refresh disclosures
         </Button>
       </Group>
 

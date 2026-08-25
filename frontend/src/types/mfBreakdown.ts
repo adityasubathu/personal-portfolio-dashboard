@@ -175,6 +175,9 @@ export interface IngestDonePayload {
   ingest?: {
     schemes_processed?: number
     rows_upserted?: number
+    schemes_skipped?: number
+    already_current?: boolean
+    as_of?: string
     unmatched_equities?: Array<{ name: string; scheme_isin: string }>
     missing_funds?: Array<{ isin: string; name: string }>
     errors?: string[]

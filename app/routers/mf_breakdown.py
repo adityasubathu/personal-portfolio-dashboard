@@ -26,7 +26,7 @@ from app.services.mf_breakdown import (
     get_sector_list,
     get_sector_stock_breakdown,
     get_stock_holdings_table,
-    ingest_scheme_csvs,
+    ingest_from_openfin,
     save_allocation_targets,
     save_asset_class_targets,
     save_sector_overrides,
@@ -44,7 +44,7 @@ async def ingest_stream(db: AsyncSession = Depends(get_db)):
     async def _runner(on_progress):
         amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
         if "error" not in amfi:
-            ingest = await ingest_scheme_csvs(db, on_progress=on_progress)
+            ingest = await ingest_from_openfin(db, on_progress=on_progress)
         else:
             ingest = {"error": "Skipped — AMFI classification not loaded"}
         return {"amfi": amfi, "ingest": ingest}

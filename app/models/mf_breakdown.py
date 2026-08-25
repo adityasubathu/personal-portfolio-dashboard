@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -48,7 +48,6 @@ class EquitySectorOverride(Base):
 class MfSchemeBreakdown(Base):
     __tablename__ = "mf_scheme_breakdown"
     __table_args__ = (
-        UniqueConstraint("scheme_isin", "name", "holding_type", name="uq_mf_breakdown_scheme_name_type"),
         Index("ix_mf_breakdown_scheme_isin", "scheme_isin"),
     )
 
@@ -56,7 +55,9 @@ class MfSchemeBreakdown(Base):
     scheme_isin: Mapped[str] = mapped_column(String(12))
     name: Mapped[str] = mapped_column(String(255))
     holding_type: Mapped[str] = mapped_column(String(50))
-    holdings_pct: Mapped[float] = mapped_column(Numeric(8, 4))
+    holdings_pct: Mapped[float] = mapped_column(Numeric(14, 8))
+    market_value: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     category: Mapped[str] = mapped_column(String(30))
     sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    as_of: Mapped[date | None] = mapped_column(Date, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)

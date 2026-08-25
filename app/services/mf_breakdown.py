@@ -2,7 +2,7 @@
 # Logic lives in mf_ingest.py, allocation.py, and composition.py.
 from app.services.mf_ingest import (
     normalize_company_name,
-    ingest_scheme_csvs,
+    ingest_from_openfin,
     sync_amfi_market_cap,
 )
 from app.services.allocation import (
@@ -29,7 +29,7 @@ from app.services.composition import (
 
 __all__ = [
     "normalize_company_name",
-    "ingest_scheme_csvs",
+    "ingest_from_openfin",
     "sync_amfi_market_cap",
     "get_allocation_comparison",
     "get_allocation_targets",

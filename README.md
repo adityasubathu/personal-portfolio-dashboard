@@ -97,7 +97,7 @@ portfolio-mac-arm/
 │   │   ├── trades.py            # CSV import, split-credit, import history, trade list
 │   │   ├── kite.py              # Kite OAuth, config CRUD, holdings sync
 │   │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
-│   │   ├── mf_breakdown.py      # Ingest scheme CSVs, batch classify, chart data
+│   │   ├── mf_breakdown.py      # Ingest OpenFin disclosures, batch classify, chart data
 │   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
 │   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
@@ -115,7 +115,7 @@ portfolio-mac-arm/
 │       ├── kite_reconcile.py    # Local ↔ Kite quantity validation
 │       ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
-│       ├── mf_breakdown.py      # AMFI xlsx parse, scheme CSV ingest, chart aggregation
+│       ├── mf_breakdown.py      # AMFI xlsx parse, OpenFin disclosure ingest, chart aggregation
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
 │       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
@@ -181,7 +181,7 @@ portfolio-mac-arm/
 │       └── 0001_baseline.py     # Full schema + data migrations
 ├── alembic.ini                  # DB URL set programmatically from app.config
 ├── data/
-│   ├── mf_portfolio_breakdown/  # Drop scheme CSVs (named by ISIN) + AMFI xlsx here
+│   ├── mf_portfolio_breakdown/  # Drop AMFI xlsx + sector_master.csv here; scheme holdings now come from OpenFin, not local CSVs
 │   └── demo/                    # Committed fixture files for demo seed
 │       ├── ohlc/                # <SYMBOL>.json — daily OHLC rows (synthetic)
 │       └── nav/                 # <ISIN>.json — daily NAV rows (real, from mfapi.in)
@@ -229,7 +229,7 @@ Non-traded assets. `asset_type`: FD, PPF, NPS, CASH, USD_CASH, FOREIGN_EQ. FDs h
 AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker`, `exchanges`, `categorization`, `sector`, `aliases`.
 
 ### MfSchemeBreakdown
-Per-holding breakdown of each MF/ETF scheme. Parsed from scheme CSVs. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `category`, `sector`. Unique on `(scheme_isin, name, holding_type)`.
+Per-holding breakdown of each MF/ETF scheme. Fetched from the OpenFin disclosure API. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `market_value` (INR, fund-level), `category`, `sector`, `as_of` (disclosure date, shared by all rows for a scheme — compared against the catalog's `latest_as_of` to decide which schemes need refetching; a stale scheme's rows are fully deleted and reinserted, never merged).
 
 ### EquityCategoryOverride
 Persists manual market-cap classifications for equity holdings not found in the AMFI list. Keyed by `name_normalized`. Applied automatically on subsequent ingests.
@@ -309,7 +309,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 ### MF Breakdown (`/api/v1/mf-breakdown`)
 | Endpoint | Description |
 |---|---|
-| `GET /ingest/stream` | SSE: load AMFI xlsx + ingest scheme CSVs |
+| `GET /ingest/stream` | SSE: load AMFI xlsx + refresh stale disclosures from OpenFin |
 | `PATCH /classify-batch` | Manual category override for unmatched equities |
 | `GET /chart-data` | Allocation doughnut data |
 | `GET /allocation-comparison` | Current vs target allocation with deltas (`?mode=anchored\|free_float`) |
@@ -392,7 +392,11 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → stream progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. A Halt button POSTs to `/sync-price-history/cancel` to stop mid-run. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
 
 ### MF Breakdown
-Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Parse scheme CSVs → classify each equity holding: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
+Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`.
+
+Classification is per-holding, driven by the API's `holding_type`/`section`, not per-fund: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; a non-`IN` ISIN prefix is also treated as foreign; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
+
+**Arbitrage funds** (name matches `arbitrage`): equity and offsetting short-futures legs are grouped by ISIN and summed across contract expiries; the matched (lower) notional becomes `Equity - Arbitrage`, any leftover becomes extra `Equity` (long side bigger) or `Derivatives - Leveraged` (short side bigger, stored as a negative market value). OpenFin sometimes mislabels money-market paper (CDs) as `holding_type: "equity"` — a populated `instrument_yield` (never set on real equity) is used to catch and reclassify these as `Debt`.
 
 **Equity categories:** `Large Cap`, `Mid Cap`, `Small Cap`, `Unclassified Equity` (domestic), `Equity - Foreign`, `Equity - Arbitrage`.  
 **Allocation comparison:** two modes selectable per session:
@@ -431,6 +435,6 @@ venv/bin/alembic downgrade -1
 | AMFI NAVAll.txt | Daily MF NAVs | HTTP fetch (`amfi_nav.py`) |
 | mfapi.in / finapi.upvaly.com | Historical MF NAVs (user-toggled source) | REST per scheme (`mfapi_nav.py`) |
 | AMFI xlsx (local) | Company → market-cap classification | Manual download into `data/mf_portfolio_breakdown/` |
-| Scheme CSVs (local) | Per-fund holding breakdown | Manual download into `data/mf_portfolio_breakdown/<ISIN>.csv` |
+| openfin.pocketedge.in | Per-fund MF holding disclosures (catalog + holdings) | REST, no auth (`mf_ingest.py`) |
 | sector_master.csv (local) | Company → SEBI sector mapping | NSE index CSV; place in `data/mf_portfolio_breakdown/sector_master.csv` |
 | company_master.csv (auto) | ISIN master with tickers, exchanges, sector, aliases | Auto-generated on each AMFI sync; edit only the `aliases` column |

@@ -2,6 +2,34 @@
 
 ---
 
+## 2026-08-25 — Classify OpenFin holdings by ISIN directly, not just by name
+
+- `app/services/mf_ingest.py` (`_AmfiLookups.classify_equity`/`resolve_sector`) — each OpenFin holding carries its own ISIN, but classification only reached AMFI's market-cap/sector data indirectly, through a name→ISIN resolution chain keyed by AMFI's own name wording — so it missed whenever the two disclosures spelled a company differently (e.g. "The Jammu & Kashmir Bank Ltd." vs "...Limited"). Now tries `isin_to_mcap`/`isin_to_sector` directly against the holding's own ISIN first.
+- Verified: unmatched-equities count dropped from 16 to 11 on a full re-ingest (EID Parry, Jindal Steel & Power, both Jammu & Kashmir Bank spellings, Ecos India Mobility now resolve via direct ISIN match); MCX's sector went from "Unknown" to "Financial Services" for the same reason. Remaining unmatched names appear to be genuinely absent from AMFI's own classification file (small/micro-caps), not a resolution bug.
+
+---
+
+## 2026-08-25 — MF breakdown: fix has_holdings flakiness; confirm per-scheme replace
+
+- `app/services/mf_ingest.py` — fixed a bug where OpenFin's catalog response inconsistently omits the `has_holdings` field (present in one fetch, absent in the next); treating a missing key as `False` caused every held fund to be wrongly reported as "not found in OpenFin". Now defaults to `True` when the key is absent.
+- The catalog-based staleness check (only re-fetch schemes with a newer `latest_as_of`) is unchanged and stays. Confirmed a stale scheme's local rows are fully deleted and reinserted from the fresh disclosure (`delete().where(scheme_isin == isin)` then insert) rather than merged row-by-row — this was already correct, not an upsert.
+- One-time cleanup: cleared `mf_scheme_breakdown` to purge rows from before the CD-mislabeling fix in the previous entry, since those schemes' `as_of` hadn't changed and the staleness check would otherwise have kept skipping them.
+
+---
+
+## 2026-08-25 — OpenFin portfolio disclosure sync
+
+- `app/services/mf_ingest.py` — replaced `ingest_scheme_csvs()` (manual CSVs in `data/mf_portfolio_breakdown/`) with `ingest_from_openfin()`: fetches the OpenFin catalog, compares `latest_as_of` against locally stored `as_of` per scheme, and only re-fetches funds with a newer disclosure. Classification is now per-holding (driven by the API's `holding_type`/`section`) instead of per-fund/per-CSV-row.
+- Arbitrage funds: equity + offsetting short-futures legs matched by ISIN (summed across contract expiries) — matched notional → `Equity - Arbitrage`, leftover → extra `Equity` or a new `Derivatives - Leveraged` category (negative market value for a naked short).
+- Worked around an OpenFin data quirk: money-market CDs are mislabeled `holding_type: "equity"` — detected via a populated `instrument_yield` (never set on real equity) and reclassified as `Debt`.
+- `app/models/mf_breakdown.py` + migration `58d3324ee86b` — `MfSchemeBreakdown` gains `as_of` (disclosure date) and `market_value` (INR); `holdings_pct` precision widened to `Numeric(14,8)`; dropped the `(scheme_isin, name, holding_type)` unique constraint since the API can return duplicate name+type rows (e.g. two Cash lines).
+- `app/services/allocation.py`, `app/services/composition.py` — added `Derivatives - Leveraged` to the category display-order lists.
+- `app/routers/mf_breakdown.py` — SSE endpoint calls `ingest_from_openfin`; response now includes `already_current`/`schemes_skipped`.
+- `frontend/src/pages/Breakdown.tsx` — button renamed "Ingest portfolios" → "Refresh disclosures"; result panel shows "All schemes are up to date" when nothing was stale, and reports skipped-vs-updated scheme counts; "Missing CSVs" messaging → "Not found in OpenFin".
+- Verified end-to-end against the live OpenFin API for all 12 currently-held funds (arbitrage, commodity ETFs, plain equity/debt funds) — category totals reconcile to ~100% per scheme.
+
+---
+
 ## 2026-08-21 — NAV source switch: mfapi.in ↔ finapi fallback
 
 - `app/services/mfapi_nav.py` — new `fetch_history_finapi()` (finapi.upvaly.com, ISIN-first with scheme-code fallback); `_sync_one`/`sync_nav_history` take a `source` param; finapi sync runs sequential (semaphore=1) to stay within its 30 req/min free-tier limit

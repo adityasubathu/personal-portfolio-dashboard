@@ -5,6 +5,7 @@ from datetime import date
 from difflib import SequenceMatcher
 from pathlib import Path
 
+import httpx
 import openpyxl
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, EquitySectorOverride, MfSchemeBreakdown
+from app.services.mfapi_nav import resolve_scheme_codes
 from app.time_util import now_ist
 
 BREAKDOWN_DIR = Path("data/mf_portfolio_breakdown")
+OPENFIN_BASE = "https://openfin.pocketedge.in/api/v1"
 
 _AMFI_DATE_RE = re.compile(
     r"AverageMarketCapitalization(\d{1,2})(\w{3})(\d{4})",
@@ -351,75 +354,258 @@ def _resolve_equity_sector(
 
 _MF_DEBT_RE = re.compile(r"\b(liquid|money\s+market|savings\s+fund|low\s+duration)\b", re.IGNORECASE)
 _REIT_RE = re.compile(r"\b(reit|real\s+estate\s+trust)\b", re.IGNORECASE)
+# Match "liquid" at a word start (no trailing boundary — catches LIQUIDCASE, LIQUIDBEES, etc.)
+_ARBITRAGE_RE = re.compile(r"\barbitrage\b", re.IGNORECASE)
+
+_MV_MULTIPLIERS = {"INR_LAKH": 100_000.0, "INR_CRORE": 10_000_000.0, "INR": 1.0}
 
 
-def _classify_type(holding_type: str, name: str) -> str:
-    t = holding_type.strip()
-    if t.startswith("Bond"):
-        return "Debt"
-    if t.startswith("Cash") or t == "Cash":
-        return "Cash"
-    if t.startswith("Mutual Fund") and (_MF_DEBT_RE.search(t) or _MF_DEBT_RE.search(name)):
-        return "Debt"
-    return "Other"
+async def _fetch_catalog(client: httpx.AsyncClient) -> dict:
+    """GET /api/v1/catalog — the full OpenFin catalog keyed by AMFI code."""
+    r = await client.get(f"{OPENFIN_BASE}/catalog", timeout=30.0)
+    r.raise_for_status()
+    return r.json()
 
 
-def _parse_holdings_pct(s: str) -> float | None:
-    s = s.strip().rstrip("%").strip()
+async def _fetch_fund_holdings(client: httpx.AsyncClient, amfi_code: str, as_of: str) -> dict | None:
+    """GET /api/v1/holdings/{amfi_code}?as_of=... Returns None on any HTTP error."""
     try:
-        return float(s)
-    except ValueError:
+        r = await client.get(f"{OPENFIN_BASE}/holdings/{amfi_code}", params={"as_of": as_of}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPError:
         return None
 
 
-def _sector_for_type(holding_type: str, name: str) -> str | None:
-    t = holding_type.strip()
-    if t.startswith("Bond"):
-        return "Fixed Income"
-    if t.startswith("Cash") or t == "Cash":
-        return "Liquid / Money Market"
-    if t.startswith("Mutual Fund") and (_MF_DEBT_RE.search(t) or _MF_DEBT_RE.search(name)):
-        return "Liquid / Money Market"
-    return None
+class _AmfiLookups:
+    """Bundles the AMFI-derived lookup tables used for equity classification, so
+    they're built once per ingest run and threaded through as a single object."""
 
-
-async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
-    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
-
-    alias_to_isin: dict[str, str] = {}
-    name_to_isin: dict[str, str] = {}
-    isin_to_mcap: dict[str, str] = {}
-    isin_to_sector: dict[str, str] = {}
-    amfi_by_name: dict[str, str] = {}
-    amfi_name_sector: dict[str, str] = {}
-
-    for a in amfi_all:
-        amfi_by_name[a.name_normalized] = a.categorization
-        if a.sector:
-            amfi_name_sector[a.name_normalized] = a.sector
-        if a.isin:
-            isin_to_mcap[a.isin] = a.categorization
-            name_to_isin[a.name_normalized] = a.isin
+    def __init__(self, amfi_all, overrides: dict[str, str], sector_overrides: dict[str, str]):
+        self.alias_to_isin: dict[str, str] = {}
+        self.name_to_isin: dict[str, str] = {}
+        self.isin_to_mcap: dict[str, str] = {}
+        self.isin_to_sector: dict[str, str] = {}
+        self.amfi_by_name: dict[str, str] = {}
+        self.amfi_name_sector: dict[str, str] = {}
+        for a in amfi_all:
+            self.amfi_by_name[a.name_normalized] = a.categorization
             if a.sector:
-                isin_to_sector[a.isin] = a.sector
-            if a.aliases:
-                for alias in a.aliases.split("|"):
-                    alias_norm = normalize_company_name(alias.strip())
-                    if alias_norm:
-                        alias_to_isin[alias_norm] = a.isin
+                self.amfi_name_sector[a.name_normalized] = a.sector
+            if a.isin:
+                self.isin_to_mcap[a.isin] = a.categorization
+                self.name_to_isin[a.name_normalized] = a.isin
+                if a.sector:
+                    self.isin_to_sector[a.isin] = a.sector
+                if a.aliases:
+                    for alias in a.aliases.split("|"):
+                        alias_norm = normalize_company_name(alias.strip())
+                        if alias_norm:
+                            self.alias_to_isin[alias_norm] = a.isin
+        self.overrides = overrides
+        self.sector_overrides = sector_overrides
 
+    def classify_equity(self, name: str, holding_isin: str | None, fund_isin: str) -> str:
+        if holding_isin and not holding_isin.startswith("IN"):
+            return "Equity - Foreign"
+        if fund_isin in FOREIGN_FUND_ISINS:
+            return "Equity - Foreign"
+        name_lower = name.lower()
+        if any(s in name_lower for s in FOREIGN_COMPANY_SUBSTRINGS):
+            return "Equity - Foreign"
+        if holding_isin and holding_isin in COMMODITY_ETF_CATEGORY:
+            return COMMODITY_ETF_CATEGORY[holding_isin]
+        # OpenFin gives us the holding's own ISIN directly — try that exact match
+        # before falling back to name-based resolution (which only reaches AMFI's
+        # ISIN indirectly, via AMFI's own name wording, and misses whenever the
+        # two disclosures spell the company differently).
+        if holding_isin and holding_isin in self.isin_to_mcap:
+            return self.isin_to_mcap[holding_isin]
+        category = _resolve_equity_category(name, self.alias_to_isin, self.name_to_isin, self.isin_to_mcap, self.amfi_by_name)
+        if category != "Unclassified Equity":
+            return category
+        return (
+            self.overrides.get(normalize_company_name(name))
+            or ETF_CAP_OVERRIDE.get(holding_isin or "")
+            or "Unclassified Equity"
+        )
+
+    def resolve_sector(self, name: str, holding_isin: str | None = None) -> str | None:
+        if holding_isin and holding_isin in self.isin_to_sector:
+            return self.isin_to_sector[holding_isin]
+        sector = _resolve_equity_sector(name, self.alias_to_isin, self.name_to_isin, self.isin_to_sector, self.amfi_name_sector)
+        if sector is None:
+            sector = self.sector_overrides.get(normalize_company_name(name))
+        return sector
+
+
+def _classify_non_equity(
+    api_holding_type: str,
+    section: str,
+    instrument_name: str,
+    holding_isin: str | None,
+    catalog_by_isin: dict[str, dict],
+) -> tuple[str, str, str | None]:
+    """Returns (stored_holding_type, category, sector) for anything that isn't
+    an 'equity' or 'derivative' API holding_type."""
+    sec_lower = (section or "").strip().lower()
+    text = f"{sec_lower} {instrument_name}".lower()
+
+    if sec_lower in ("certificate of deposit", "commercial paper", "treasury bill"):
+        return section.strip(), "Debt", "Fixed Income"
+    if api_holding_type == "cash" or sec_lower == "cash":
+        return "Cash", "Cash", "Liquid / Money Market"
+    if api_holding_type == "fund_unit" or sec_lower == "mutual fund units":
+        entry = catalog_by_isin.get(holding_isin) if holding_isin else None
+        amfi_category = (entry.get("category") or "").lower() if entry else ""
+        if any(k in amfi_category for k in ("debt scheme", "liquid", "money market", "overnight")):
+            return "Mutual Fund Units", "Debt", "Liquid / Money Market"
+        if "equity scheme" in amfi_category:
+            return "Mutual Fund Units", "Other", None
+        if _MF_DEBT_RE.search(instrument_name):
+            return "Mutual Fund Units", "Debt", "Liquid / Money Market"
+        return "Mutual Fund Units", "Other", None
+    if api_holding_type in ("commodity", "other"):
+        if "gold" in text:
+            return "Commodity", "Gold", "Gold"
+        if "silver" in text:
+            return "Commodity", "Silver", "Silver"
+        return "Commodity", "Other", None
+    if api_holding_type in ("debt", "money_market"):
+        return "Debt", "Debt", "Fixed Income"
+
+    # Unknown API holding_type/section combo — fall through to a sensible default.
+    return api_holding_type.capitalize() or "Other", "Other", None
+
+
+def _map_scheme_holdings(
+    fund_isin: str,
+    holdings: list[dict],
+    mv_multiplier: float,
+    catalog_by_isin: dict[str, dict],
+    lookups: _AmfiLookups,
+    is_arbitrage_fund: bool,
+) -> tuple[list[dict], list[dict]]:
+    """Maps one fund's raw API holdings into MfSchemeBreakdown-shaped rows
+    (holdings_pct not yet set — computed by the caller after totalling).
+    Returns (rows, unmatched_equities)."""
+    rows: list[dict] = []
+    unmatched: list[dict] = []
+    plain: list[dict] = []
+
+    equity_by_isin: dict[str, list[dict]] = {}
+    deriv_by_isin: dict[str, list[dict]] = {}
+
+    for h in holdings:
+        if h.get("market_value") is None:
+            continue  # malformed/junk row observed in some disclosures
+        # OpenFin sometimes mislabels money-market paper (CDs) as holding_type
+        # "equity" — instrument_yield is never set on genuine equity, so it's a
+        # reliable tell. Route these to the debt path regardless of fund type.
+        is_mislabeled_debt = h["holding_type"] == "equity" and h.get("instrument_yield") is not None
+        if is_mislabeled_debt:
+            plain.append(h)
+        elif is_arbitrage_fund and h["holding_type"] == "equity" and h.get("isin"):
+            equity_by_isin.setdefault(h["isin"], []).append(h)
+        elif is_arbitrage_fund and h["holding_type"] == "derivative" and h.get("section") == "Futures" and h.get("isin"):
+            deriv_by_isin.setdefault(h["isin"], []).append(h)
+        else:
+            plain.append(h)
+
+    # Arbitrage funds: pair each stock's long equity value against its short futures
+    # value (summed across contract expiries) on the same ISIN. The matched (lower)
+    # amount is the true arbitrage position; any leftover is unhedged exposure —
+    # extra stock if the long side was bigger, a naked short if the derivative was.
+    for isin in set(equity_by_isin) | set(deriv_by_isin):
+        eq_rows = equity_by_isin.get(isin, [])
+        de_rows = deriv_by_isin.get(isin, [])
+        long_mv = sum(float(r["market_value"]) for r in eq_rows) * mv_multiplier
+        short_mv = -sum(float(r["market_value"]) for r in de_rows) * mv_multiplier
+        name = (eq_rows[0] if eq_rows else de_rows[0])["instrument"]
+        matched = min(long_mv, short_mv)
+        residual = abs(long_mv - short_mv)
+
+        if matched > 0:
+            rows.append({
+                "name": name, "holding_type": "Arbitrage", "category": "Equity - Arbitrage",
+                "sector": lookups.resolve_sector(name, isin), "market_value": matched,
+            })
+        if residual > 1e-6:
+            if long_mv > short_mv:
+                category = lookups.classify_equity(name, isin, fund_isin)
+                if category == "Unclassified Equity":
+                    unmatched.append({"name": name, "scheme_isin": fund_isin})
+                rows.append({
+                    "name": name, "holding_type": "Equity", "category": category,
+                    "sector": lookups.resolve_sector(name, isin), "market_value": residual,
+                })
+            else:
+                rows.append({
+                    "name": name, "holding_type": "Derivative", "category": "Derivatives - Leveraged",
+                    "sector": lookups.resolve_sector(name, isin), "market_value": -residual,
+                })
+
+    for h in plain:
+        name = (h.get("instrument") or "").strip()
+        if not name:
+            continue
+        market_value = float(h["market_value"]) * mv_multiplier
+        holding_isin = h.get("isin")
+        section = h.get("section") or ""
+
+        # OpenFin mislabels some listed equities as holding_type "commodity"/"other"
+        # (e.g. Multi Commodity Exchange of India Ltd — the word "Commodity" in the
+        # company name apparently confuses their classifier). Real commodity holdings
+        # (gold bars, silver, commodity-exchange derivatives) never have an `industry`
+        # or a normal equity ISIN — genuine equity always does.
+        is_mislabeled_equity = (
+            h["holding_type"] in ("commodity", "other")
+            and h.get("industry") is not None
+            and bool(holding_isin) and holding_isin.startswith("IN")
+        )
+        api_type = "equity" if is_mislabeled_equity else h["holding_type"]
+
+        if api_type == "equity" and h.get("instrument_yield") is not None:
+            holding_type, category, sector = "Certificate of Deposit", "Debt", "Fixed Income"
+        elif api_type == "equity":
+            if _REIT_RE.search(section) or _REIT_RE.search(name):
+                holding_type, category, sector = "Reits", "Real Estate Trust", "Real Estate Trust"
+            else:
+                category = lookups.classify_equity(name, holding_isin, fund_isin)
+                if category == "Unclassified Equity":
+                    unmatched.append({"name": name, "scheme_isin": fund_isin})
+                holding_type, sector = "Equity", lookups.resolve_sector(name, holding_isin)
+        elif api_type == "derivative":
+            holding_type, category, sector = "Derivative", "Derivatives - Leveraged", lookups.resolve_sector(name, holding_isin)
+        else:
+            holding_type, category, sector = _classify_non_equity(api_type, section, name, holding_isin, catalog_by_isin)
+
+        rows.append({
+            "name": name, "holding_type": holding_type, "category": category,
+            "sector": sector, "market_value": market_value,
+        })
+
+    return rows, unmatched
+
+
+async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
+    resolved = await resolve_scheme_codes(db)
+    if on_progress and (resolved["resolved"] or resolved["unresolved"]):
+        await on_progress(f"AMFI scheme codes: {resolved['resolved']} resolved, {len(resolved['unresolved'])} unresolved")
+
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
     overrides: dict[str, str] = {
         o.name_normalized: o.category
         for o in (await db.execute(select(EquityCategoryOverride))).scalars().all()
     }
-
     sector_override_rows = (await db.execute(select(EquitySectorOverride))).scalars().all()
     sector_overrides: dict[str, str] = {o.name_normalized: o.sector for o in sector_override_rows}
+    lookups = _AmfiLookups(amfi_all, overrides, sector_overrides)
 
     # Auto-prune: if AMFI now has a sector for an override, the override is stale
     pruned = 0
     for o in sector_override_rows:
-        if _resolve_equity_sector(o.raw_name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector) is not None:
+        if _resolve_equity_sector(o.raw_name, lookups.alias_to_isin, lookups.name_to_isin, lookups.isin_to_sector, lookups.amfi_name_sector) is not None:
             await db.execute(delete(EquitySectorOverride).where(EquitySectorOverride.id == o.id))
             sector_overrides.pop(o.name_normalized, None)
             pruned += 1
@@ -432,151 +618,128 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
         .where(Instrument.instrument_type.in_(("MF", "ETF")))
     )).scalars().all()
     held_isins = {i.isin for i in held_funds if i.isin}
+    isin_to_name = {i.isin: (i.tradingsymbol or i.name or i.isin) for i in held_funds if i.isin}
 
-    # Match "liquid" at a word start (no trailing boundary — catches LIQUIDCASE, LIQUIDBEES, etc.)
-    _DEBT_KEYWORDS = re.compile(r"\b(debt|liquid)", re.IGNORECASE)
-    _ARBITRAGE_RE = re.compile(r"\barbitrage\b", re.IGNORECASE)
-    # No trailing \b — catches compound names like GoldCase, Silvercase, etc.
-    _GOLD_RE = re.compile(r"\bgold", re.IGNORECASE)
-    _SILVER_RE = re.compile(r"\bsilver", re.IGNORECASE)
-    debt_fund_isins: set[str] = set()
     arbitrage_fund_isins: set[str] = set()
-    gold_fund_isins: set[str] = set()
-    silver_fund_isins: set[str] = set()
     for i in held_funds:
         name_to_check = " ".join(filter(None, [i.tradingsymbol, i.name]))
-        if i.isin and _DEBT_KEYWORDS.search(name_to_check):
-            debt_fund_isins.add(i.isin)
         if i.isin and _ARBITRAGE_RE.search(name_to_check):
             arbitrage_fund_isins.add(i.isin)
-        if i.isin and _GOLD_RE.search(name_to_check):
-            gold_fund_isins.add(i.isin)
-        if i.isin and _SILVER_RE.search(name_to_check):
-            silver_fund_isins.add(i.isin)
 
-    if not BREAKDOWN_DIR.exists():
-        return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
-                "missing_funds": [], "errors": ["Directory data/mf_portfolio_breakdown/ not found"]}
-
-    csv_files = [p for p in BREAKDOWN_DIR.glob("*.csv") if p.stem.strip().startswith("IN")]
     schemes_processed = 0
+    schemes_skipped = 0
     rows_upserted = 0
     unmatched: list[dict] = []
     errors: list[str] = []
     seen_isins: set[str] = set()
+    latest_as_of: date | None = None
 
-    isin_to_name = {i.isin: (i.tradingsymbol or i.name or i.isin) for i in held_funds if i.isin}
-    if on_progress:
-        await on_progress(f"Found {len(csv_files)} CSV file(s) starting with IN")
-
-    for csv_path in csv_files:
-        scheme_isin = csv_path.stem.strip()
-        fund_name = isin_to_name.get(scheme_isin, scheme_isin)
-        if on_progress:
-            await on_progress(f"[{schemes_processed + 1}/{len(csv_files)}] {fund_name}")
-
-        seen_isins.add(scheme_isin)
-        is_debt_fund = scheme_isin in debt_fund_isins
-        is_gold_fund = scheme_isin in gold_fund_isins
-        is_silver_fund = scheme_isin in silver_fund_isins
-        is_foreign_fund = scheme_isin in FOREIGN_FUND_ISINS
-        equity_override = ETF_CAP_OVERRIDE.get(scheme_isin)
-
+    async with httpx.AsyncClient(follow_redirects=True, headers={"User-Agent": "portfolio-mac-arm/1.0"}) as client:
         try:
-            text = csv_path.read_text(encoding="utf-8-sig")
-        except UnicodeDecodeError:
-            text = csv_path.read_text(encoding="latin-1")
+            catalog = await _fetch_catalog(client)
+        except httpx.HTTPError as e:
+            return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
+                    "missing_funds": [], "errors": [f"OpenFin catalog fetch failed: {e}"]}
 
-        reader = csv.DictReader(io.StringIO(text))
-        if not reader.fieldnames:
-            errors.append(f"{csv_path.name}: empty or no header")
-            continue
-        reader.fieldnames = [f.strip() for f in reader.fieldnames]
+        catalog_by_isin = {e["isin"]: e for e in catalog.values() if e.get("isin")}
 
-        dedup: dict[tuple[str, str], dict] = {}
-        for row_num, row in enumerate(reader, start=2):
-            name = (row.get("Name") or "").strip().rstrip("*^")
-            htype = (row.get("Type") or "").strip()
-            pct_raw = row.get("Holdings") or ""
-            if not name or not htype:
+        # Resolve each held fund to a catalog entry: by amfi_scheme_code first, then by ISIN.
+        fund_catalog_entry: dict[str, dict] = {}  # scheme_isin -> catalog entry
+        for i in held_funds:
+            if not i.isin:
                 continue
-            pct = _parse_holdings_pct(pct_raw)
-            if pct is None:
-                errors.append(f"{csv_path.name} row {row_num}: bad Holdings '{pct_raw}'")
-                continue
+            entry = catalog.get(i.amfi_scheme_code or "") or catalog_by_isin.get(i.isin)
+            if entry and entry.get("has_holdings", True):
+                fund_catalog_entry[i.isin] = entry
 
-            if scheme_isin in arbitrage_fund_isins and htype.strip() in ("Equity - Future", "Cash - General Offset"):
-                continue
+        missing_funds = [
+            {"isin": isin, "name": isin_to_name.get(isin, isin)}
+            for isin in sorted(held_isins - set(fund_catalog_entry))
+        ]
 
-            key = (name[:255], htype[:50])
-            if key in dedup:
-                dedup[key]["holdings_pct"] += pct
+        # Staleness check: compare the catalog's latest_as_of against what we have
+        # stored locally per scheme. Only schemes with a newer disclosure are fetched.
+        local_as_of_rows = (await db.execute(
+            select(MfSchemeBreakdown.scheme_isin, MfSchemeBreakdown.as_of).distinct()
+        )).all()
+        local_as_of = {isin: d for isin, d in local_as_of_rows if d is not None}
+
+        stale: list[tuple[str, dict]] = []
+        for isin, entry in fund_catalog_entry.items():
+            catalog_as_of = date.fromisoformat(entry["latest_as_of"])
+            if isin not in local_as_of or catalog_as_of > local_as_of[isin]:
+                stale.append((isin, entry))
             else:
-                is_arb_holding = scheme_isin in arbitrage_fund_isins and htype.strip() == "Equity"
-                is_reit = bool(_REIT_RE.search(name) or _REIT_RE.search(htype))
-                if is_reit:
-                    category = "Real Estate Trust"
-                elif is_gold_fund:
-                    category = "Gold"
-                elif is_silver_fund:
-                    category = "Silver"
-                elif is_debt_fund:
-                    category = "Debt"
-                elif is_arb_holding:
-                    category = "Equity - Arbitrage"
-                elif htype.strip() == "Equity":
-                    name_lower = name.lower()
-                    if is_foreign_fund or any(s in name_lower for s in FOREIGN_COMPANY_SUBSTRINGS):
-                        category = "Equity - Foreign"
-                    else:
-                        category = _resolve_equity_category(name, alias_to_isin, name_to_isin, isin_to_mcap, amfi_by_name)
-                        if category == "Unclassified Equity":
-                            # AMFI has no record — fall back to the fund's index cap tier, then manual overrides
-                            category = overrides.get(normalize_company_name(name)) or equity_override or "Unclassified Equity"
-                else:
-                    category = _classify_type(htype, name)
-                if category == "Unclassified Equity":
-                    unmatched.append({"name": name, "scheme_isin": scheme_isin})
+                schemes_skipped += 1
+                seen_isins.add(isin)
+                if latest_as_of is None or local_as_of[isin] > latest_as_of:
+                    latest_as_of = local_as_of[isin]
 
-                # Sector classification
-                if is_reit:
-                    sector: str | None = "Real Estate Trust"
-                elif is_gold_fund:
-                    sector = "Gold"
-                elif is_silver_fund:
-                    sector = "Silver"
-                else:
-                    sector = _sector_for_type(htype, name)
-                    if sector is None and htype.strip() == "Equity":
-                        sector = _resolve_equity_sector(name, alias_to_isin, name_to_isin, isin_to_sector, amfi_name_sector)
-                        if sector is None:
-                            sector = sector_overrides.get(normalize_company_name(name))
+        if not stale:
+            return {
+                "schemes_processed": 0, "rows_upserted": 0, "schemes_skipped": schemes_skipped,
+                "already_current": True, "as_of": latest_as_of.isoformat() if latest_as_of else None,
+                "unmatched_equities": [], "missing_funds": missing_funds, "errors": [],
+            }
 
-                dedup[key] = {
-                    "scheme_isin": scheme_isin,
-                    "name": key[0],
-                    "holding_type": key[1],
-                    "holdings_pct": pct,
-                    "category": category,
-                    "sector": sector,
-                    "updated_at": now_ist(),
-                }
-
-        values = list(dedup.values())
-        await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin == scheme_isin))
-        if values:
-            await db.execute(MfSchemeBreakdown.__table__.insert(), values)
-            rows_upserted += len(values)
-
-        schemes_processed += 1
         if on_progress:
-            unmatched_here = sum(1 for u in unmatched if u["scheme_isin"] == scheme_isin)
-            msg = f"  → {len(values)} rows"
-            if unmatched_here:
-                msg += f", {unmatched_here} unmatched"
-            await on_progress(msg)
+            await on_progress(f"{len(stale)} scheme(s) have newer disclosures ({schemes_skipped} already current)")
 
-    # Synthesize 100% rows for commodity ETFs with no CSV (gold/silver trackers need no breakdown).
+        for isin, entry in stale:
+            fund_name = isin_to_name.get(isin, isin)
+            as_of_str = entry["latest_as_of"]
+            if on_progress:
+                await on_progress(f"[{schemes_processed + 1}/{len(stale)}] {fund_name} (as of {as_of_str})")
+
+            response = await _fetch_fund_holdings(client, entry["amfi_code"], as_of_str)
+            if response is None:
+                errors.append(f"{fund_name}: holdings fetch failed")
+                continue
+
+            mv_unit = response.get("meta", {}).get("market_value_unit")
+            if mv_unit not in _MV_MULTIPLIERS:
+                errors.append(f"{fund_name}: unrecognised market_value_unit {mv_unit!r} — skipped")
+                continue
+
+            rows, scheme_unmatched = _map_scheme_holdings(
+                isin, response.get("holdings", []), _MV_MULTIPLIERS[mv_unit],
+                catalog_by_isin, lookups, isin in arbitrage_fund_isins,
+            )
+            unmatched.extend(scheme_unmatched)
+
+            total_mv = sum(r["market_value"] for r in rows)
+            scheme_as_of = date.fromisoformat(response["meta"]["as_of"])
+            values = [{
+                "scheme_isin": isin,
+                "name": r["name"][:255],
+                "holding_type": r["holding_type"][:50],
+                "holdings_pct": round(r["market_value"] / total_mv * 100, 8) if total_mv else 0.0,
+                "market_value": round(r["market_value"], 2),
+                "category": r["category"],
+                "sector": r["sector"],
+                "as_of": scheme_as_of,
+                "updated_at": now_ist(),
+            } for r in rows]
+
+            # Replace, not upsert: this scheme's entire local breakdown is wiped
+            # and rebuilt from the fresh disclosure, not merged row-by-row.
+            await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin == isin))
+            if values:
+                await db.execute(MfSchemeBreakdown.__table__.insert(), values)
+                rows_upserted += len(values)
+
+            seen_isins.add(isin)
+            schemes_processed += 1
+            if latest_as_of is None or scheme_as_of > latest_as_of:
+                latest_as_of = scheme_as_of
+            if on_progress:
+                unmatched_here = sum(1 for u in scheme_unmatched if u["scheme_isin"] == isin)
+                msg = f"  → {len(values)} rows"
+                if unmatched_here:
+                    msg += f", {unmatched_here} unmatched"
+                await on_progress(msg)
+
+    # Synthesize 100% rows for commodity ETFs that OpenFin doesn't cover at all.
     for isin, commodity_cat in COMMODITY_ETF_CATEGORY.items():
         if isin not in held_isins or isin in seen_isins:
             continue
@@ -593,27 +756,22 @@ async def ingest_scheme_csvs(db: AsyncSession, on_progress=None) -> dict:
         seen_isins.add(isin)
         rows_upserted += 1
         if on_progress:
-            await on_progress(f"  → {isin_to_name.get(isin, isin)}: synthesized 100% {commodity_cat} (no CSV needed)")
+            await on_progress(f"  → {isin_to_name.get(isin, isin)}: synthesized 100% {commodity_cat} (not in OpenFin)")
 
-    # Remove rows for schemes whose CSV was deleted.
-    if seen_isins:
-        await db.execute(
-            delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.notin_(seen_isins))
-        )
-    else:
-        await db.execute(delete(MfSchemeBreakdown))
+    # Remove rows for held schemes that dropped out of both the stale-fetch set and catalog.
+    stale_isins = {isin for isin, _ in stale}
+    to_clean = held_isins - seen_isins - (set(fund_catalog_entry) - stale_isins)
+    if to_clean:
+        await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(to_clean)))
 
     await db.commit()
-
-    # Warn about held funds that have no CSV file.
-    missing_funds = [
-        {"isin": isin, "name": isin_to_name.get(isin, isin)}
-        for isin in sorted(held_isins - seen_isins)
-    ]
 
     return {
         "schemes_processed": schemes_processed,
         "rows_upserted": rows_upserted,
+        "schemes_skipped": schemes_skipped,
+        "already_current": False,
+        "as_of": latest_as_of.isoformat() if latest_as_of else None,
         "unmatched_equities": unmatched,
         "missing_funds": missing_funds,
         "errors": errors[:30],
