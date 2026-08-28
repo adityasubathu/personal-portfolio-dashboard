@@ -119,50 +119,76 @@ def _to_points(s: pd.Series, decimals: int = 2) -> list[dict]:
 
 # ── Per-horizon trend labels ──────────────────────────────────────────────────
 
-def _short_trend(df: pd.DataFrame, rsi14: pd.Series, macd_df: pd.DataFrame) -> str:
-    """Short-term trend from EMA20 + MACD + RSI."""
-    close = df['close'].iloc[-1]
+# ── Trend scoring ─────────────────────────────────────────────────────────────
+# One scoring model, shared by the sentiment summary card and the sector table so
+# the two can never disagree about the same index. Each horizon asks the same
+# three questions, measured over a window matched to the timescale:
+#
+#   position  — is price above its moving average?
+#   direction — is the trend still gaining strength?
+#   return    — has price actually risen over the period?
+#
+# The three are deliberately different mechanisms. Signals that restate each other
+# (RSI > 50 tracks Close > EMA20 ~96% of the time; SMA100 tracks the 3-month return
+# ~92%) would inflate the score without adding information, so only one of each
+# redundant pair is kept.
+
+_TREND_LABELS = {3: "Bullish", 2: "Mostly Bullish", 1: "Mostly Bearish", 0: "Bearish"}
+
+
+def _trend_cell(signals: dict[str, bool], direction_key: str) -> dict:
+    """Score a horizon's three signals into a label, flagging the 'losing steam' case.
+
+    At a score of 2 the direction signal is the only one that can be failing while
+    both price signals pass — i.e. price is up and has risen, but the trend has
+    stopped strengthening. That combination accounts for the large majority of
+    score-2 days (97% of them on the long-term horizon), so it's worth surfacing
+    rather than hiding behind a generic 2-of-3 label."""
+    score = sum(signals.values())
+    return {
+        "label": _TREND_LABELS[score],
+        "signals": signals,
+        "fading": bool(score == 2 and not signals[direction_key]),
+    }
+
+
+def _trend_short(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
     e20 = mi.ema(df, 20).iloc[-1]
-    hist = macd_df['histogram'].iloc[-1]
-    rsi_val = rsi14.iloc[-1]
-
-    score = sum([
-        pd.notna(e20) and close > e20,
-        pd.notna(hist) and hist > 0,
-        pd.notna(rsi_val) and rsi_val > 50,
-    ])
-    return {3: "Bullish", 2: "Leaning Bullish", 1: "Leaning Bearish", 0: "Bearish"}[score]
+    hist = mi.macd(df)['histogram'].iloc[-1]
+    ret_1m = mi.rolling_return(df, 21).iloc[-1]
+    return _trend_cell({
+        "ema20":  bool(pd.notna(e20) and close > float(e20)),
+        "macd":   bool(pd.notna(hist) and float(hist) > 0),
+        "ret_1m": bool(pd.notna(ret_1m) and float(ret_1m) > 0),
+    }, "macd")
 
 
-def _mid_trend(df: pd.DataFrame, adx_df: pd.DataFrame) -> str:
-    """Mid-term trend from SMA50/100 + DI direction."""
-    close = df['close'].iloc[-1]
+def _trend_mid(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
     s50 = mi.sma(df, 50).iloc[-1]
-    s100 = mi.sma(df, 100).iloc[-1]
+    adx_df = mi.adx(df)
     plus_di = adx_df['plus_di'].iloc[-1]
     minus_di = adx_df['minus_di'].iloc[-1]
+    ret_3m = mi.rolling_return(df, 63).iloc[-1]
+    return _trend_cell({
+        "sma50":  bool(pd.notna(s50) and close > float(s50)),
+        "di":     bool(pd.notna(plus_di) and pd.notna(minus_di) and plus_di > minus_di),
+        "ret_3m": bool(pd.notna(ret_3m) and float(ret_3m) > 0),
+    }, "di")
 
-    score = sum([
-        pd.notna(s50) and close > s50,
-        pd.notna(s100) and close > s100,
-        pd.notna(plus_di) and pd.notna(minus_di) and plus_di > minus_di,
-    ])
-    return {3: "Bullish", 2: "Leaning Bullish", 1: "Mixed", 0: "Bearish"}[score]
 
-
-def _long_trend(df: pd.DataFrame) -> str:
-    """Long-term trend from SMA200 + golden/death cross + 1yr return."""
-    close = df['close'].iloc[-1]
-    s200 = mi.sma(df, 200).iloc[-1]
-    cross = mi.golden_death_cross(df)
-    ret_1yr = mi.rolling_return(df, 252).iloc[-1]
-
-    score = sum([
-        pd.notna(s200) and close > s200,
-        cross['cross_state'] == 'golden',
-        pd.notna(ret_1yr) and ret_1yr > 0,
-    ])
-    return {3: "Strong Uptrend", 2: "Uptrend Bias", 1: "Mixed", 0: "Downtrend"}[score]
+def _trend_long(df: pd.DataFrame) -> dict:
+    close = float(df['close'].iloc[-1])
+    s200 = mi.sma(df, 200)
+    s200_val = s200.iloc[-1]
+    slope = mi.sma_slope(s200).iloc[-1]
+    ret_1y = mi.rolling_return(df, 252).iloc[-1]
+    return _trend_cell({
+        "sma200":       bool(pd.notna(s200_val) and close > float(s200_val)),
+        "sma200_slope": slope == "rising",
+        "ret_1y":       bool(pd.notna(ret_1y) and float(ret_1y) > 0),
+    }, "sma200_slope")
 
 
 # ── Composite helpers ─────────────────────────────────────────────────────────
@@ -254,7 +280,7 @@ def _segment_drawdown(dfs: dict) -> dict:
     return result
 
 
-# ── Sector trend scoring (close-only, no OHLC required) ─────────────────────
+# ── Sector / benchmark index lists ──────────────────────────────────────────
 
 SECTOR_INDICES: list[tuple[str, str]] = [
     ("NIFTY AUTO",        "Auto"),
@@ -279,52 +305,6 @@ BENCHMARKS: list[tuple[str, str]] = [
     ("NIFTY 500", "Nifty 500"),
 ]
 SENTIMENT_INDICES = {"nifty50": "NIFTY 50", "nifty500": "NIFTY 500"}
-
-
-def _sector_short(df: pd.DataFrame) -> dict:
-    close = float(df['close'].iloc[-1])
-    e20 = mi.ema(df, 20).iloc[-1]
-    rsi_val = mi.rsi(df).iloc[-1]
-    ret_1m = mi.rolling_return(df, 21).iloc[-1]
-    sig_ema20 = bool(pd.notna(e20) and close > float(e20))
-    sig_rsi50 = bool(pd.notna(rsi_val) and float(rsi_val) > 50)
-    sig_ret1m = bool(pd.notna(ret_1m) and float(ret_1m) > 0)
-    score = sum([sig_ema20, sig_rsi50, sig_ret1m])
-    return {
-        "label": {3: "Bullish", 2: "Leaning Bullish", 1: "Leaning Bearish", 0: "Bearish"}[score],
-        "signals": {"ema20": sig_ema20, "rsi50": sig_rsi50, "ret_1m": sig_ret1m},
-    }
-
-
-def _sector_mid(df: pd.DataFrame) -> dict:
-    close = float(df['close'].iloc[-1])
-    s50 = mi.sma(df, 50).iloc[-1]
-    s100 = mi.sma(df, 100).iloc[-1]
-    ret_3m = mi.rolling_return(df, 63).iloc[-1]
-    sig_sma50 = bool(pd.notna(s50) and close > float(s50))
-    sig_sma100 = bool(pd.notna(s100) and close > float(s100))
-    sig_ret3m = bool(pd.notna(ret_3m) and float(ret_3m) > 0)
-    score = sum([sig_sma50, sig_sma100, sig_ret3m])
-    return {
-        "label": {3: "Bullish", 2: "Leaning Bullish", 1: "Mixed", 0: "Bearish"}[score],
-        "signals": {"sma50": sig_sma50, "sma100": sig_sma100, "ret_3m": sig_ret3m},
-    }
-
-
-def _sector_long(df: pd.DataFrame) -> dict:
-    close = float(df['close'].iloc[-1])
-    s200 = mi.sma(df, 200)
-    s200_val = s200.iloc[-1]
-    slope = mi.sma_slope(s200).iloc[-1]
-    ret_1y = mi.rolling_return(df, 252).iloc[-1]
-    sig_sma200 = bool(pd.notna(s200_val) and close > float(s200_val))
-    sig_slope = slope == "rising"
-    sig_ret1y = bool(pd.notna(ret_1y) and float(ret_1y) > 0)
-    score = sum([sig_sma200, sig_slope, sig_ret1y])
-    return {
-        "label": {3: "Strong Uptrend", 2: "Uptrend Bias", 1: "Mixed", 0: "Downtrend"}[score],
-        "signals": {"sma200": sig_sma200, "sma200_slope": sig_slope, "ret_1y": sig_ret1y},
-    }
 
 
 def _cagr(df: pd.DataFrame | None, years: int) -> float | None:
@@ -382,21 +362,21 @@ async def get_sentiment_summary(db: AsyncSession, symbol: str = "NIFTY 50") -> d
         "close": _safe(df['close'].iloc[-1]),
         "horizons": {
             "short": {
-                "trend": _short_trend(df, rsi14, macd_df),
+                "trend": _trend_short(df),
                 "rsi14": _safe(rsi14.iloc[-1]),
                 "macd_hist": _safe(macd_df['histogram'].iloc[-1]),
                 "vol_regime": vol_reg,
                 "vix": vix_short,
             },
             "mid": {
-                "trend": _mid_trend(df, adx_df),
+                "trend": _trend_mid(df),
                 "adx": _safe(adx_df['adx'].iloc[-1]),
                 "weekly_rsi": _safe(wrsi.iloc[-1]),
                 "vol_regime": vol_reg,
                 "vix": vix_mid,
             },
             "long": {
-                "trend": _long_trend(df),
+                "trend": _trend_long(df),
                 "sma200_slope": s200_slope,
                 "drawdown_from_ath_pct": dd["current_drawdown"],
                 "vol_percentile": vol_pct,
@@ -529,8 +509,9 @@ async def get_sentiment_series(db: AsyncSession, days: int, symbol: str = "NIFTY
 
 
 async def get_sector_trends(db: AsyncSession) -> dict:
-    benchmark_dfs = {sym: await _load_index_df(db, sym) for sym, _ in BENCHMARKS}
-    sector_dfs = {sym: await _load_index_df(db, sym) for sym, _ in SECTOR_INDICES}
+    # OHLC (not close-only) — the mid-horizon +DI/-DI signal needs high/low.
+    benchmark_dfs = {sym: await _load_ohlc_df(db, sym) for sym, _ in BENCHMARKS}
+    sector_dfs = {sym: await _load_ohlc_df(db, sym) for sym, _ in SECTOR_INDICES}
 
     n50_df = benchmark_dfs.get("NIFTY 50")
     n500_df = benchmark_dfs.get("NIFTY 500")
@@ -558,9 +539,9 @@ async def get_sector_trends(db: AsyncSession) -> dict:
         if df is None or len(df) < 21:
             return None
         return {
-            "short": _sector_short(df),
-            "mid": _sector_mid(df),
-            "long": _sector_long(df),
+            "short": _trend_short(df),
+            "mid": _trend_mid(df),
+            "long": _trend_long(df),
         }
 
     rows: list[dict] = []

@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-08-28 — Unify trend scoring across the summary card and sector table
+
+The summary card and the sector-trends table scored the same index with different indicators, so they could disagree about Nifty 50 / Nifty 500. Both now use one shared model.
+
+- `app/services/market_sentiment.py` — replaced `_short_trend`/`_mid_trend`/`_long_trend` (summary, returned bare strings) and `_sector_short`/`_sector_mid`/`_sector_long` (sector table) with a single `_trend_short`/`_trend_mid`/`_trend_long`, each returning `{label, signals, fading}`. Every horizon now asks the same three questions — MA position, trend direction, fixed-window return — windowed to its timescale (20/50/200-day MA; MACD / ±DI / SMA200 slope; 1M/3M/1Y return).
+- Dropped redundant signals: **RSI > 50** (agrees with Close > EMA20 ~96% of the time — binarising at 50 discards what makes RSI useful; it remains as the oscillator chart and a raw value) and **SMA100** (agrees with the 3-month return ~92%). Dropped the **golden cross** from the long-term score — it latches the last 50/200 crossover and can be months stale; it stays as its own badge.
+- Labels unified to `Bullish` / `Mostly Bullish` / `Mostly Bearish` / `Bearish` at every horizon (previously the same score read as "Leaning Bearish", "Mixed", or "Uptrend Bias" depending on the column).
+- New `fading` flag ("losing steam"): set when the score is 2 and the direction signal is the one failing — i.e. price is up and has risen, but the trend has stopped strengthening. This is 97% of long-horizon 2-of-3 days, so it was worth surfacing rather than leaving behind a generic label. Rendered as a `↘` on the badge.
+- `get_sector_trends` now loads OHLC (`_load_ohlc_df`) rather than close-only, since ±DI needs high/low. Verified all 20 index instruments have complete OHLC; endpoint still responds in ~0.5s.
+- `frontend/src/types/marketSentiment.ts` — new shared `TrendCell` (`{label, signals, fading}`); replaces `SectorTrendHorizon` and the summary horizons' `trend: string`.
+- `frontend/src/pages/MarketSentiment.tsx` — `TrendChip` gains the `↘` marker, an explanatory line, and an optional `info` block; the summary card now uses it instead of `FlagChip`, so it gains the click-for-signals popover the sector table already had. `trendColor` rewritten as a four-step gradient over the new labels. Trend explanations rewritten in plain language.
+
+---
+
 ## 2026-08-28 — Market Sentiment: Nifty 50 / Nifty 500 toggle
 
 - `app/services/market_sentiment.py` — generalised `_load_nifty_df` → `_load_ohlc_df(db, tradingsymbol)`; `get_sentiment_summary`/`get_sentiment_series` take a `symbol` param (default `"NIFTY 50"`); added `SENTIMENT_INDICES` allowlist (`nifty50`/`nifty500`)

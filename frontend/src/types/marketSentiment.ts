@@ -25,8 +25,17 @@ export interface VixLong {
   vix_pct_rank: number | null
 }
 
+/** One horizon's trend verdict. Shared by the summary card and the sector table —
+ *  both are scored by the same three signals so they can never disagree. */
+export interface TrendCell {
+  label: string
+  signals: Record<string, boolean>
+  /** Price is up but the trend has stopped gaining strength ("losing steam"). */
+  fading: boolean
+}
+
 export interface SentimentHorizonShort {
-  trend: string
+  trend: TrendCell
   rsi14: number | null
   macd_hist: number | null
   vol_regime: string
@@ -34,7 +43,7 @@ export interface SentimentHorizonShort {
 }
 
 export interface SentimentHorizonMid {
-  trend: string
+  trend: TrendCell
   adx: number | null
   weekly_rsi: number | null
   vol_regime: string
@@ -42,7 +51,7 @@ export interface SentimentHorizonMid {
 }
 
 export interface SentimentHorizonLong {
-  trend: string
+  trend: TrendCell
   sma200_slope: string | null
   drawdown_from_ath_pct: number | null
   vol_percentile: number | null
@@ -132,16 +141,11 @@ export interface SectorTrendPerf {
   vs_n500_10y: number | null
 }
 
-export interface SectorTrendHorizon {
-  label: string
-  signals: Record<string, boolean>
-}
-
 export interface SectorTrendRow {
   symbol: string
   label: string
   is_benchmark: boolean
-  trend: { short: SectorTrendHorizon; mid: SectorTrendHorizon; long: SectorTrendHorizon } | null
+  trend: { short: TrendCell; mid: TrendCell; long: TrendCell } | null
   perf: SectorTrendPerf
 }
 

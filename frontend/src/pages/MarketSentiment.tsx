@@ -21,7 +21,7 @@ import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-reac
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
-import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
 
@@ -48,11 +48,16 @@ function toNavPoints(pts: IndicatorPoint[]): NavPoint[] {
   return pts.filter((p) => p.value !== null) as NavPoint[]
 }
 
+// Four-step gradient over the shared trend labels (3/2/1/0 signals passing).
+const TREND_COLORS: Record<string, string> = {
+  'Bullish': 'green',
+  'Mostly Bullish': 'teal',
+  'Mostly Bearish': 'orange',
+  'Bearish': 'red',
+}
+
 function trendColor(trend: string): string {
-  const t = trend.toLowerCase()
-  if (t.includes('bullish') || t.includes('strong up') || t.includes('uptrend')) return 'green'
-  if (t.includes('downtrend') || t.includes('bearish') || t.includes('strong down')) return 'red'
-  return 'yellow'
+  return TREND_COLORS[trend] ?? 'gray'
 }
 
 const numFormatter = (p: number) => p.toFixed(0)
@@ -73,11 +78,11 @@ const EXPLANATIONS = {
 
   vol: `Realized volatility is the actual standard deviation of daily returns over the past 20 or 60 trading days, annualized to a yearly percentage.\n\nRV 20 (amber line) reacts faster to regime changes — it'll spike as soon as volatility picks up.\nRV 60 (purple line) is smoother — it shows the sustained volatility environment rather than short bursts.\n\nComparing the two tells you if a volatility spike is fading (RV 20 drops back toward RV 60) or becoming a new regime (RV 60 starts rising to meet RV 20).`,
 
-  trendShort: `Short-term trend scores 3 signals — Close > EMA(20), MACD histogram > 0, RSI(14) > 50 — and labels the result:\n\n3/3 → Bullish\n2/3 → Leaning Bullish\n1/3 → Leaning Bearish\n0/3 → Bearish`,
+  trendShort: `Every horizon asks the same three yes/no questions and counts the yeses. Short-term measures them over weeks:\n\n1. Is the price above its 20-day average?\n2. Is the trend still gaining strength? (MACD histogram above zero)\n3. Has the price actually risen over the last month?\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\n↘ means "losing steam": the price is up, but question 2 failed — the trend has stopped gaining strength. An early warning that the move may be tiring.`,
 
-  trendMid: `Mid-term trend scores 3 signals — Close > SMA(50), Close > SMA(100), +DI > -DI (ADX direction) — and labels the result:\n\n3/3 → Bullish\n2/3 → Leaning Bullish\n1/3 → Mixed\n0/3 → Bearish`,
+  trendMid: `Every horizon asks the same three yes/no questions and counts the yeses. Mid-term measures them over months:\n\n1. Is the price above its 50-day average?\n2. Is the trend still gaining strength? (+DI above −DI, from the ADX system)\n3. Has the price actually risen over the last 3 months?\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\n↘ means "losing steam": the price is up, but question 2 failed — the trend has stopped gaining strength.`,
 
-  trendLong: `Long-term trend scores 3 signals — Close > SMA(200), a Golden Cross is active (50 > 200), 1-year rolling return > 0 — and labels the result:\n\n3/3 → Strong Uptrend\n2/3 → Uptrend Bias\n1/3 → Mixed\n0/3 → Downtrend`,
+  trendLong: `Every horizon asks the same three yes/no questions and counts the yeses. Long-term measures them over a year or more:\n\n1. Is the price above its 200-day average?\n2. Is the trend still gaining strength? (is the 200-day line still sloping up)\n3. Has the price actually risen over the last year?\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\n↘ means "losing steam": the price is up, but question 2 failed — still above the 200-day average, but that average has gone flat. This is the most common 2/3 case by far.\n\nThe Golden Cross is deliberately not scored here — it reports the last 50/200 crossover, which can be months stale. It appears as its own badge instead.`,
 
   tableShort: `Short-term momentum uses two indicators:\n\n• RSI(14) — 0–100 oscillator. Above 70 = overbought; below 30 = oversold; ~50 = neutral.\n• MACD histogram — gap between a fast and slow EMA shown as bars. Bars growing above zero = momentum accelerating; shrinking toward zero = fading before price moves.`,
 
@@ -103,7 +108,7 @@ const EXPLANATIONS = {
 
   breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to the Nifty 50 over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while Nifty50 is rising, that is the chart version of a Narrow Rally: the headline index propped up by a handful of large-caps while the broader market weakens.`,
 
-  sectorTrends: `Trend labels for each sectoral index, scored on close-only signals:\n\n• Short — EMA20 position, RSI14 > 50, 1-month return positive (3 signals → Bullish … 0 → Bearish)\n• Mid — SMA50/100 position, 3-month return positive\n• Long — SMA200 position, SMA200 slope rising, 1-year return positive\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
+  sectorTrends: `Trend labels use the same scoring as the summary card at the top of the page, so the two always agree for Nifty 50 and Nifty 500. Each horizon asks three yes/no questions — is the price above its moving average, is the trend still gaining strength, and has the price actually risen — and counts the yeses:\n\n• Short (weeks) — 20-day average, MACD, 1-month return\n• Mid (months) — 50-day average, +DI/−DI, 3-month return\n• Long (year+) — 200-day average, 200-day slope, 1-year return\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\nClick any badge to see which questions passed. ↘ means "losing steam" — the price is up, but the trend has stopped gaining strength.\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
 }
 
 function ChartInfo({ text }: { text: string }) {
@@ -233,7 +238,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
             <Table.Tr key={r.horizon}>
               <Table.Td fw={500}>{r.horizon}</Table.Td>
               <Table.Td>
-                <FlagChip label={r.trend} color={trendColor(r.trend)} info={r.trendInfo} />
+                <TrendChip horizon={r.trend} info={r.trendInfo} size="md" />
               </Table.Td>
               <Table.Td c="dimmed" fz="sm">
                 <Group gap={4} align="center" wrap="nowrap">
@@ -519,31 +524,33 @@ type OverlayKey = typeof OVERLAY_DEFS[number]['key']
 
 // ── Sector Trends Table ───────────────────────────────────────────────────────
 
+// Each horizon asks: is price above its average · is the trend still gaining
+// strength · has price actually risen. Same three, windowed to the timescale.
 const SIGNAL_LABELS: Record<string, string> = {
   ema20:       'Close > EMA(20)',
-  rsi50:       'RSI(14) > 50',
+  macd:        'MACD histogram > 0',
   ret_1m:      '1-month return > 0',
   sma50:       'Close > SMA(50)',
-  sma100:      'Close > SMA(100)',
+  di:          '+DI > −DI (trend direction)',
   ret_3m:      '3-month return > 0',
   sma200:      'Close > SMA(200)',
   sma200_slope:'SMA(200) slope rising',
   ret_1y:      '1-year return > 0',
 }
 
-function TrendChip({ horizon }: { horizon: { label: string; signals: Record<string, boolean> } }) {
+function TrendChip({ horizon, info, size = 'xs' }: { horizon: TrendCell; info?: string; size?: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <Popover opened={open} onChange={setOpen} withArrow shadow="md" width={230} position="bottom">
+    <Popover opened={open} onChange={setOpen} withArrow shadow="md" width={260} position="bottom">
       <Popover.Target>
         <Badge
-          size="xs"
+          size={size}
           color={trendColor(horizon.label)}
           variant="light"
           style={{ cursor: 'pointer' }}
           onClick={() => setOpen(o => !o)}
         >
-          {horizon.label}
+          {horizon.label}{horizon.fading ? ' ↘' : ''}
         </Badge>
       </Popover.Target>
       <Popover.Dropdown>
@@ -554,6 +561,12 @@ function TrendChip({ horizon }: { horizon: { label: string; signals: Record<stri
               <Text size="xs" c={passed ? undefined : 'dimmed'}>{SIGNAL_LABELS[key] ?? key}</Text>
             </Group>
           ))}
+          {horizon.fading && (
+            <Text size="xs" c="orange" mt={2}>
+              ↘ Losing steam — the price is up, but the trend has stopped gaining strength.
+            </Text>
+          )}
+          {info && <Text size="xs" c="dimmed" mt={4} style={{ whiteSpace: 'pre-line' }}>{info}</Text>}
         </Stack>
       </Popover.Dropdown>
     </Popover>

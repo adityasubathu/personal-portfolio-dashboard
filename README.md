@@ -122,7 +122,7 @@ portfolio-mac-arm/
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
 │       ├── market_indicators.py  # Pure indicator functions: EMA/SMA, RSI (Wilder's), MACD, ADX, ATR, Bollinger, drawdown, vol
-│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth/get_sector_trends
+│       ├── market_sentiment.py   # Composite trend/vol/divergence + get_sentiment_summary/get_sentiment_series/get_market_breadth/get_sector_trends; one shared 3-signal trend model (_trend_short/_trend_mid/_trend_long) used by both the summary card and the sector table
 │       ├── capital_gains.py      # FIFO matching, Indian tax rules (FY 2020-21+), CII indexation, §112A grandfathering + exemption
 │       └── xirr.py              # Newton-Raphson XIRR (per-holding + portfolio)
 ├── frontend/
@@ -143,7 +143,7 @@ portfolio-mac-arm/
 │       │   ├── manualAssets.ts
 │       │   ├── charts.ts
 │       │   ├── settings.ts
-│   │   ├── marketSentiment.ts # useSentimentSummary(), useSentimentSeries(days), useMarketBreadth(), useSectorTrends(), useRefreshIndicesMutation()
+│   │   ├── marketSentiment.ts # useSentimentSummary(index), useSentimentSeries(days, index), useMarketBreadth(), useSectorTrends(), useRefreshIndicesMutation()
 │       │   ├── capitalGains.ts  # useCapitalGainsYears(), useCapitalGains(fy)
 │       │   └── status.ts        # useAppStatus(), useResetDemoMutation()
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
@@ -165,7 +165,7 @@ portfolio-mac-arm/
 │       │   ├── Trades.tsx       # Debounced search + paginated trade list
 │       │   ├── Import.tsx       # CSV upload, import history, rollback, split-credit
 │       │   ├── Kite.tsx         # Config form, OAuth login, token status, one-click sync
-│   │   ├── MarketSentiment.tsx # Nifty 50 sentiment: 3-horizon table, flags banner, breadth table + ratio chart, sector trends table (CAGR + vs-benchmark, clickable trend chips), candlestick + overlays, oscillator + volatility panels
+│   │   ├── MarketSentiment.tsx # Nifty 50 / Nifty 500 sentiment (persisted toggle): 3-horizon table, flags banner, breadth table + ratio chart, sector trends table (CAGR + vs-benchmark, clickable trend chips), candlestick + overlays, oscillator + volatility panels
 │       │   ├── CapitalGains.tsx # Realized gains by FY: FIFO lots grouped by tax bucket, set-off, §112A exemption, attention items
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
