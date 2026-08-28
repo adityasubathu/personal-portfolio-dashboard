@@ -106,7 +106,7 @@ const EXPLANATIONS = {
 
   segmentDrawdown: `How far each segment has fallen from its own 1-year rolling high (252 trading days).\n\n0% = the segment is currently at a 52-week high. Larger negative values = deeper correction from recent peak.\n\nThe orange "Smallcap drawdown disproportionate" flag appears when the Small250 drawdown is more than 2.5× the Nifty50 drawdown and greater than 5% absolute — a sign that risk appetite has specifically dried up at the smaller end of the market, even if large-caps are holding up.`,
 
-  breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to the Nifty 50 over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while Nifty50 is rising, that is the chart version of a Narrow Rally: the headline index propped up by a handful of large-caps while the broader market weakens.`,
+  breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to large-caps over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nThe large-cap leg is the Nifty 100 — the full large-cap universe (Nifty 50 + Nifty Next 50) — rather than the Nifty 50, which is only its top half. Using the wider index means the comparison is mid/small vs all large-caps, not mid/small vs mega-caps.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while large-caps rise, that is the chart version of a Narrow Rally: the headline index propped up by a handful of the biggest names while the broader market weakens.\n\n(The Breadth Regime and Relative Strength readings above still use the Nifty 50 — there it is one rung of a size ladder (50 → Next 50 → Mid 150 → Small 250) that the Nifty 100 would overlap.)`,
 
   sectorTrends: `Trend labels use the same scoring as the summary card at the top of the page, so the two always agree for Nifty 50 and Nifty 500. Each horizon asks three yes/no questions — is the price above its moving average, is the trend still gaining strength, and has the price actually risen — and counts the yeses:\n\n• Short (weeks) — 20-day average, MACD, 1-month return\n• Mid (months) — 50-day average, +DI/−DI, 3-month return\n• Long (year+) — 200-day average, 200-day slope, 1-year return\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\nClick any badge to see which questions passed. ↘ means "losing steam" — the price is up, but the trend has stopped gaining strength.\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
 }
@@ -876,14 +876,14 @@ export function MarketSentiment() {
           <MarketBreadthCard data={breadthData} />
           <Box px={128}>
             <Group justify="center" align="center" gap={6} mb={4}>
-              <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap (rebased, 1Y) ↓</Text>
+              <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap ({breadthData.ratios!.benchmark}, rebased, 1Y) ↓</Text>
               <ChartInfo text={EXPLANATIONS.breadthRatioChart} />
             </Group>
             <LwChart
               seriesType="line"
-              line={toNavPoints(breadthData.ratios!.mid150_nifty50)}
-              label="Mid150 / Nifty50"
-              compareLines={[{ label: 'Small250 / Nifty50', color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250_nifty50) }]}
+              line={toNavPoints(breadthData.ratios!.mid150)}
+              label={`Mid150 / ${breadthData.ratios!.benchmark}`}
+              compareLines={[{ label: `Small250 / ${breadthData.ratios!.benchmark}`, color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250) }]}
               persistKey="market-sentiment-breadth-ratio"
               priceScaleWidth={chartPriceScaleWidth}
               onPriceScaleWidth={(w) => reportScaleWidth('breadth-ratio', w)}

@@ -169,7 +169,9 @@ export interface MarketBreadth {
   }
   drawdowns?: BreadthDrawdowns
   ratios?: {
-    mid150_nifty50: IndicatorPoint[]
-    small250_nifty50: IndicatorPoint[]
+    /** Large-cap leg actually used — "Nifty 100", or "Nifty 50" where Nifty 100 isn't synced yet. */
+    benchmark: string
+    mid150: IndicatorPoint[]
+    small250: IndicatorPoint[]
   }
 }

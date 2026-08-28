@@ -38,6 +38,8 @@ KITE_DAY_CANDLE_CAP = 1800  # Kite caps `day` interval at 2000; leave headroom.
 INDEX_INSTRUMENTS = [
     {"tradingsymbol": "NIFTY 50",          "exchange": "NSE", "name": "Nifty 50"},
     {"tradingsymbol": "NIFTY NEXT 50",     "exchange": "NSE", "name": "Nifty Next 50"},
+    # Large-cap universe (Nifty 50 + Next 50) — denominator for the breadth ratio chart
+    {"tradingsymbol": "NIFTY 100",         "exchange": "NSE", "name": "Nifty 100"},
     {"tradingsymbol": "NIFTY MIDCAP 150",  "exchange": "NSE", "name": "Nifty Midcap 150"},
     {"tradingsymbol": "NIFTY SMLCAP 250",  "exchange": "NSE", "name": "Nifty Smallcap 250"},
     {"tradingsymbol": "INDIA VIX",         "exchange": "NSE", "name": "India VIX"},

@@ -406,6 +406,7 @@ async def get_market_breadth(db: AsyncSession) -> dict:
     nn50 = await _load_index_df(db, "NIFTY NEXT 50")
     mid150 = await _load_index_df(db, "NIFTY MIDCAP 150")
     sml250 = await _load_index_df(db, "NIFTY SMLCAP 250")
+    n100 = await _load_index_df(db, "NIFTY 100")
 
     dfs = {'nifty50': n50, 'next50': nn50, 'mid150': mid150, 'small250': sml250}
     if any(df is None or len(df) < 22 for df in dfs.values()):
@@ -416,15 +417,24 @@ async def get_market_breadth(db: AsyncSession) -> dict:
     drawdowns = _segment_drawdown(dfs)
     rs = _relative_strength_order(returns_1m)
 
-    # Ratio chart — trailing 252 rows on the intersection of all four series
+    # Ratio chart — trailing 252 rows on the intersection of the three series.
+    # Denominator is Nifty 100 (the full large-cap universe: Nifty 50 + Next 50),
+    # which is a truer "large-cap" leg than Nifty 50 alone. Falls back to Nifty 50
+    # where Nifty 100 hasn't been synced yet (demo mode, fresh install); the
+    # benchmark actually used is reported so the chart can label itself honestly.
+    # The regime / relative-strength / drawdown readings above deliberately keep
+    # Nifty 50 — there it is one rung of a size ladder that Nifty 100 would overlap.
+    use_n100 = n100 is not None and len(n100) >= 252
+    large = n100 if use_n100 else n50
+
     combined = pd.DataFrame({
-        'nifty50': n50['close'],
+        'large': large['close'],
         'mid150': mid150['close'],
         'small250': sml250['close'],
     }).dropna().tail(252)
 
-    mid_ratio = combined['mid150'] / combined['nifty50']
-    small_ratio = combined['small250'] / combined['nifty50']
+    mid_ratio = combined['mid150'] / combined['large']
+    small_ratio = combined['small250'] / combined['large']
     mid_ratio = mid_ratio / mid_ratio.iloc[0] * 100
     small_ratio = small_ratio / small_ratio.iloc[0] * 100
 
@@ -441,8 +451,9 @@ async def get_market_breadth(db: AsyncSession) -> dict:
         },
         "drawdowns": drawdowns,
         "ratios": {
-            "mid150_nifty50": _to_points(mid_ratio),
-            "small250_nifty50": _to_points(small_ratio),
+            "benchmark": "Nifty 100" if use_n100 else "Nifty 50",
+            "mid150": _to_points(mid_ratio),
+            "small250": _to_points(small_ratio),
         },
     }
 

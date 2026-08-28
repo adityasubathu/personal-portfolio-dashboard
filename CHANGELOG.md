@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-08-29 — Breadth ratio chart: large-cap leg is now Nifty 100
+
+- `app/services/kite_historical.py` — added `NIFTY 100` to `INDEX_INSTRUMENTS`. Backfilled from Kite: 2,888 rows from 2015-01-01, complete OHLC.
+- `app/services/market_sentiment.py` — the Mid/Small vs Large ratio chart now divides by Nifty 100 (the full large-cap universe: Nifty 50 + Next 50) instead of Nifty 50 (its top half only). Falls back to Nifty 50 where Nifty 100 isn't synced yet (demo mode, fresh install), and reports which was used via a new `ratios.benchmark` field so the chart labels itself honestly.
+- Breadth Regime, Relative Strength, and segment drawdowns deliberately keep Nifty 50 — there it is one rung of a size ladder (50 → Next 50 → Mid 150 → Small 250) that Nifty 100 would overlap.
+- Response keys `ratios.mid150_nifty50`/`small250_nifty50` → `ratios.mid150`/`small250` (denominator is no longer baked into the key name), plus `ratios.benchmark`.
+- `frontend/src/types/marketSentiment.ts`, `frontend/src/pages/MarketSentiment.tsx` — chart title, both series labels, and the explanation text are driven by the reported benchmark.
+
+---
+
 ## 2026-08-28 — Unify trend scoring across the summary card and sector table
 
 The summary card and the sector-trends table scored the same index with different indicators, so they could disagree about Nifty 50 / Nifty 500. Both now use one shared model.
