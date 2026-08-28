@@ -1,5 +1,5 @@
 """
-Composite sentiment functions and API-facing service functions for Nifty 50.
+Composite sentiment functions and API-facing service functions for Nifty 50 / Nifty 500.
 All computation is on-request (vectorized pandas over ~1,600 rows is fast enough).
 """
 import numpy as np
@@ -39,10 +39,10 @@ async def _load_index_df(db: AsyncSession, tradingsymbol: str) -> pd.DataFrame |
     return df.sort_index()
 
 
-async def _load_nifty_df(db: AsyncSession) -> pd.DataFrame | None:
+async def _load_ohlc_df(db: AsyncSession, tradingsymbol: str) -> pd.DataFrame | None:
     result = await db.execute(
         select(Instrument).where(
-            Instrument.tradingsymbol == "NIFTY 50",
+            Instrument.tradingsymbol == tradingsymbol,
             Instrument.instrument_type == "INDEX",
         )
     )
@@ -278,6 +278,7 @@ BENCHMARKS: list[tuple[str, str]] = [
     ("NIFTY 50",  "Nifty 50"),
     ("NIFTY 500", "Nifty 500"),
 ]
+SENTIMENT_INDICES = {"nifty50": "NIFTY 50", "nifty500": "NIFTY 500"}
 
 
 def _sector_short(df: pd.DataFrame) -> dict:
@@ -346,8 +347,8 @@ def _cagr(df: pd.DataFrame | None, years: int) -> float | None:
 
 # ── API-facing functions ──────────────────────────────────────────────────────
 
-async def get_sentiment_summary(db: AsyncSession) -> dict:
-    df = await _load_nifty_df(db)
+async def get_sentiment_summary(db: AsyncSession, symbol: str = "NIFTY 50") -> dict:
+    df = await _load_ohlc_df(db, symbol)
     if df is None or len(df) < 20:
         return {"no_data": True}
 
@@ -466,8 +467,8 @@ async def get_market_breadth(db: AsyncSession) -> dict:
     }
 
 
-async def get_sentiment_series(db: AsyncSession, days: int) -> dict:
-    df = await _load_nifty_df(db)
+async def get_sentiment_series(db: AsyncSession, days: int, symbol: str = "NIFTY 50") -> dict:
+    df = await _load_ohlc_df(db, symbol)
     if df is None or df.empty:
         return {"no_data": True}
 

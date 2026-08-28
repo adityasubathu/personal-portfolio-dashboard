@@ -21,7 +21,7 @@ import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-reac
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
-import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
 
@@ -727,7 +727,9 @@ function SectorTrendsTable() {
 
 export function MarketSentiment() {
   const refreshMutation = useRefreshIndicesMutation()
-  const { data: summary, isLoading: summaryLoading } = useSentimentSummary()
+  const [index, setIndex] = usePersistentState<SentimentIndex>('market-sentiment-index', 'nifty50')
+  const indexLabel = index === 'nifty50' ? 'Nifty 50' : 'Nifty 500'
+  const { data: summary, isLoading: summaryLoading } = useSentimentSummary(index)
   const { data: breadthData } = useMarketBreadth()
 
   // Sync price scale widths across all charts so x-axes align perfectly.
@@ -747,7 +749,7 @@ export function MarketSentiment() {
   )
 
   const rangeDays = RANGE_OPTIONS.find((r) => r.label === rangeLabel)?.days ?? 252
-  const { data: series, isLoading: seriesLoading } = useSentimentSeries(0)
+  const { data: series, isLoading: seriesLoading } = useSentimentSeries(0, index)
 
   const filteredCandles = useMemo(
     () => filterByDays(series?.candles ?? [], rangeDays),
@@ -789,7 +791,7 @@ export function MarketSentiment() {
   if (summary?.no_data) {
     return (
       <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light" maw={480}>
-        No Nifty 50 price history found. Run a portfolio sync (Kite → Sync) to load index data.
+        No {indexLabel} price history found. Run a portfolio sync (Kite → Sync) to load index data.
       </Alert>
     )
   }
@@ -798,47 +800,58 @@ export function MarketSentiment() {
     <Stack gap="md">
       <Group justify="space-between" align="center">
         <Box>
-          <Title order={3}>Market Sentiment — Nifty 50</Title>
+          <Title order={3}>Market Sentiment — {indexLabel}</Title>
           {summary?.as_of && (
             <Text fz="xs" c="dimmed">
               As of {summary.as_of} · Close: {summary.close?.toLocaleString('en-IN')}
             </Text>
           )}
         </Box>
-        <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<IconRefresh size={14} />}
-          loading={refreshMutation.isPending}
-          onClick={() => {
-            refreshMutation.mutate(undefined, {
-              onSuccess: (data) => {
-                if (!data.ok) {
+        <Group gap="xs">
+          <SegmentedControl
+            size="xs"
+            value={index}
+            onChange={(v) => setIndex(v as SentimentIndex)}
+            data={[
+              { value: 'nifty50', label: 'Nifty 50' },
+              { value: 'nifty500', label: 'Nifty 500' },
+            ]}
+          />
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={<IconRefresh size={14} />}
+            loading={refreshMutation.isPending}
+            onClick={() => {
+              refreshMutation.mutate(undefined, {
+                onSuccess: (data) => {
+                  if (!data.ok) {
+                    notifications.show({
+                      title: 'Index refresh failed',
+                      message: data.error ?? 'Unknown error',
+                      color: 'red',
+                    })
+                  } else if (data.rows_added === 0) {
+                    notifications.show({
+                      message: 'No new candles — market may not have opened yet or data is already current.',
+                      color: 'gray',
+                      autoClose: 3000,
+                    })
+                  }
+                },
+                onError: (err) => {
                   notifications.show({
                     title: 'Index refresh failed',
-                    message: data.error ?? 'Unknown error',
+                    message: err instanceof Error ? err.message : 'Request failed',
                     color: 'red',
                   })
-                } else if (data.rows_added === 0) {
-                  notifications.show({
-                    message: 'No new candles — market may not have opened yet or data is already current.',
-                    color: 'gray',
-                    autoClose: 3000,
-                  })
-                }
-              },
-              onError: (err) => {
-                notifications.show({
-                  title: 'Index refresh failed',
-                  message: err instanceof Error ? err.message : 'Request failed',
-                  color: 'red',
-                })
-              },
-            })
-          }}
-        >
-          Refresh
-        </Button>
+                },
+              })
+            }}
+          >
+            Refresh
+          </Button>
+        </Group>
       </Group>
 
       {summary?.horizons && <SentimentSummaryCard data={summary} />}

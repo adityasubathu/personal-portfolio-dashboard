@@ -1,5 +1,7 @@
 import type { Candle } from './charts'
 
+export type SentimentIndex = 'nifty50' | 'nifty500'
+
 export interface IndicatorPoint {
   time: string
   value: number | null

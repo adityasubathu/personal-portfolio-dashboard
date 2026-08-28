@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-08-28 — Market Sentiment: Nifty 50 / Nifty 500 toggle
+
+- `app/services/market_sentiment.py` — generalised `_load_nifty_df` → `_load_ohlc_df(db, tradingsymbol)`; `get_sentiment_summary`/`get_sentiment_series` take a `symbol` param (default `"NIFTY 50"`); added `SENTIMENT_INDICES` allowlist (`nifty50`/`nifty500`)
+- `app/routers/market_sentiment.py` — `/summary` and `/series` accept an `index` query param, resolved through the allowlist (400 on unknown value); `/breadth`, `/sector-trends`, `/refresh-indices` unchanged
+- `frontend/src/types/marketSentiment.ts` — new `SentimentIndex` union type
+- `frontend/src/api/marketSentiment.ts` — `sentimentKeys.summary`/`.series` now take the index as part of the cache key; `useRefreshIndicesMutation` invalidates by key-prefix so both indices refresh together
+- `frontend/src/pages/MarketSentiment.tsx` — `SegmentedControl` toggle (persisted via `usePersistentState`) next to the Refresh button; title, no-data alert, and all summary/flags/chart/oscillator/volatility panels follow the selected index. Market Breadth and Sector Trends stay Nifty-50-based by design (see plan for rationale).
+
+---
+
 ## 2026-08-25 — Classify OpenFin holdings by ISIN directly, not just by name
 
 - `app/services/mf_ingest.py` (`_AmfiLookups.classify_equity`/`resolve_sector`) — each OpenFin holding carries its own ISIN, but classification only reached AMFI's market-cap/sector data indirectly, through a name→ISIN resolution chain keyed by AMFI's own name wording — so it missed whenever the two disclosures spelled a company differently (e.g. "The Jammu & Kashmir Bank Ltd." vs "...Limited"). Now tries `isin_to_mcap`/`isin_to_sector` directly against the holding's own ISIN first.

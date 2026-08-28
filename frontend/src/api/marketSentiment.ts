@@ -1,26 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request } from './client'
-import type { SentimentSummary, SentimentSeries, MarketBreadth, SectorTrends } from '../types/marketSentiment'
+import type { SentimentSummary, SentimentSeries, MarketBreadth, SectorTrends, SentimentIndex } from '../types/marketSentiment'
 
 export const sentimentKeys = {
-  summary: ['market-sentiment', 'summary'] as const,
-  series: (days: number) => ['market-sentiment', 'series', days] as const,
+  summary: (index: SentimentIndex) => ['market-sentiment', 'summary', index] as const,
+  series: (days: number, index: SentimentIndex) => ['market-sentiment', 'series', days, index] as const,
   breadth: ['market-sentiment', 'breadth'] as const,
   sectorTrends: ['market-sentiment', 'sector-trends'] as const,
 }
 
-export function useSentimentSummary() {
+export function useSentimentSummary(index: SentimentIndex) {
   return useQuery({
-    queryKey: sentimentKeys.summary,
-    queryFn: () => request<SentimentSummary>('/api/v1/market-sentiment/summary'),
+    queryKey: sentimentKeys.summary(index),
+    queryFn: () => request<SentimentSummary>(`/api/v1/market-sentiment/summary?index=${index}`),
     staleTime: 60 * 60 * 1000,
   })
 }
 
-export function useSentimentSeries(days: number) {
+export function useSentimentSeries(days: number, index: SentimentIndex) {
   return useQuery({
-    queryKey: sentimentKeys.series(days),
-    queryFn: () => request<SentimentSeries>(`/api/v1/market-sentiment/series?days=${days}`),
+    queryKey: sentimentKeys.series(days, index),
+    queryFn: () => request<SentimentSeries>(`/api/v1/market-sentiment/series?days=${days}&index=${index}`),
     staleTime: 60 * 60 * 1000,
   })
 }
@@ -49,7 +49,7 @@ export function useRefreshIndicesMutation() {
       { method: 'POST' },
     ),
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: sentimentKeys.summary })
+      qc.invalidateQueries({ queryKey: ['market-sentiment', 'summary'] })
       qc.invalidateQueries({ queryKey: ['market-sentiment', 'series'] })
       qc.invalidateQueries({ queryKey: sentimentKeys.breadth })
       qc.invalidateQueries({ queryKey: sentimentKeys.sectorTrends })
