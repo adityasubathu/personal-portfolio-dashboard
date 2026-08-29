@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-08-29 — Darker chart grid lines
+
+- `frontend/src/components/LwChart.tsx` — grid line color `#e5e7eb` → `#b0b6bf` (shared by every lightweight-charts instance in the app).
+
+---
+
+## 2026-08-29 — Capital gains: debt/bonds never get LTCG, hybrid MFs get their own bucket
+
+Fixed the tax logic to match actual rules: genuine debt instruments (debt funds, bonds) have no LTCG concession at all under §50AA — every rupee is taxed at slab rate, regardless of holding period. That had leaked through for pre-Apr-2023 debt-fund purchases and for bonds.
+
+- `app/services/capital_gains.py` — `debt_mf` and `bond` asset categories now always classify to `debt_slab`; removed the LTCG branches (`debt_ltcg_20_indexed`/`debt_ltcg_125` on the debt-fund side, `bond_stcg_slab`/`bond_ltcg_10`/`bond_ltcg_125` on the bond side) that previously gave them 20%-indexed or 12.5% flat LTCG treatment for pre-2023 purchases/listed bonds.
+- Renamed the surviving 24-month/no-indexation LTCG bucket (`intl_fund`, `gold_mf`, and their listed-ETF equivalents) from `debt_slab`/`debt_ltcg_20_indexed`/`debt_ltcg_125` to `hybrid_stcg_slab`/`hybrid_ltcg_20_indexed`/`hybrid_ltcg_125`, labeled "Hybrid/Specified MF" — this is the actual Hybrid & Specified Mutual Fund (35–65% equity) tax treatment: STCG below 24 months at slab, LTCG at a flat 12.5% with no indexation and no ₹1.25L exemption.
+- Fixed the equity-fund name classifier (`_EQUITY_MF_RE`) to recognise sectoral/thematic fund names (infrastructure, pharma/healthcare, technology, natural resources, opportunities, quant, value, contra, etc.) that were previously falling through to `unknown_mf` and silently being taxed at slab — this had zero visible signal in the UI since unclassified funds looked identical to genuine debt funds.
+- Added a `hybrid_mf` category (`_HYBRID_MF_RE`, matches "multi asset") for funds like multi-asset-allocation funds that are SEBI-categorized as Hybrid, routed into the same 24-month bucket as `intl_fund`/`gold_mf`.
+- `frontend/src/pages/CapitalGains.tsx` — added an `AssetCategoryBadge` (Equity / Debt-Non-Equity / Hybrid) next to each symbol in the per-symbol breakdown table, driven by `asset_category`; updated `LT_BUCKETS` for the renamed/removed buckets.
+
+---
+
 ## 2026-08-29 — Breadth ratio chart: large-cap leg is now Nifty 100
 
 - `app/services/kite_historical.py` — added `NIFTY 100` to `INDEX_INSTRUMENTS`. Backfilled from Kite: 2,888 rows from 2015-01-01, complete OHLC.

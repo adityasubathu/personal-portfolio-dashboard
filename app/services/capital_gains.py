@@ -2,7 +2,9 @@
 
 Tax law is date-driven:
   - Budget 2024 (23 Jul 2024): equity rates 15→20% STCG, 10→12.5% LTCG; debt LTCG 24m threshold.
-  - §50AA (1 Apr 2023): debt MFs bought on/after → always slab, no LTCG benefit.
+  - §50AA (1 Apr 2023): debt MFs → always slab, no LTCG benefit at any holding period.
+    Hybrid/specified MFs (35-65% equity) bought on/after 1 Apr 2023 → always slab too;
+    bought before → old LTCG rules apply (24m/12.5% flat post-Budget-2024).
   - §112A grandfathering: equity lots bought before 1 Feb 2018 → cost = max(actual, min(FMV-31Jan18, sale)).
   - CII frozen at 2024-25 (indexation no longer applies to new periods).
 """
@@ -43,25 +45,27 @@ BUCKET_META: dict[str, dict] = {
     "equity_stcg_20":       {"label": "Equity STCG (20%) §111A",          "rate": 20.0,  "term": "short"},
     "equity_ltcg_10":       {"label": "Equity LTCG (10%) §112A",          "rate": 10.0,  "term": "long",  "is_112a": True},
     "equity_ltcg_125":      {"label": "Equity LTCG (12.5%) §112A",        "rate": 12.5,  "term": "long",  "is_112a": True},
-    "debt_slab":            {"label": "Debt / Specified MF — Slab rate",  "rate": None,  "term": "short"},
-    "debt_ltcg_20_indexed": {"label": "Debt LTCG (20% + indexation)",     "rate": 20.0,  "term": "long",  "indexed": True},
-    "debt_ltcg_125":        {"label": "Debt/Non-Equity LTCG (12.5%)",     "rate": 12.5,  "term": "long"},
-    "bond_stcg_slab":       {"label": "Bond STCG — Slab rate",            "rate": None,  "term": "short"},
-    "bond_ltcg_10":         {"label": "Bond LTCG (10%)",                  "rate": 10.0,  "term": "long"},
-    "bond_ltcg_125":        {"label": "Bond LTCG (12.5%)",                "rate": 12.5,  "term": "long"},
+    "debt_slab":            {"label": "Debt / Non-Equity — Slab rate",    "rate": None,  "term": "short"},
+    "hybrid_stcg_slab":     {"label": "Hybrid/Specified MF — Slab rate",  "rate": None,  "term": "short"},
+    "hybrid_ltcg_20_indexed": {"label": "Hybrid/Specified MF LTCG (20% + indexation)", "rate": 20.0, "term": "long", "indexed": True},
+    "hybrid_ltcg_125":      {"label": "Hybrid/Specified MF LTCG (12.5%)", "rate": 12.5,  "term": "long"},
     "unknown_mf_slab":      {"label": "Unclassified MF — Slab (conservative)", "rate": None, "term": "short"},
 }
 
-_STCG_KEYS = {"equity_stcg_15", "equity_stcg_20", "debt_slab", "bond_stcg_slab", "unknown_mf_slab"}
-_LTCG_KEYS = {"equity_ltcg_10", "equity_ltcg_125", "debt_ltcg_20_indexed", "debt_ltcg_125", "bond_ltcg_10", "bond_ltcg_125"}
+_STCG_KEYS = {"equity_stcg_15", "equity_stcg_20", "debt_slab", "hybrid_stcg_slab", "unknown_mf_slab"}
+_LTCG_KEYS = {"equity_ltcg_10", "equity_ltcg_125", "hybrid_ltcg_20_indexed", "hybrid_ltcg_125"}
 _112A_KEYS = {"equity_ltcg_10", "equity_ltcg_125"}
 
 # ── MF equity/debt classification ─────────────────────────────────────────────
 _EQUITY_MF_RE = re.compile(
     r"\b(equity|elss|index|flexi.?cap|large.?cap|mid.?cap|small.?cap|multi.?cap|"
-    r"aggressive.?hybrid|balanced.?advantage|nifty|sensex|arbitrage)",
+    r"aggressive.?hybrid|balanced.?advantage|nifty|sensex|arbitrage|"
+    r"infrastructure|pharma|healthcare|technology|natural.?resources|new.?energy|"
+    r"opportunities|consumption|manufactur|business.?cycle|value|contra|quant|"
+    r"dividend.?yield|focused|special.?situations|financial.?services)\b",
     re.IGNORECASE,
 )
+_HYBRID_MF_RE = re.compile(r"\bmulti.?asset\b", re.IGNORECASE)
 _INTL_FUND_RE = re.compile(
     r"\b(nasdaq|fang|hang.?seng|global|international|overseas|world|"
     r"us\s+equity|us\s+fund|emerging\s+market|asia\s+pacific|europe|china|japan)\b",
@@ -83,6 +87,8 @@ def _classify_mf_orientation(name: str | None, tradingsymbol: str | None) -> str
     combined = f"{tradingsymbol or ''} {name or ''}"
     if _EQUITY_MF_RE.search(combined):
         return "equity"
+    if _HYBRID_MF_RE.search(combined):
+        return "hybrid_mf"
     if _GOLD_RE.search(combined):
         return "gold"
     if _INTL_FUND_RE.search(combined):
@@ -125,7 +131,8 @@ def _holding_months(buy: date, sell: date) -> int:
 def classify_lot(asset_category: str, buy_date: date, sell_date: date) -> str:
     """Map (asset_category, buy_date, sell_date) → tax bucket key.
 
-    asset_category: 'equity' | 'debt_mf' | 'intl_etf' | 'intl_fund' | 'gold_etf' | 'gold_mf' | 'bond' | 'unknown_mf'
+    asset_category: 'equity' | 'debt_mf' | 'intl_etf' | 'intl_fund' | 'gold_etf' | 'gold_mf' |
+        'hybrid_mf' | 'bond' | 'unknown_mf'
     """
     months = _holding_months(buy_date, sell_date)
 
@@ -136,36 +143,34 @@ def classify_lot(asset_category: str, buy_date: date, sell_date: date) -> str:
         return "equity_ltcg_10" if is_lt else "equity_stcg_15"
 
     if asset_category == "debt_mf":
-        if buy_date >= _DEBT_50AA_BOUNDARY:
-            return "debt_slab"
-        if sell_date < _BUDGET_2024:
-            return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
-        return "debt_ltcg_125" if months >= 24 else "debt_slab"
+        # Genuine debt / money-market funds: always deemed short-term, taxed at
+        # slab rate — no LTCG treatment at any holding period (§50AA, all years).
+        return "debt_slab"
 
-    if asset_category in ("intl_fund", "gold_mf"):
-        # Unlisted / fund-of-fund: 24m LTCG threshold post-Budget 2024.
-        # Pre-Budget 2024: §50AA (if bought ≥ Apr 2023) or old 36m/indexed rule.
-        # No §112A exemption.
+    if asset_category in ("intl_fund", "gold_mf", "hybrid_mf"):
+        # Hybrid & Specified Mutual Funds (35%-65% equity, or otherwise
+        # non-domestic-equity fund-of-funds): 24m LTCG threshold.
+        # STCG (<24m): slab. LTCG (>=24m): flat 12.5%, no indexation, no §1.25L exemption.
+        # Pre-Budget 2024 sales retain the old 36m/indexed rule.
         if sell_date < _BUDGET_2024:
             if buy_date >= _DEBT_50AA_BOUNDARY:
-                return "debt_slab"
-            return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
-        return "debt_ltcg_125" if months >= 24 else "debt_slab"
+                return "hybrid_stcg_slab"
+            return "hybrid_ltcg_20_indexed" if months >= 36 else "hybrid_stcg_slab"
+        return "hybrid_ltcg_125" if months >= 24 else "hybrid_stcg_slab"
 
     if asset_category in ("gold_etf", "intl_etf"):
-        # Listed non-equity ETF: 12m LTCG threshold post-Budget 2024, slab STCG.
-        # Pre-Budget 2024: same §50AA / old rules as debt funds.
+        # Listed hybrid/specified ETF: 12m LTCG threshold post-Budget 2024, slab STCG.
+        # Pre-Budget 2024: same §50AA / old rules as above.
         if sell_date < _BUDGET_2024:
             if buy_date >= _DEBT_50AA_BOUNDARY:
-                return "debt_slab"
-            return "debt_ltcg_20_indexed" if months >= 36 else "debt_slab"
-        return "debt_ltcg_125" if months >= 12 else "debt_slab"
+                return "hybrid_stcg_slab"
+            return "hybrid_ltcg_20_indexed" if months >= 36 else "hybrid_stcg_slab"
+        return "hybrid_ltcg_125" if months >= 12 else "hybrid_stcg_slab"
 
     if asset_category == "bond":
-        is_lt = months >= 12
-        if sell_date >= _BUDGET_2024:
-            return "bond_ltcg_125" if is_lt else "bond_stcg_slab"
-        return "bond_ltcg_10" if is_lt else "bond_stcg_slab"
+        # Bonds are a debt instrument — same slab-only treatment as debt_mf,
+        # no LTCG at any holding period.
+        return "debt_slab"
 
     # unknown_mf: conservative — slab rate, treat as short-term
     return "unknown_mf_slab"
@@ -290,8 +295,8 @@ def _fifo_match(
 
             tax_bucket = classify_lot(asset_category, front.trade_date, d)
 
-            # Indexed buy value for debt LTCG with indexation
-            if tax_bucket == "debt_ltcg_20_indexed":
+            # Indexed buy value for hybrid/specified-MF LTCG with indexation
+            if tax_bucket == "hybrid_ltcg_20_indexed":
                 buy_cii = CII.get(_cii_fy(front.trade_date), 100)
                 sell_cii = CII.get(_cii_fy(d), 363)
                 effective_buy_value = effective_buy_value * (sell_cii / buy_cii)
@@ -491,6 +496,8 @@ async def get_capital_gains(db: AsyncSession, fy: str) -> dict:
                 asset_category = "gold_etf"
             elif orientation == "intl_fund":
                 asset_category = "intl_etf"
+            elif orientation == "hybrid_mf":
+                asset_category = "hybrid_mf"
             else:
                 asset_category = "debt_mf"
         elif itype == "BOND":

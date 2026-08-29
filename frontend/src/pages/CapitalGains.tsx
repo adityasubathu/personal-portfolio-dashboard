@@ -32,11 +32,31 @@ const PAGE_PX = 128
 
 const LT_BUCKETS = new Set([
   'equity_ltcg_10', 'equity_ltcg_125',
-  'debt_ltcg_20_indexed', 'debt_ltcg_125',
-  'bond_ltcg_10', 'bond_ltcg_125',
+  'hybrid_ltcg_20_indexed', 'hybrid_ltcg_125',
 ])
 
 function isLongTerm(taxBucket: string) { return LT_BUCKETS.has(taxBucket) }
+
+const ASSET_CATEGORY_BADGE: Record<string, { label: string; color: string }> = {
+  equity: { label: 'Equity', color: 'green' },
+  debt_mf: { label: 'Debt/Non-Equity', color: 'grape' },
+  bond: { label: 'Debt/Non-Equity', color: 'grape' },
+  unknown_mf: { label: 'Debt/Non-Equity', color: 'grape' },
+  intl_fund: { label: 'Hybrid', color: 'yellow' },
+  gold_mf: { label: 'Hybrid', color: 'yellow' },
+  intl_etf: { label: 'Hybrid', color: 'yellow' },
+  gold_etf: { label: 'Hybrid', color: 'yellow' },
+  hybrid_mf: { label: 'Hybrid', color: 'yellow' },
+}
+
+function AssetCategoryBadge({ assetCategory }: { assetCategory: string }) {
+  const meta = ASSET_CATEGORY_BADGE[assetCategory] ?? { label: assetCategory, color: 'gray' }
+  return (
+    <Badge size="xs" color={meta.color} variant="light" fz="calc(var(--mantine-font-size-xs) * 1.1)">
+      {meta.label}
+    </Badge>
+  )
+}
 
 function TermBadge({ taxBucket }: { taxBucket: string }) {
   const lt = isLongTerm(taxBucket)
@@ -130,6 +150,7 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
 interface SymbolGroup {
   symbol: string
   name: string | null
+  assetCategory: string
   stcg: number
   ltcg: number
   total: number
@@ -240,6 +261,7 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
       bySymbol.set(lot.symbol, {
         symbol: lot.symbol,
         name: lot.name,
+        assetCategory: lot.asset_category,
         stcg: stcgDelta,
         ltcg: ltcgDelta,
         total: lot.gain,
@@ -290,7 +312,10 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
                   </UnstyledButton>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm" fw={600}>{sg.symbol}</Text>
+                  <Group gap={6} wrap="nowrap">
+                    <Text size="sm" fw={600}>{sg.symbol}</Text>
+                    <AssetCategoryBadge assetCategory={sg.assetCategory} />
+                  </Group>
                   {sg.name && sg.name !== sg.symbol && (
                     <Text size="xs" c="dimmed" lineClamp={1}>{sg.name}</Text>
                   )}
