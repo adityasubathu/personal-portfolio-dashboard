@@ -74,15 +74,15 @@ export interface RebalanceBucket {
 export interface RebalancePlan {
   mode: 'anchored' | 'free_float'
   pool: number
-  cash_to_zero_drift: number
-  cash_applied: number
+  cash_amount: number
   new_pool: number
+  total_buy: number
+  total_sell: number
   buckets: RebalanceBucket[]
   asset_class: RebalanceBucket[]
-  asset_class_cash_to_zero_drift: number
-  asset_class_binding_note: string | null
+  asset_class_total_buy: number
+  asset_class_total_sell: number
   conflict_note: string | null
-  binding_note: string | null
 }
 
 export interface SchemeHolding {

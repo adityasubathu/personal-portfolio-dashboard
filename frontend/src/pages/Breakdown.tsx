@@ -38,38 +38,35 @@ function diffColor(diff: number): string | undefined {
 // ── Rebalance calculator — shared by asset-class and category tables ────────────
 
 function RebalanceControls({
-  cashToZeroDrift,
+  totalBuy,
+  totalSell,
   cash,
   onCashChange,
-  bindingNote,
 }: {
-  cashToZeroDrift: number
+  totalBuy: number
+  totalSell: number
   cash: number | ''
   onCashChange: (v: number | '') => void
-  bindingNote?: string | null
 }) {
   return (
     <Stack gap={2} mb="xs">
       <Group gap="sm" align="center">
-        <Text size="sm">Cash to deploy:</Text>
+        <Text size="sm">Extra cash to add:</Text>
         <NumberInput
           size="xs"
           w={140}
           value={cash}
           onChange={(v) => onCashChange(v === '' ? '' : Number(v))}
-          placeholder={cashToZeroDrift.toFixed(0)}
+          placeholder="0"
           min={0}
           prefix="₹"
           thousandSeparator=","
         />
-        <Button size="xs" variant="subtle" onClick={() => onCashChange('')}>
-          Zero all drifts: <MoneyText value={cashToZeroDrift} compact />
-        </Button>
         <Text size="xs" c="dimmed">
-          Only adds to under-allocated buckets. Over-allocated buckets need sells or time to correct.
+          Sell <MoneyText value={totalSell} compact style={{ color: 'var(--mantine-color-red-6)' }} /> from over-target buckets,
+          buy <MoneyText value={totalBuy} compact style={{ color: 'var(--mantine-color-green-6)' }} /> into under-target ones — every bucket lands exactly on target.
         </Text>
       </Group>
-      {bindingNote && <Text size="xs" c="dimmed">{bindingNote}</Text>}
     </Stack>
   )
 }
@@ -77,31 +74,34 @@ function RebalanceControls({
 function RebalanceRows({ buckets }: { buckets: RebalanceBucket[] }) {
   return (
     <>
-      {buckets.map((b) => {
-        const overAllocated = b.invest === 0 && b.remaining_drift < -0.01
-        return (
-          <Table.Tr key={b.category} style={overAllocated ? { opacity: 0.6 } : undefined}>
-            <Table.Td>
-              <Group gap={6}>
-                <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(b.category) }} />
-                {b.category}
-                {overAllocated && <Text size="xs" c="dimmed">over-allocated — no action</Text>}
+      {buckets.map((b) => (
+        <Table.Tr key={b.category}>
+          <Table.Td>
+            <Group gap={6}>
+              <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(b.category) }} />
+              {b.category}
+            </Group>
+          </Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}>{b.target_pct.toFixed(1)}%</Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}>{b.current_pct.toFixed(2)}%</Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}>
+            {Math.abs(b.invest) > 1 ? (
+              <Group gap={4} justify="flex-end" wrap="nowrap">
+                <Text size="xs" c="dimmed">{b.invest > 0 ? 'Buy' : 'Sell'}</Text>
+                <MoneyText
+                  value={Math.abs(b.invest)}
+                  compact
+                  style={{ color: b.invest > 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)' }}
+                />
               </Group>
-            </Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{b.target_pct.toFixed(1)}%</Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{b.current_pct.toFixed(2)}%</Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>
-              {b.invest > 0
-                ? <MoneyText value={b.invest} compact style={{ color: 'var(--mantine-color-green-6)' }} />
-                : '—'}
-            </Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{b.new_pct.toFixed(2)}%</Table.Td>
-            <Table.Td style={{ textAlign: 'right', color: overAllocated ? 'var(--mantine-color-red-5)' : 'var(--mantine-color-green-6)' }}>
-              {b.remaining_drift >= 0 ? '+' : ''}{b.remaining_drift.toFixed(2)}%
-            </Table.Td>
-          </Table.Tr>
-        )
-      })}
+            ) : '—'}
+          </Table.Td>
+          <Table.Td style={{ textAlign: 'right' }}>{b.new_pct.toFixed(2)}%</Table.Td>
+          <Table.Td style={{ textAlign: 'right', color: 'var(--mantine-color-green-6)' }}>
+            {b.remaining_drift >= 0 ? '+' : ''}{b.remaining_drift.toFixed(2)}%
+          </Table.Td>
+        </Table.Tr>
+      ))}
     </>
   )
 }
@@ -174,10 +174,10 @@ function AssetClassTargetsSection({
       </Group>
       {rebalanceView && plan && (
         <RebalanceControls
-          cashToZeroDrift={plan.asset_class_cash_to_zero_drift}
+          totalBuy={plan.asset_class_total_buy}
+          totalSell={plan.asset_class_total_sell}
           cash={cashInput}
           onCashChange={setCashInput}
-          bindingNote={plan.asset_class_binding_note}
         />
       )}
       <Table fz="sm" withColumnBorders={false}>
@@ -405,10 +405,10 @@ function OverviewTab() {
 
           {rebalanceView && plan && (
             <RebalanceControls
-              cashToZeroDrift={plan.cash_to_zero_drift}
+              totalBuy={plan.total_buy}
+              totalSell={plan.total_sell}
               cash={cashInput}
               onCashChange={setCashInput}
-              bindingNote={plan.binding_note}
             />
           )}
           {rebalanceView && plan?.conflict_note && (

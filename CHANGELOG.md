@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-08-29 — Rebalance plan now sells over-target buckets instead of add-only
+
+The Rebalance calculator only ever added cash to under-allocated buckets and left over-allocated ones alone ("over-allocated — no action"), so a real rebalance often needed a separate manual sell step and, in anchored mode, silently assumed you'd inject however much fresh cash was needed to grow Equity-Foreign up to its target — sometimes lakhs, with zero sells suggested.
+
+- `app/services/allocation.py` — replaced `_zero_drift_plan` (cash-injection-only, clamped at 0, computed a "minimum cash to zero drift") with `_full_rebalance_plan`: every bucket's `invest` is `target_value - current_value`, so it comes out negative (sell) for over-target buckets and positive (buy) for under-target ones. Every bucket lands exactly on target with zero new cash by default — one trade per off-target bucket, the minimum possible. An optional `cash_amount` still adds fresh money on top, split by target weight.
+- Anchored mode's foreign/domestic split is now solved as a single closed pool (domestic + foreign together) instead of foreign being bolted on afterwards assuming unlimited fresh cash — algebraically this reduces to the same `anchor_ratio` (foreign's share of Large Cap) as before, just funded by selling other equity categories rather than requiring new cash.
+- Removed `cash_to_zero_drift`/`cash_applied`/`binding_note` (and the asset-class equivalents) from the API response; added `cash_amount`, `total_buy`, `total_sell` instead.
+- `frontend/src/pages/Breakdown.tsx` — `RebalanceControls` now shows total buy/sell instead of a "cash to zero drift" shortcut button; `RebalanceRows` shows a Buy/Sell chip per bucket instead of dimming over-allocated rows as "no action".
+- `frontend/src/types/mfBreakdown.ts` — `RebalancePlan` fields updated to match.
+
+---
+
 ## 2026-08-29 — Market Sentiment charts default to full history
 
 - `frontend/src/pages/MarketSentiment.tsx` — range selector default `'1Y'` → `'All'`.
