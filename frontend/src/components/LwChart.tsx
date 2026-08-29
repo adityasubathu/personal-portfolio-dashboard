@@ -188,8 +188,8 @@ export function LwChart({
         textColor: '#374151',
       },
       grid: {
-        vertLines: { color: '#e5e7eb', style: LineStyle.Dotted },
-        horzLines: { color: '#e5e7eb', style: LineStyle.Dotted },
+        vertLines: { color: '#b0b6bf', style: LineStyle.Dotted },
+        horzLines: { color: '#b0b6bf', style: LineStyle.Dotted },
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: '#d1d5db', ...(priceScaleWidth != null ? { minimumWidth: priceScaleWidth } : {}) },
