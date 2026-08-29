@@ -755,7 +755,7 @@ export function MarketSentiment() {
     setChartPriceScaleWidth(prev => (max !== prev ? max : prev))
   }, [])
 
-  const [rangeLabel, setRangeLabel] = usePersistentState<string>('market-sentiment-range', '1Y')
+  const [rangeLabel, setRangeLabel] = usePersistentState<string>('market-sentiment-range', 'All')
   const [enabledOverlays, setEnabledOverlays] = usePersistentState<OverlayKey[]>(
     'market-sentiment-overlays',
     ['sma50', 'sma200'],

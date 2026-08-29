@@ -2,6 +2,13 @@
 
 ---
 
+## 2026-08-29 — Market Sentiment charts default to full history
+
+- `frontend/src/pages/MarketSentiment.tsx` — range selector default `'1Y'` → `'All'`.
+- `frontend/src/components/LwChart.tsx` — lightweight-charts doesn't auto-fit its view on `setData`; without an explicit `fitContent()` call it silently showed only the trailing ~150-200 bars regardless of how much data was actually loaded, even with the full 2015-2026 dataset in hand and "All" selected. Now calls `timeScale().fitContent()` after every data update — fixes the price chart, overlays, and every oscillator/volatility chart on the page.
+
+---
+
 ## 2026-08-29 — Chart height persists per page, not per symbol
 
 - `frontend/src/pages/PriceChart.tsx`, `frontend/src/pages/NavChart.tsx` — `persistKey` no longer interpolates the selected instrument's id, so a manually-dragged chart height is shared across every symbol viewed on that page instead of being remembered separately per symbol (old per-symbol `localStorage` entries are simply orphaned, not migrated).
