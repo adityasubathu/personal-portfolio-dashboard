@@ -126,7 +126,7 @@ export function NavChart() {
             <LwChart
               seriesType="line"
               compareLines={compareLines}
-              persistKey={`nav_chart_h_${selectedId}`}
+              persistKey="nav_chart_h"
               defaultHeight={520}
               maskInPrivacy={false}
             />
@@ -138,7 +138,7 @@ export function NavChart() {
                 label={etfCompareLines ? `${selectedInstr?.name ?? 'NAV'} (NAV)` : undefined}
                 markers={mainData.markers}
                 compareLines={etfCompareLines}
-                persistKey={`nav_chart_h_${selectedId}`}
+                persistKey="nav_chart_h"
                 defaultHeight={520}
                 maskInPrivacy={false}
               />

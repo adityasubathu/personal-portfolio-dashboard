@@ -2,6 +2,12 @@
 
 ---
 
+## 2026-08-29 — Chart height persists per page, not per symbol
+
+- `frontend/src/pages/PriceChart.tsx`, `frontend/src/pages/NavChart.tsx` — `persistKey` no longer interpolates the selected instrument's id, so a manually-dragged chart height is shared across every symbol viewed on that page instead of being remembered separately per symbol (old per-symbol `localStorage` entries are simply orphaned, not migrated).
+
+---
+
 ## 2026-08-29 — Darker chart grid lines
 
 - `frontend/src/components/LwChart.tsx` — grid line color `#e5e7eb` → `#b0b6bf` (shared by every lightweight-charts instance in the app).

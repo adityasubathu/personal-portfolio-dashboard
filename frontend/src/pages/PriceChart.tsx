@@ -35,7 +35,7 @@ export function PriceChart() {
           seriesType="candlestick"
           candles={chartData.candles}
           markers={chartData.markers}
-          persistKey={`price_chart_h_${selectedId}`}
+          persistKey="price_chart_h"
           defaultHeight={520}
           maskInPrivacy={false}
         />
