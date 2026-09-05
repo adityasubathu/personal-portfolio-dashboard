@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import re
 from datetime import date
 from difflib import SequenceMatcher
@@ -8,8 +9,10 @@ from pathlib import Path
 import httpx
 import openpyxl
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.app_config import AppConfig
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, EquitySectorOverride, MfSchemeBreakdown
@@ -18,6 +21,7 @@ from app.time_util import now_ist
 
 BREAKDOWN_DIR = Path("data/mf_portfolio_breakdown")
 OPENFIN_BASE = "https://openfin.pocketedge.in/api/v1"
+MF_BREAKDOWN_CHECK_KEY = "mf_breakdown_last_check"
 
 _AMFI_DATE_RE = re.compile(
     r"AverageMarketCapitalization(\d{1,2})(\w{3})(\d{4})",
@@ -377,6 +381,30 @@ async def _fetch_fund_holdings(client: httpx.AsyncClient, amfi_code: str, as_of:
         return None
 
 
+async def _fetch_filings(client: httpx.AsyncClient) -> list[dict]:
+    """GET /api/v1/filings — newest-first list of {as_of, cadence, portfolio_count}.
+    Diagnostic only: failure must not abort the ingest."""
+    try:
+        r = await client.get(f"{OPENFIN_BASE}/filings", timeout=30.0)
+        r.raise_for_status()
+        return r.json().get("filings", [])
+    except httpx.HTTPError:
+        return []
+
+
+async def _record_last_check(db: AsyncSession, payload: dict) -> None:
+    """Persist the last OpenFin check to app_config so the Fund Breakdown page
+    can read it without re-running a sync. Commits — the early-return "already
+    current" path has no other commit point, and this is the case that runs
+    on nearly every ingest, so the write must not be lost."""
+    stmt = pg_insert(AppConfig).values(key=MF_BREAKDOWN_CHECK_KEY, value_json=json.dumps(payload))
+    await db.execute(stmt.on_conflict_do_update(
+        index_elements=["key"],
+        set_={"value_json": stmt.excluded.value_json},
+    ))
+    await db.commit()
+
+
 class _AmfiLookups:
     """Bundles the AMFI-derived lookup tables used for equity classification, so
     they're built once per ingest run and threaded through as a single object."""
@@ -641,6 +669,10 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
             return {"schemes_processed": 0, "rows_upserted": 0, "unmatched_equities": [],
                     "missing_funds": [], "errors": [f"OpenFin catalog fetch failed: {e}"]}
 
+        filings = await _fetch_filings(client)
+        server_latest_filing = filings[0]["as_of"] if filings else None
+        server_latest_portfolio_count = filings[0]["portfolio_count"] if filings else None
+
         catalog_by_isin = {e["isin"]: e for e in catalog.values() if e.get("isin")}
 
         # Resolve each held fund to a catalog entry: by amfi_scheme_code first, then by ISIN.
@@ -676,10 +708,28 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
                     latest_as_of = local_as_of[isin]
 
         if not stale:
+            checked_at = now_ist().isoformat()
+            if on_progress:
+                as_of_str = latest_as_of.isoformat() if latest_as_of else "unknown"
+                await on_progress(f"All {schemes_skipped} scheme(s) current at {as_of_str}.")
+                if server_latest_filing and latest_as_of and server_latest_filing > latest_as_of.isoformat():
+                    await on_progress(
+                        f"Server's newest filing is {server_latest_filing} "
+                        f"({server_latest_portfolio_count} portfolios) — none of your funds are in it yet."
+                    )
+            await _record_last_check(db, {
+                "checked_at": checked_at,
+                "server_latest_filing": server_latest_filing,
+                "server_latest_portfolio_count": server_latest_portfolio_count,
+                "schemes_updated": 0,
+            })
             return {
                 "schemes_processed": 0, "rows_upserted": 0, "schemes_skipped": schemes_skipped,
                 "already_current": True, "as_of": latest_as_of.isoformat() if latest_as_of else None,
                 "unmatched_equities": [], "missing_funds": missing_funds, "errors": [],
+                "checked_at": checked_at,
+                "server_latest_filing": server_latest_filing,
+                "server_latest_portfolio_count": server_latest_portfolio_count,
             }
 
         if on_progress:
@@ -764,7 +814,13 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
     if to_clean:
         await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(to_clean)))
 
-    await db.commit()
+    checked_at = now_ist().isoformat()
+    await _record_last_check(db, {
+        "checked_at": checked_at,
+        "server_latest_filing": server_latest_filing,
+        "server_latest_portfolio_count": server_latest_portfolio_count,
+        "schemes_updated": schemes_processed,
+    })  # commits — covers the deletes/inserts above too
 
     return {
         "schemes_processed": schemes_processed,
@@ -775,4 +831,7 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
         "unmatched_equities": unmatched,
         "missing_funds": missing_funds,
         "errors": errors[:30],
+        "checked_at": checked_at,
+        "server_latest_filing": server_latest_filing,
+        "server_latest_portfolio_count": server_latest_portfolio_count,
     }

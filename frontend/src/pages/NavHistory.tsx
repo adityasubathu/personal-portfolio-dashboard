@@ -93,10 +93,12 @@ export function NavHistory() {
     time: p.date,
     value: p.invested,
   }))
-  const unitNavData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
-    time: p.date,
-    value: p.unit_nav,
-  }))
+  const unitNavData: NavPoint[] = (navSeries ?? [])
+    .filter((p: NavSeriesPoint) => p.unit_nav != null)
+    .map((p: NavSeriesPoint) => ({
+      time: p.date,
+      value: p.unit_nav as number,
+    }))
 
   async function handleUploadOhlc() {
     if (!uploadInstrId || !uploadFile) return
@@ -135,7 +137,7 @@ export function NavHistory() {
         {unitNavData.length > 0 && (
           <Box>
             <Text size="xs" c="dimmed" mb={4}>
-              Unit NAV — performance excluding cash flows (base = 100)
+              Unit NAV — performance excluding cash flows (base = 100 on 5 Nov 2022)
             </Text>
             <LwChart
               seriesType="line"

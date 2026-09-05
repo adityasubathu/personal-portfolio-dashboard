@@ -72,5 +72,5 @@ export interface NavPoint {
   date: string
   value: number
   invested: number
-  unit_nav: number
+  unit_nav: number | null
 }

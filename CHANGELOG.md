@@ -2,6 +2,17 @@
 
 ---
 
+## 2026-09-04 — Unit-NAV base date, OpenFin freshness diagnosis, Fund Breakdown staleness display
+
+- `app/services/nav_history.py` — `unit_nav` in `compute_nav_series` now compounds from a base date of 2022-11-05 (`UNIT_NAV_BASE_DATE`) instead of the first trade date (2022-02-04); the first nine months were a handful of isolated trades and compounded noise off a near-zero base. `unit_nav` is `null` before the base date so the chart line starts there instead of drawing a flat 100 stub. Guarded with `max(UNIT_NAV_BASE_DATE, start)` so a portfolio that begins after the base date is unaffected. `value`/`invested` still start at the first trade.
+- `frontend/src/types/portfolio.ts` / `frontend/src/pages/NavHistory.tsx` — `NavPoint.unit_nav` is `number | null`; the unit-NAV chart's data filters out nulls before handing points to `LwChart` (a raw `null` value throws inside `lightweight-charts`); caption now states the base date.
+- Diagnosed the OpenFin sync reporting `already_current` for August 2026: verified live against `openfin.pocketedge.in` that the August monthly disclosure genuinely doesn't exist yet for any held fund (only 4 AMCs — none of them holding funds we own — have filed against SEBI's 10th-of-next-month deadline). Not a bug; nothing changed in classification or staleness logic.
+- `app/services/mf_ingest.py` — `ingest_from_openfin` now also fetches `/filings` and reports the server's newest filing date + portfolio count alongside `already_current`, both in the SSE progress log and the result JSON, so "nothing to update" states *why* instead of looking silently stuck. Persisted as a `last_checked_at` / `server_latest_filing` row in `app_config` (key `mf_breakdown_last_check`) on every ingest run, including the early-return path — which previously never called `db.commit()` at all.
+- `app/services/composition.py` — `get_scheme_breakdown` now returns `as_of`, `fetched_at`, `last_checked_at`, `server_latest_filing`, `server_latest_portfolio_count` alongside `holdings`/`category_summary`.
+- `frontend/src/pages/FundBreakdown.tsx` — renders the freshness line (`Portfolio as of … · fetched … · last checked …`) plus an orange line when the server has a newer filing this fund hasn't received yet. New `shortDate`/`shortDateTime` formatters added to `frontend/src/lib/format.ts`.
+
+---
+
 ## 2026-08-29 — Rebalance plan now sells over-target buckets instead of add-only
 
 The Rebalance calculator only ever added cash to under-allocated buckets and left over-allocated ones alone ("over-allocated — no action"), so a real rebalance often needed a separate manual sell step and, in anchored mode, silently assumed you'd inject however much fresh cash was needed to grow Equity-Foreign up to its target — sometimes lakhs, with zero sells suggested.

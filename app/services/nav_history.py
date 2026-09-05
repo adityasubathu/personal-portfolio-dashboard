@@ -26,6 +26,9 @@ from app.models.trade import Trade
 
 MF_TYPES = {"MF"}
 
+UNIT_NAV_BASE_DATE = date(2022, 11, 5)
+UNIT_NAV_BASE = 100.0
+
 
 async def compute_nav_series(db: AsyncSession) -> list[dict]:
     """Return [{date, value, invested, unit_nav}] from the earliest trade to today.
@@ -33,14 +36,16 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
     is known yet for a newly-bought instrument.
 
     `unit_nav` is a daily time-weighted return (Modified Dietz, cash flows
-    counted at day-end) compounded from BASE_NAV — the standard GIPS-style
-    method fund administrators use to report performance independent of
-    contribution/withdrawal timing. Unlike a unit-creation approach keyed to
-    trade price, it never compares a trade's execution price against that
-    day's close, so it isn't thrown off when a data vendor (e.g. Kite)
-    retroactively re-scales historical closes for a later corporate action —
-    each day's return only ever compares consecutive days from the same
-    price series. See plans/2026-08-19-unit-nav-chart.md.
+    counted at day-end) compounded from UNIT_NAV_BASE at UNIT_NAV_BASE_DATE —
+    the standard GIPS-style method fund administrators use to report
+    performance independent of contribution/withdrawal timing. Unlike a
+    unit-creation approach keyed to trade price, it never compares a trade's
+    execution price against that day's close, so it isn't thrown off when a
+    data vendor (e.g. Kite) retroactively re-scales historical closes for a
+    later corporate action — each day's return only ever compares consecutive
+    days from the same price series. `unit_nav` is null before the base date.
+    See plans/2026-08-19-unit-nav-chart.md and
+    plans/2026-09-04-21-55-nav-base-date-and-breakdown-freshness.md.
     """
     trades = list(
         (await db.execute(select(Trade).order_by(Trade.trade_date, Trade.id))).scalars().all()
@@ -91,15 +96,15 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
 
     start = trades[0].trade_date
     end = date.today()
+    base_date = max(UNIT_NAV_BASE_DATE, start)
 
     qty: dict[int, float] = defaultdict(float)
     cost: dict[int, float] = defaultdict(float)  # running cost basis of held units
     last_close: dict[int, float] = {}
     series: list[dict] = []
 
-    BASE_NAV = 100.0
     prev_value = 0.0   # prior day's end-of-day portfolio value (yesterday's `value`)
-    unit_nav = BASE_NAV
+    unit_nav = UNIT_NAV_BASE
 
     cur = start
     while cur <= end:
@@ -155,7 +160,7 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
         # rescaling historical closes for a later corporate action. So unit_nav
         # carries forward unchanged (100 on true inception), and today's
         # end-of-day value becomes tomorrow's basis instead.
-        if prev_value > 1e-9:
+        if cur > base_date and prev_value > 1e-9:
             numerator = value - prev_value - net_cf
             unit_nav *= 1.0 + numerator / prev_value
 
@@ -163,7 +168,7 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
             "date": cur.isoformat(),
             "value": round(value, 2),
             "invested": round(invested, 2),
-            "unit_nav": round(unit_nav, 4),
+            "unit_nav": round(unit_nav, 4) if cur >= base_date else None,
         })
         prev_value = value
         cur += timedelta(days=1)

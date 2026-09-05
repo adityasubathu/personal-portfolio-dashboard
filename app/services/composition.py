@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from difflib import SequenceMatcher
 
@@ -5,6 +6,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.app_config import AppConfig
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown
@@ -12,7 +14,7 @@ from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
 from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
-from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, _SGB_RE, normalize_company_name
+from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, normalize_company_name
 from app.time_util import now_ist
 
 _CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Derivatives - Leveraged", "Other"]
@@ -45,8 +47,18 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
         .order_by(MfSchemeBreakdown.holdings_pct.desc())
     )).scalars().all()
 
+    last_check = (await db.execute(
+        select(AppConfig).where(AppConfig.key == MF_BREAKDOWN_CHECK_KEY)
+    )).scalar_one_or_none()
+    last_check_data = json.loads(last_check.value_json) if last_check and last_check.value_json else {}
+    freshness = {
+        "last_checked_at": last_check_data.get("checked_at"),
+        "server_latest_filing": last_check_data.get("server_latest_filing"),
+        "server_latest_portfolio_count": last_check_data.get("server_latest_portfolio_count"),
+    }
+
     if not rows:
-        return {"holdings": [], "category_summary": []}
+        return {"holdings": [], "category_summary": [], "as_of": None, "fetched_at": None, **freshness}
 
     # Resolve fund market value from the holding record
     holding_row = (await db.execute(
@@ -91,7 +103,16 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
                 "value": round(cat_value_totals.get(cat, 0), 2),
             })
 
-    return {"holdings": holdings, "category_summary": category_summary}
+    as_of = rows[0].as_of
+    fetched_at = max((r.updated_at for r in rows), default=None)
+
+    return {
+        "holdings": holdings,
+        "category_summary": category_summary,
+        "as_of": as_of.isoformat() if as_of else None,
+        "fetched_at": fetched_at.isoformat() if fetched_at else None,
+        **freshness,
+    }
 
 
 async def get_category_composition(db: AsyncSession) -> list[dict]:

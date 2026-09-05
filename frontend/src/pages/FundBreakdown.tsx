@@ -3,6 +3,7 @@ import { Autocomplete, Box, Stack, Table, Text, Title } from '@mantine/core'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
+import { shortDate, shortDateTime } from '../lib/format'
 
 export function FundBreakdown() {
   const { data: schemes } = useAvailableSchemes()
@@ -36,6 +37,25 @@ export function FundBreakdown() {
       />
 
       {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
+
+      {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
+        <Box>
+          <Text size="xs" c="dimmed">
+            {[
+              breakdown.as_of && `Portfolio as of ${shortDate(breakdown.as_of)}`,
+              breakdown.fetched_at && `fetched ${shortDateTime(breakdown.fetched_at)}`,
+              breakdown.last_checked_at && `last checked ${shortDateTime(breakdown.last_checked_at)}`,
+            ].filter(Boolean).join(' · ')}
+          </Text>
+          {breakdown.server_latest_filing && breakdown.as_of && breakdown.server_latest_filing > breakdown.as_of && (
+            <Text size="xs" c="orange">
+              Server's newest filing: {shortDate(breakdown.server_latest_filing)}
+              {breakdown.server_latest_portfolio_count != null && ` (${breakdown.server_latest_portfolio_count} funds)`}
+              {' '}— this fund hasn't filed yet
+            </Text>
+          )}
+        </Box>
+      )}
 
       {breakdown && labels.length > 0 && (
         <DonutChart labels={labels} values={values} />

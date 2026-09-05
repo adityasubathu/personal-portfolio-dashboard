@@ -96,6 +96,11 @@ export interface SchemeHolding {
 export interface SchemeBreakdown {
   holdings: SchemeHolding[]
   category_summary: Array<{ category: string; pct: number; value: number }>
+  as_of: string | null
+  fetched_at: string | null
+  last_checked_at: string | null
+  server_latest_filing: string | null
+  server_latest_portfolio_count: number | null
 }
 
 export interface SchemeListItem {
