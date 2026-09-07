@@ -14,4 +14,5 @@ mf_portfolio_breakdown/
 plans
 rebuild.sh
 .claude
+.agents
 CLAUDE_BLUF_STYLE.md
