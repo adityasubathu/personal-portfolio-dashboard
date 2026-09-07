@@ -79,10 +79,19 @@ _SUFFIX_RE = re.compile(
 _TRAILING_JUNK = re.compile(r"[\s.*\-]+$")
 _MULTI_SPACE = re.compile(r"\s+")
 
+# Footnote markers AMCs append/prepend in disclosures ("^^INOX Renewable Ltd **").
+# Only stripped at the ends — inside a name they could belong to the name itself.
+_EDGE_MARKER_RE = re.compile(r"^(?:\s*(?:\^\^|\*\*))+|(?:(?:\^\^|\*\*)\s*)+$")
+
 _NAME_ALIASES: dict[str, str] = {
     "m.r.f.": "mrf",
     "m r f": "mrf",
 }
+
+
+def clean_instrument_name(name: str) -> str:
+    """Strip leading/trailing ^^ and ** footnote markers from a holding name."""
+    return _EDGE_MARKER_RE.sub("", name).strip()
 
 
 def normalize_company_name(name: str) -> str:
@@ -371,14 +380,24 @@ async def _fetch_catalog(client: httpx.AsyncClient) -> dict:
     return r.json()
 
 
-async def _fetch_fund_holdings(client: httpx.AsyncClient, amfi_code: str, as_of: str) -> dict | None:
-    """GET /api/v1/holdings/{amfi_code}?as_of=... Returns None on any HTTP error."""
-    try:
-        r = await client.get(f"{OPENFIN_BASE}/holdings/{amfi_code}", params={"as_of": as_of}, timeout=30.0)
-        r.raise_for_status()
-        return r.json()
-    except httpx.HTTPError:
-        return None
+async def _fetch_fund_holdings(
+    client: httpx.AsyncClient, amfi_code: str, as_of_dates: list[str]
+) -> dict | None:
+    """GET /api/v1/holdings/{amfi_code}?as_of=... trying each date newest-first.
+
+    The catalog stamps every scheme's latest_as_of/available_as_of with the newest
+    filing date in the index, including schemes that did not file for it — so the
+    first date often 404s while the fund's real latest disclosure sits one entry
+    down the list. Returns None only when no date has holdings.
+    """
+    for as_of in as_of_dates:
+        try:
+            r = await client.get(f"{OPENFIN_BASE}/holdings/{amfi_code}", params={"as_of": as_of}, timeout=30.0)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError:
+            continue
+    return None
 
 
 async def _fetch_filings(client: httpx.AsyncClient) -> list[dict]:
@@ -549,7 +568,7 @@ def _map_scheme_holdings(
         de_rows = deriv_by_isin.get(isin, [])
         long_mv = sum(float(r["market_value"]) for r in eq_rows) * mv_multiplier
         short_mv = -sum(float(r["market_value"]) for r in de_rows) * mv_multiplier
-        name = (eq_rows[0] if eq_rows else de_rows[0])["instrument"]
+        name = clean_instrument_name((eq_rows[0] if eq_rows else de_rows[0])["instrument"])
         matched = min(long_mv, short_mv)
         residual = abs(long_mv - short_mv)
 
@@ -574,7 +593,7 @@ def _map_scheme_holdings(
                 })
 
     for h in plain:
-        name = (h.get("instrument") or "").strip()
+        name = clean_instrument_name(h.get("instrument") or "")
         if not name:
             continue
         market_value = float(h["market_value"]) * mv_multiplier
@@ -741,9 +760,10 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
             if on_progress:
                 await on_progress(f"[{schemes_processed + 1}/{len(stale)}] {fund_name} (as of {as_of_str})")
 
-            response = await _fetch_fund_holdings(client, entry["amfi_code"], as_of_str)
+            candidates = list(dict.fromkeys([as_of_str, *(entry.get("available_as_of") or [])]))
+            response = await _fetch_fund_holdings(client, entry["amfi_code"], candidates)
             if response is None:
-                errors.append(f"{fund_name}: holdings fetch failed")
+                errors.append(f"{fund_name}: no holdings for any of {', '.join(candidates)}")
                 continue
 
             mv_unit = response.get("meta", {}).get("market_value_unit")
@@ -785,6 +805,8 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
             if on_progress:
                 unmatched_here = sum(1 for u in scheme_unmatched if u["scheme_isin"] == isin)
                 msg = f"  → {len(values)} rows"
+                if scheme_as_of.isoformat() != as_of_str:
+                    msg += f" (no {as_of_str} filing on server; used {scheme_as_of.isoformat()})"
                 if unmatched_here:
                     msg += f", {unmatched_here} unmatched"
                 await on_progress(msg)
@@ -808,9 +830,10 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
         if on_progress:
             await on_progress(f"  → {isin_to_name.get(isin, isin)}: synthesized 100% {commodity_cat} (not in OpenFin)")
 
-    # Remove rows for held schemes that dropped out of both the stale-fetch set and catalog.
-    stale_isins = {isin for isin, _ in stale}
-    to_clean = held_isins - seen_isins - (set(fund_catalog_entry) - stale_isins)
+    # Remove rows only for held schemes with no catalog entry at all. A scheme whose
+    # fetch failed this run is still in fund_catalog_entry and keeps its existing
+    # breakdown — a transient 404 must never wipe a good local disclosure.
+    to_clean = held_isins - seen_isins - set(fund_catalog_entry)
     if to_clean:
         await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(to_clean)))
 
