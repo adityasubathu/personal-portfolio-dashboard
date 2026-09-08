@@ -20,16 +20,26 @@ def sma(df: pd.DataFrame, window: int) -> pd.Series:
     return df['close'].rolling(window).mean()
 
 
-def sma_slope(sma_series: pd.Series, lookback: int = 5) -> pd.Series:
-    """Classify SMA slope: 'rising' / 'flat' / 'falling' (threshold ±0.05%/day)."""
+SMA_SLOPE_FLAT_THRESHOLD = 0.015   # %/day — roughly ±3.8% annualised
+
+
+def sma_slope(sma_series: pd.Series, lookback: int = 21) -> pd.Series:
+    """Classify SMA slope: 'rising' / 'flat' / 'falling' (threshold ±0.015%/day).
+
+    A long SMA only moves by (new price - dropped price) / period each day, so a
+    5-day window is mostly noise on a 200-day average and the old ±0.05%/day band
+    (≈±12.6% annualised) was wide enough to swallow real trends — it called the
+    Nifty 50 flat for 78% of the last two years. A 21-day window over a ±3.8%/yr
+    band tracks what the curve visibly does.
+    """
     pct_per_day = sma_series.pct_change(lookback) / lookback * 100
 
     def _classify(x):
         if pd.isna(x):
             return None
-        if x > 0.05:
+        if x > SMA_SLOPE_FLAT_THRESHOLD:
             return "rising"
-        if x < -0.05:
+        if x < -SMA_SLOPE_FLAT_THRESHOLD:
             return "falling"
         return "flat"
 

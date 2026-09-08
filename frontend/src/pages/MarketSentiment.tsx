@@ -88,7 +88,7 @@ const EXPLANATIONS = {
 
   tableMid: `Mid-term momentum uses two indicators:\n\n• ADX — measures trend strength (not direction). Below ~20 = no real trend; above ~25 = trend is in place and MA signals are more reliable.\n• Weekly RSI — same RSI formula on weekly closes. Much smoother than daily; shows the underlying medium-term momentum without day-to-day noise.`,
 
-  tableLong: `Long-term momentum uses three reads:\n\n• SMA200 slope — is the 200-day average itself rising, flat, or falling? Cleaner regime signal than price-vs-200DMA alone.\n• Drawdown from ATH — how far current price has fallen from the most recent peak, and how long the drawdown has lasted.\n• Rolling 1-year return — the % return over the trailing 252 trading days. Puts current performance in context: unusually strong, weak, or normal vs. history.`,
+  tableLong: `Long-term momentum uses three reads:\n\n• SMA200 slope — is the 200-day average itself rising, flat, or falling? Measured over 21 sessions; flat means it moved less than 0.015%/day (about ±3.8% a year). Cleaner regime signal than price-vs-200DMA alone.\n• Drawdown from ATH — how far current price has fallen from the most recent peak, and how long the drawdown has lasted.\n• Rolling 1-year return — the % return over the trailing 252 trading days. Puts current performance in context: unusually strong, weak, or normal vs. history.`,
 
   tableVol: `Volatility regime classifies the current realized volatility environment:\n\n• Low — vol is below its historical median; market is calm.\n• Normal — vol is in its typical range.\n• High — vol is elevated; expect wider daily swings and less reliable trend signals.\n\nBased on rolling 60-day realized volatility percentile vs. the full 6-year window.`,
 
