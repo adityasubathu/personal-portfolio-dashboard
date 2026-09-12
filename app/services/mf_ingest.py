@@ -8,7 +8,7 @@ from pathlib import Path
 
 import httpx
 import openpyxl
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -380,24 +380,14 @@ async def _fetch_catalog(client: httpx.AsyncClient) -> dict:
     return r.json()
 
 
-async def _fetch_fund_holdings(
-    client: httpx.AsyncClient, amfi_code: str, as_of_dates: list[str]
-) -> dict | None:
-    """GET /api/v1/holdings/{amfi_code}?as_of=... trying each date newest-first.
-
-    The catalog stamps every scheme's latest_as_of/available_as_of with the newest
-    filing date in the index, including schemes that did not file for it — so the
-    first date often 404s while the fund's real latest disclosure sits one entry
-    down the list. Returns None only when no date has holdings.
-    """
-    for as_of in as_of_dates:
-        try:
-            r = await client.get(f"{OPENFIN_BASE}/holdings/{amfi_code}", params={"as_of": as_of}, timeout=30.0)
-            r.raise_for_status()
-            return r.json()
-        except httpx.HTTPError:
-            continue
-    return None
+async def _fetch_fund_holdings(client: httpx.AsyncClient, amfi_code: str, as_of: str) -> dict | None:
+    """GET /api/v1/holdings/{amfi_code}?as_of=... Returns None on any HTTP error."""
+    try:
+        r = await client.get(f"{OPENFIN_BASE}/holdings/{amfi_code}", params={"as_of": as_of}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPError:
+        return None
 
 
 async def _fetch_filings(client: httpx.AsyncClient) -> list[dict]:
@@ -409,6 +399,35 @@ async def _fetch_filings(client: httpx.AsyncClient) -> list[dict]:
         return r.json().get("filings", [])
     except httpx.HTTPError:
         return []
+
+
+async def _fund_summary(db: AsyncSession, isin_to_name: dict[str, str]) -> list[dict]:
+    """Per-held-fund disclosure date and row count, read back after the writes.
+
+    Reading from the table rather than tracking it through the loop means schemes
+    that were skipped as already-current, freshly fetched, or synthesized locally
+    all report the same way.
+    """
+    stored = {
+        isin: (as_of, rows)
+        for isin, as_of, rows in (await db.execute(
+            select(
+                MfSchemeBreakdown.scheme_isin,
+                func.max(MfSchemeBreakdown.as_of),
+                func.count(),
+            ).group_by(MfSchemeBreakdown.scheme_isin)
+        )).all()
+    }
+    summary = []
+    for isin, name in isin_to_name.items():
+        as_of, rows = stored.get(isin, (None, 0))
+        summary.append({
+            "isin": isin,
+            "name": name,
+            "as_of": as_of.isoformat() if as_of else None,
+            "rows": rows,
+        })
+    return sorted(summary, key=lambda f: f["name"])
 
 
 async def _record_last_check(db: AsyncSession, payload: dict) -> None:
@@ -746,6 +765,7 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
                 "schemes_processed": 0, "rows_upserted": 0, "schemes_skipped": schemes_skipped,
                 "already_current": True, "as_of": latest_as_of.isoformat() if latest_as_of else None,
                 "unmatched_equities": [], "missing_funds": missing_funds, "errors": [],
+                "funds": await _fund_summary(db, isin_to_name),
                 "checked_at": checked_at,
                 "server_latest_filing": server_latest_filing,
                 "server_latest_portfolio_count": server_latest_portfolio_count,
@@ -760,10 +780,9 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
             if on_progress:
                 await on_progress(f"[{schemes_processed + 1}/{len(stale)}] {fund_name} (as of {as_of_str})")
 
-            candidates = list(dict.fromkeys([as_of_str, *(entry.get("available_as_of") or [])]))
-            response = await _fetch_fund_holdings(client, entry["amfi_code"], candidates)
+            response = await _fetch_fund_holdings(client, entry["amfi_code"], as_of_str)
             if response is None:
-                errors.append(f"{fund_name}: no holdings for any of {', '.join(candidates)}")
+                errors.append(f"{fund_name}: no holdings for {as_of_str}")
                 continue
 
             mv_unit = response.get("meta", {}).get("market_value_unit")
@@ -806,7 +825,7 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
                 unmatched_here = sum(1 for u in scheme_unmatched if u["scheme_isin"] == isin)
                 msg = f"  → {len(values)} rows"
                 if scheme_as_of.isoformat() != as_of_str:
-                    msg += f" (no {as_of_str} filing on server; used {scheme_as_of.isoformat()})"
+                    msg += f" (server served {scheme_as_of.isoformat()}, not the requested {as_of_str})"
                 if unmatched_here:
                     msg += f", {unmatched_here} unmatched"
                 await on_progress(msg)
@@ -837,6 +856,8 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
     if to_clean:
         await db.execute(delete(MfSchemeBreakdown).where(MfSchemeBreakdown.scheme_isin.in_(to_clean)))
 
+    funds = await _fund_summary(db, isin_to_name)
+
     checked_at = now_ist().isoformat()
     await _record_last_check(db, {
         "checked_at": checked_at,
@@ -854,6 +875,7 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
         "unmatched_equities": unmatched,
         "missing_funds": missing_funds,
         "errors": errors[:30],
+        "funds": funds,
         "checked_at": checked_at,
         "server_latest_filing": server_latest_filing,
         "server_latest_portfolio_count": server_latest_portfolio_count,

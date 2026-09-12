@@ -21,6 +21,8 @@ import {
   useSectorClassifyBatchMutation,
   useSchemeBreakdown,
 } from '../api/mfBreakdown'
+import { DataTable } from '../components/DataTable'
+import type { Column } from '../components/DataTable'
 import { DonutChart } from '../components/DonutChart'
 import { SsePanel } from '../components/SsePanel'
 import { MoneyText } from '../components/MoneyText'
@@ -28,8 +30,8 @@ import { useSse } from '../hooks/useSse'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
-import { inrCompact } from '../lib/format'
-import type { IngestDonePayload, RebalanceBucket } from '../types/mfBreakdown'
+import { inrCompact, shortDate } from '../lib/format'
+import type { IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
 
 function diffColor(diff: number): string | undefined {
   return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
@@ -756,6 +758,28 @@ function CompositionTab() {
 }
 
 
+const SYNCED_FUND_COLUMNS: Column<SyncedFund>[] = [
+  { key: 'name', label: 'Fund', sortable: true, render: (f) => <Text size="xs">{f.name}</Text> },
+  {
+    key: 'as_of',
+    label: 'Portfolio as of',
+    sortable: true,
+    render: (f) => <Text size="xs">{f.as_of ? shortDate(f.as_of) : '—'}</Text>,
+  },
+  {
+    key: 'rows',
+    label: 'Holdings',
+    sortable: true,
+    align: 'right',
+    render: (f) => <Text size="xs">{f.rows}</Text>,
+  },
+]
+
+function staleFunds(funds: SyncedFund[], serverLatest: string): SyncedFund[] {
+  return funds.filter((f) => !f.as_of || f.as_of < serverLatest)
+}
+
+
 function IngestResultRenderer(result: IngestDonePayload) {
   const { amfi, ingest } = result
   return (
@@ -774,6 +798,24 @@ function IngestResultRenderer(result: IngestDonePayload) {
           Ingest: {ingest.schemes_processed} scheme(s) updated, {ingest.rows_upserted} row(s)
           {typeof ingest.schemes_skipped === 'number' && ingest.schemes_skipped > 0 ? ` · ${ingest.schemes_skipped} already current` : ''}
         </Text>
+      ) : null}
+      {ingest?.funds?.length ? (
+        <Stack gap={2} mt={6}>
+          <Text size="xs" fw={600}>Portfolio date per fund</Text>
+          <DataTable
+            columns={SYNCED_FUND_COLUMNS}
+            rows={ingest.funds}
+            defaultSort="as_of"
+            defaultDir="desc"
+            rowKey={(f) => f.isin}
+          />
+          {ingest.server_latest_filing && staleFunds(ingest.funds, ingest.server_latest_filing).length ? (
+            <Text size="xs" c="orange">
+              {staleFunds(ingest.funds, ingest.server_latest_filing).length} fund(s) behind the
+              server's newest filing ({shortDate(ingest.server_latest_filing)}) — they haven't disclosed for it yet
+            </Text>
+          ) : null}
+        </Stack>
       ) : null}
       {ingest?.unmatched_equities?.length ? (
         <Text size="xs" c="orange">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</Text>

@@ -165,6 +165,13 @@ export interface SectorClassifyResult {
   updated: number
 }
 
+export interface SyncedFund {
+  isin: string
+  name: string
+  as_of: string | null
+  rows: number
+}
+
 export interface IngestDonePayload {
   ok: boolean
   amfi?: {
@@ -185,8 +192,12 @@ export interface IngestDonePayload {
     as_of?: string
     unmatched_equities?: Array<{ name: string; scheme_isin: string }>
     missing_funds?: Array<{ isin: string; name: string }>
+    funds?: SyncedFund[]
     errors?: string[]
     error?: string
+    checked_at?: string
+    server_latest_filing?: string | null
+    server_latest_portfolio_count?: number | null
   }
   error?: string
 }
