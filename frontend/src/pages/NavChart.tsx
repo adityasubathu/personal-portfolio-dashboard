@@ -3,6 +3,7 @@ import { Box, Button, Group, Select, Stack, Text, Title } from '@mantine/core'
 import { IconPlus, IconX } from '@tabler/icons-react'
 import { useNavChartInstruments, useNavChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
+import { usePersistentState } from '../hooks/usePersistentState'
 import type { NavPoint } from '../types/charts'
 
 function normalizeToPercent(data: NavPoint[]): NavPoint[] {
@@ -39,7 +40,7 @@ function CompareSelect({
 
 export function NavChart() {
   const { data: instruments } = useNavChartInstruments()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = usePersistentState<number | null>('nav-chart-instrument', null)
   const [compareId, setCompareId] = useState<number | null>(null)
   const [compareMode, setCompareMode] = useState(false)
 

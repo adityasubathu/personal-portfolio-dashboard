@@ -3,17 +3,25 @@ import { Autocomplete, Box, SimpleGrid, Stack, Table, Text, Title } from '@manti
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { shortDate, shortDateTime } from '../lib/format'
+import type { SchemeListItem } from '../types/mfBreakdown'
+
+const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
 export function FundBreakdown() {
   const { data: schemes } = useAvailableSchemes()
-  const [selectedIsin, setSelectedIsin] = useState<string | null>(null)
+  const [selectedIsin, setSelectedIsin] = usePersistentState<string | null>('fund-breakdown-isin', null)
+  const [search, setSearch] = useState<string | null>(null)
   const { data: breakdown, isLoading } = useSchemeBreakdown(selectedIsin)
 
   const schemeOptions = schemes?.map((s) => ({
     value: s.scheme_isin,
-    label: `${s.name} (${s.scheme_isin})`,
+    label: schemeLabel(s),
   })) ?? []
+
+  const selectedScheme = schemes?.find((s) => s.scheme_isin === selectedIsin)
+  const searchValue = search ?? (selectedScheme ? schemeLabel(selectedScheme) : '')
 
   function handleSelect(label: string) {
     const match = schemeOptions.find((o) => o.label === label)
@@ -32,6 +40,8 @@ export function FundBreakdown() {
       <Autocomplete
         placeholder="Search fund by name or ISIN…"
         data={schemeOptions.map((o) => o.label)}
+        value={searchValue}
+        onChange={setSearch}
         onOptionSubmit={handleSelect}
         w={400}
         size="sm"

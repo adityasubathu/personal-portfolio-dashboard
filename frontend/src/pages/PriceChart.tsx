@@ -1,11 +1,11 @@
-import { useState } from 'react'
 import { Select, Stack, Text, Title } from '@mantine/core'
 import { useChartInstruments, usePriceChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 export function PriceChart() {
   const { data: instruments } = useChartInstruments()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = usePersistentState<number | null>('price-chart-instrument', null)
   const { data: chartData, isLoading } = usePriceChart(selectedId)
 
   const options = instruments?.map((i) => ({
