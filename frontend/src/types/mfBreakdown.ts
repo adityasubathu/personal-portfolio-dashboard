@@ -127,16 +127,6 @@ export interface SectorStockBreakdownItem {
   holdings: SectorStockHolding[]
 }
 
-export interface StockHolding {
-  name: string
-  isin: string | null
-  sector: string
-  schemes: string[]
-  value: number
-  pct_of_equity: number
-  category: string
-}
-
 export interface CategoryCompositionItem {
   category: string
   total: number
@@ -148,14 +138,6 @@ export interface CategoryCompositionItem {
     contribution: number
     share_pct: number
   }>
-}
-
-export interface DirectTradeBreakdown {
-  symbol: string
-  type: string
-  total_buy: number
-  total_sell: number
-  net: number
 }
 
 export interface ClassifyResult {

@@ -12,7 +12,6 @@ import {
   useDeleteKiteConfigMutation,
   useKiteSyncMutation,
 } from '../api/kite'
-import { apiUrl } from '../api/client'
 import { useAppStatus } from '../api/status'
 
 export function Kite() {
@@ -164,17 +163,7 @@ export function Kite() {
                 size="xs"
                 leftSection={<IconLogin size={12} />}
                 component="a"
-                href={apiUrl('/api/v1/kite/auth/url')}
-                onClick={async (e) => {
-                  e.preventDefault()
-                  try {
-                    const r = await fetch(apiUrl('/api/v1/kite/auth/url'))
-                    const { url } = await r.json()
-                    window.location.href = url
-                  } catch (err) {
-                    notifications.show({ color: 'red', message: String(err) })
-                  }
-                }}
+                href={status.login_url ?? undefined}
               >
                 Login with Kite
               </Button>

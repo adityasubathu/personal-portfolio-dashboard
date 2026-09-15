@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Table, Text, UnstyledButton, Group } from '@mantine/core'
+import { Table, Text, UnstyledButton } from '@mantine/core'
 import { IconChevronUp, IconChevronDown, IconSelector } from '@tabler/icons-react'
 import { heatmapBg } from '../lib/format'
 

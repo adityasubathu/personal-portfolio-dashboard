@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ActionIcon, Alert, Box, Button, Group, Loader, Paper, Text } from '@mantine/core'
+import { ActionIcon, Alert, Box, Group, Loader, Paper, Text } from '@mantine/core'
 import { IconX } from '@tabler/icons-react'
 import type { SseState } from '../hooks/useSse'
 

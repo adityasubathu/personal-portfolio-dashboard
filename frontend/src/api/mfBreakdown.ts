@@ -6,28 +6,23 @@ import type {
   BreakdownChartData,
   CategoryCompositionItem,
   ClassifyResult,
-  DirectTradeBreakdown,
   RebalancePlan,
   SchemeBreakdown,
   SchemeListItem,
   SectorClassifyResult,
   SectorCompositionItem,
   SectorStockBreakdownItem,
-  StockHolding,
 } from '../types/mfBreakdown'
 
 export const breakdownKeys = {
   chartData: ['mf-breakdown', 'chart-data'] as const,
-  stockHoldings: ['mf-breakdown', 'stock-holdings'] as const,
   allocationComparison: ['mf-breakdown', 'allocation-comparison'] as const,
-  allocationTargets: ['mf-breakdown', 'allocation-targets'] as const,
   assetClassComparison: ['mf-breakdown', 'asset-class-comparison'] as const,
   rebalancePlan: ['mf-breakdown', 'rebalance-plan'] as const,
   categoryComposition: ['mf-breakdown', 'category-composition'] as const,
   sectorComposition: ['mf-breakdown', 'sector-composition'] as const,
   sectorStockBreakdown: ['mf-breakdown', 'sector-stock-breakdown'] as const,
   sectorList: ['mf-breakdown', 'sector-list'] as const,
-  directTrades: ['mf-breakdown', 'direct-trades'] as const,
   schemes: ['mf-breakdown', 'schemes'] as const,
   scheme: (isin: string) => ['mf-breakdown', 'scheme', isin] as const,
 }
@@ -39,24 +34,10 @@ export function useBreakdownChart() {
   })
 }
 
-export function useStockHoldings() {
-  return useQuery({
-    queryKey: breakdownKeys.stockHoldings,
-    queryFn: () => request<StockHolding[]>('/api/v1/mf-breakdown/stock-holdings'),
-  })
-}
-
 export function useAllocationComparison(mode: 'anchored' | 'free_float' = 'anchored') {
   return useQuery({
     queryKey: [...breakdownKeys.allocationComparison, mode],
     queryFn: () => request<AllocationComparison>(`/api/v1/mf-breakdown/allocation-comparison?mode=${mode}`),
-  })
-}
-
-export function useAllocationTargets() {
-  return useQuery({
-    queryKey: breakdownKeys.allocationTargets,
-    queryFn: () => request<Record<string, number>>('/api/v1/mf-breakdown/allocation-targets'),
   })
 }
 
@@ -78,13 +59,6 @@ export function useSectorStockBreakdown() {
   return useQuery({
     queryKey: breakdownKeys.sectorStockBreakdown,
     queryFn: () => request<SectorStockBreakdownItem[]>('/api/v1/mf-breakdown/sector-stock-breakdown'),
-  })
-}
-
-export function useDirectTrades() {
-  return useQuery({
-    queryKey: breakdownKeys.directTrades,
-    queryFn: () => request<DirectTradeBreakdown[]>('/api/v1/mf-breakdown/direct-trades'),
   })
 }
 

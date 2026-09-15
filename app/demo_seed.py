@@ -12,7 +12,7 @@ import os
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 

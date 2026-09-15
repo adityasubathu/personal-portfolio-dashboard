@@ -14,7 +14,6 @@ from app.services.csv_importer import import_csv
 from app.services.holdings_engine import recompute_holdings
 from app.services.trades import list_trades_grouped
 from app.services.xirr import recompute_and_store_xirr
-from app.time_util import now_ist
 
 router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
 
