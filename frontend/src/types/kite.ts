@@ -15,14 +15,6 @@ export interface KiteStatus {
   login_url: string | null
 }
 
-export interface KiteConfig {
-  configured: boolean
-  api_key?: string
-  has_secret?: boolean
-  token_valid?: boolean
-  token_expiry?: string | null
-}
-
 export interface KiteDiscrepancy {
   kind: 'new_on_kite' | 'missing_from_kite' | 'quantity_mismatch'
   symbol: string

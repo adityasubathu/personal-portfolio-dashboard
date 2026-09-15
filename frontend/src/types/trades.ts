@@ -57,10 +57,13 @@ export interface ImportResponse {
 }
 
 export interface Violation {
-  symbol?: string
-  isin?: string
-  kind: string
-  detail?: string
+  instrument_id: number
+  tradingsymbol: string
+  isin: string | null
+  instrument_type: string
+  total_buy: number
+  total_sell: number
+  net: number
 }
 
 export interface ImportBatch {

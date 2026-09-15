@@ -3,10 +3,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.mf import FetchNavResult, NavTrackedInstrument
+from app.schemas.mf import NavTrackedInstrument
 from app.services.amfi_nav import sync_mf_navs
 from app.services.mfapi_nav import (
-    fetch_nav_by_isin,
     get_nav_tracked_instruments,
     remove_nav_tracked_instrument,
     sync_nav_history,
@@ -24,18 +23,6 @@ async def sync_nav(db: AsyncSession = Depends(get_db)):
         return JSONResponse({"mode": "amfi", "error": None, **result})
     except Exception as e:
         return JSONResponse({"mode": "amfi", "error": str(e)}, status_code=500)
-
-
-@router.post("/fetch-nav-by-isin", response_model=FetchNavResult)
-async def fetch_nav_by_isin_route(isin: str, db: AsyncSession = Depends(get_db)):
-    isin = isin.strip().upper()
-    if not isin:
-        return FetchNavResult(error="ISIN is required.")
-    try:
-        result = await fetch_nav_by_isin(db, isin)
-        return FetchNavResult(**result)
-    except Exception as e:
-        return FetchNavResult(error=str(e))
 
 
 @router.get("/nav-tracked", response_model=list[NavTrackedInstrument])

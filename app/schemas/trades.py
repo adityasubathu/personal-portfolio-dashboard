@@ -55,16 +55,19 @@ class ImportFileResult(BaseModel):
 
 
 class Violation(BaseModel):
-    symbol: Optional[str] = None
+    instrument_id: int
+    tradingsymbol: str
     isin: Optional[str] = None
-    kind: str
-    detail: Optional[str] = None
+    instrument_type: str
+    total_buy: float
+    total_sell: float
+    net: float
 
 
 class ImportResponse(BaseModel):
     results: list[ImportFileResult]
     holdings_count: int
-    violations: list[dict]
+    violations: list[Violation]
 
 
 class ImportBatch(BaseModel):

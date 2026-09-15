@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, Form, HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form
+from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,30 +46,6 @@ async def delete_config(db: AsyncSession = Depends(get_db)):
     await db.execute(delete(KiteConfig))
     await db.commit()
     return await _status_json(db)
-
-
-@router.get("/config")
-async def get_config(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
-    config = result.scalar_one_or_none()
-    if not config:
-        return {"configured": False}
-    return {
-        "configured": True,
-        "api_key": config.api_key,
-        "has_secret": bool(config.api_secret),
-        "token_valid": _is_token_valid(config),
-        "token_expiry": config.access_token_expiry.isoformat() if config.access_token_expiry else None,
-    }
-
-
-@router.get("/auth/url")
-async def auth_url(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(KiteConfig).where(KiteConfig.id == 1))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(400, "Kite not configured")
-    return {"url": kite_client.login_url(config.api_key)}
 
 
 @router.get("/auth/callback")

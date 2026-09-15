@@ -5,10 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.instrument import Instrument
 from app.models.nav_history import NavHistory
-from app.models.policy_trigger import PolicyTriggerEvent, PolicyTriggerState
+from app.models.policy_trigger import PolicyTriggerState
 from app.models.price_history import PriceHistory
 from app.services.manual_assets import get_manual_assets_summary
-from app.services.mf_breakdown import get_allocation_comparison, get_asset_class_comparison
+from app.services.allocation import get_allocation_comparison, get_asset_class_comparison
 from app.time_util import now_ist
 
 THRESHOLDS = {

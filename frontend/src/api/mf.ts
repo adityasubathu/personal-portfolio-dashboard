@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request } from './client'
-import type { FetchNavResult, MfSyncResult, NavTrackedInstrument } from '../types/mf'
+import type { MfSyncResult, NavTrackedInstrument } from '../types/mf'
 
 export const mfKeys = {
   navTracked: ['mf', 'nav-tracked'] as const,
@@ -28,18 +28,6 @@ export function useSyncNavHistoryMutation() {
       request<MfSyncResult>(`/api/v1/mf/sync-nav-history?source=${source}`, { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
-      qc.invalidateQueries({ queryKey: ['charts'] })
-    },
-  })
-}
-
-export function useFetchNavByIsinMutation() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (isin: string) =>
-      request<FetchNavResult>(`/api/v1/mf/fetch-nav-by-isin?isin=${encodeURIComponent(isin)}`, { method: 'POST' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: mfKeys.navTracked })
       qc.invalidateQueries({ queryKey: ['charts'] })
     },
   })

@@ -63,11 +63,6 @@ export function gainColor(value: number | null | undefined): string {
   return value > 0 ? 'var(--mantine-color-green-8)' : 'var(--mantine-color-red-8)'
 }
 
-export function gainColorRb(value: number | null | undefined): string {
-  if (value == null || value === 0) return 'inherit'
-  return value > 0 ? 'var(--mantine-color-blue-8)' : 'var(--mantine-color-red-8)'
-}
-
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }

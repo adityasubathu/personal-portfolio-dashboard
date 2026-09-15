@@ -74,9 +74,6 @@ portfolio-mac-arm/
 │   │   ├── kite.py
 │   │   ├── manual_assets.py
 │   │   ├── mf.py
-│   │   ├── mf_breakdown.py
-│   │   ├── charts.py
-│   │   ├── capital_gains.py
 │   │   └── settings.py
 │   ├── models/
 │   │   ├── __init__.py          # Re-exports all models (for Alembic / metadata)
@@ -115,7 +112,9 @@ portfolio-mac-arm/
 │       ├── kite_reconcile.py    # Local ↔ Kite quantity validation
 │       ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
-│       ├── mf_breakdown.py      # AMFI xlsx parse, OpenFin disclosure ingest, chart aggregation
+│       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
+│       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
+│       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, sector overrides
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
 │       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
@@ -157,7 +156,7 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector, Composition, Direct Trades
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector, Composition
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
@@ -170,7 +169,8 @@ portfolio-mac-arm/
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
-│       │   └── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
+│       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
+│       │   └── usePrivacy.tsx   # Privacy-mode context — masks ₹ amounts across the app
 │       └── lib/
 │           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor
 │           └── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor()
@@ -186,8 +186,7 @@ portfolio-mac-arm/
 │       ├── ohlc/                # <SYMBOL>.json — daily OHLC rows (synthetic)
 │       └── nav/                 # <ISIN>.json — daily NAV rows (real, from mfapi.in)
 ├── scripts/
-│   ├── fetch_demo_data.py       # One-time script to refresh demo fixture data (Yahoo Finance + mfapi.in)
-│   └── fetch_nifty50_ohlc.py   # Standalone: fetch Nifty 50 daily OHLC from Kite and write to CSV (supports --start/--end/--append)
+│   └── fetch_demo_data.py       # One-time script to refresh demo fixture data (Yahoo Finance + mfapi.in)
 ├── docker-compose.yml           # PostgreSQL 17 + app (uvicorn :8000) + frontend (Vite :5173) + pgAdmin (5050)
 ├── Dockerfile                   # Backend image
 ├── requirements.txt
@@ -292,17 +291,15 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 |---|---|
 | `PUT /config` | Save API key + secret |
 | `DELETE /config` | Clear credentials |
-| `GET /config` | Config + token status |
-| `GET /auth/url` | Kite login URL |
 | `GET /auth/callback` | OAuth callback → redirect to `${FRONTEND_URL}/kite?login=success` |
 | `POST /sync` | Sync holdings + positions |
+| `GET /status` | Config + token status, last sync, and the Kite login URL |
 
 ### Mutual Funds (`/api/v1/mf`)
 | Endpoint | Description |
 |---|---|
 | `POST /sync-nav` | Update MF prices from AMFI daily feed |
 | `POST /sync-nav-history?source=mfapi\|finapi` | Download historical NAV (mfapi.in default, finapi.upvaly.com fallback) |
-| `POST /fetch-nav-by-isin` | Import a single fund by ISIN |
 | `GET /nav-tracked` | List manually tracked funds |
 | `DELETE /nav-tracked/{instrument_id}` | Remove tracking entry |
 
@@ -313,17 +310,13 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `PATCH /classify-batch` | Manual category override for unmatched equities |
 | `GET /chart-data` | Allocation doughnut data |
 | `GET /allocation-comparison` | Current vs target allocation with deltas (`?mode=anchored\|free_float`) |
-| `GET /allocation-targets` | Saved per-category equity targets |
 | `POST /allocation-targets` | Save per-category equity targets |
 | `GET /asset-class-comparison` | Asset class (Equity/Debt/PM) current vs target |
 | `GET /rebalance-plan` | Cash injection needed to zero out allocation drift (`?mode=anchored\|free_float&cash=`) |
-| `GET /asset-class-targets` | Saved asset class targets |
 | `POST /asset-class-targets` | Save asset class targets (also saves `Equity - Foreign` to `allocation_targets`) |
-| `GET /stock-holdings` | Flat list of all equity stocks across schemes |
 | `GET /category-composition` | Per-category breakdown by contributing scheme |
 | `GET /sector-composition` | Per-sector breakdown |
 | `GET /sector-stock-breakdown` | Per-sector individual stock holdings |
-| `GET /direct-trades` | Ticker-wise BUY/SELL breakdown |
 | `GET /schemes` | Schemes with breakdown data |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list + market-cap/asset-class and sector summaries |
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  Alert, Badge, Box, Button, Code, Group, NumberInput,
+  Alert, Badge, Box, Button, Group, NumberInput,
   Stack, Table, Text, TextInput, Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
@@ -31,7 +31,7 @@ function ImportResult({ result }: { result: ImportResponse }) {
       {result.violations.length > 0 && (
         <Alert color="orange" title="Holding violations" mt="xs">
           {result.violations.map((v, i) => (
-            <Text key={i} size="xs">{v.kind}: {v.symbol ?? v.isin} — {v.detail}</Text>
+            <Text key={i} size="xs">{v.tradingsymbol}: sold {v.total_sell} vs bought {v.total_buy} (net {v.net})</Text>
           ))}
         </Alert>
       )}

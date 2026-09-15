@@ -11,7 +11,6 @@ the derivative is near zero or the root moves outside a reasonable bracket.
 Returns None when the cashflows can't support a rate (all same sign, <2 flows, or no convergence).
 """
 from datetime import date
-from decimal import Decimal
 from typing import Sequence
 
 from sqlalchemy import select

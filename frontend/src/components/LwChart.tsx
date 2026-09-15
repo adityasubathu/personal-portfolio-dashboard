@@ -12,9 +12,9 @@ import {
   type IPriceLine,
   type SeriesMarker,
   type Time,
+  type MouseEventParams,
   type CandlestickData,
   type LineData,
-  type AreaData,
   CrosshairMode,
   LineStyle,
 } from 'lightweight-charts'
@@ -252,7 +252,7 @@ export function LwChart({
     }
 
     // Crosshair subscription
-    const sub = chart.subscribeCrosshairMove((param) => {
+    const onCrosshairMove = (param: MouseEventParams<Time>) => {
       const allMeta = [...seriesMetaRef.current.values()]
 
       if (!param.time || !param.point) {
@@ -262,7 +262,6 @@ export function LwChart({
         return
       }
 
-      const chartWidth = containerRef.current?.clientWidth ?? 0
       const chartHeight = heightRef.current
 
       // Gather tooltip positions
@@ -364,7 +363,8 @@ export function LwChart({
       dateEl.style.left = `${x}px`
       dateEl.style.top = `${chartHeight - 28}px`
       dateEl.style.display = 'block'
-    })
+    }
+    chart.subscribeCrosshairMove(onCrosshairMove)
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) chart.resize(containerRef.current.clientWidth, heightRef.current)
@@ -372,7 +372,7 @@ export function LwChart({
     ro.observe(containerRef.current)
 
     return () => {
-      chart.unsubscribeCrosshairMove(sub)
+      chart.unsubscribeCrosshairMove(onCrosshairMove)
       ro.disconnect()
       markersPluginRef.current = null
       seriesMetaRef.current.clear()

@@ -10,26 +10,26 @@ from app.database import get_db
 from app.sse import sse_stream
 from app.models.allocation_target import AllocationTarget
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
-from app.services.mf_breakdown import (
-    normalize_company_name,
+from app.services.allocation import (
     get_allocation_comparison,
-    get_allocation_targets,
     get_asset_class_comparison,
-    get_asset_class_targets,
-    get_available_schemes,
     get_breakdown_chart_data,
-    get_category_composition,
-    get_direct_trade_breakdown,
     get_rebalance_plan,
+    save_allocation_targets,
+    save_asset_class_targets,
+)
+from app.services.composition import (
+    get_available_schemes,
+    get_category_composition,
     get_scheme_breakdown,
     get_sector_composition,
     get_sector_list,
     get_sector_stock_breakdown,
-    get_stock_holdings_table,
-    ingest_from_openfin,
-    save_allocation_targets,
-    save_asset_class_targets,
     save_sector_overrides,
+)
+from app.services.mf_ingest import (
+    ingest_from_openfin,
+    normalize_company_name,
     sync_amfi_market_cap,
 )
 from app.time_util import now_ist
@@ -110,22 +110,10 @@ async def chart_data(db: AsyncSession = Depends(get_db)):
     return JSONResponse(data)
 
 
-@router.get("/stock-holdings")
-async def stock_holdings(db: AsyncSession = Depends(get_db)):
-    data = await get_stock_holdings_table(db)
-    return JSONResponse(data)
-
-
 @router.get("/allocation-comparison")
 async def allocation_comparison(mode: str = "anchored", db: AsyncSession = Depends(get_db)):
     data = await get_allocation_comparison(db, mode=mode)
     return JSONResponse(data)
-
-
-@router.get("/allocation-targets")
-async def allocation_targets(mode: str = "anchored", db: AsyncSession = Depends(get_db)):
-    targets = await get_allocation_targets(db, mode=mode)
-    return JSONResponse(targets)
 
 
 @router.post("/allocation-targets")
@@ -158,12 +146,6 @@ async def rebalance_plan(
 async def asset_class_comparison(db: AsyncSession = Depends(get_db)):
     data = await get_asset_class_comparison(db)
     return JSONResponse(data)
-
-
-@router.get("/asset-class-targets")
-async def get_asset_class_targets_endpoint(db: AsyncSession = Depends(get_db)):
-    targets = await get_asset_class_targets(db)
-    return JSONResponse(targets)
 
 
 @router.post("/asset-class-targets")
@@ -208,12 +190,6 @@ async def sector_composition(db: AsyncSession = Depends(get_db)):
 @router.get("/sector-stock-breakdown")
 async def sector_stock_breakdown(db: AsyncSession = Depends(get_db)):
     data = await get_sector_stock_breakdown(db)
-    return JSONResponse(data)
-
-
-@router.get("/direct-trades")
-async def direct_trades(db: AsyncSession = Depends(get_db)):
-    data = await get_direct_trade_breakdown(db)
     return JSONResponse(data)
 
 

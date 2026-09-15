@@ -1,32 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request, requestForm } from './client'
-import type { KiteConfig, KiteStatus, KiteSyncResult } from '../types/kite'
+import type { KiteStatus, KiteSyncResult } from '../types/kite'
 
 export const kiteKeys = {
   status: ['kite', 'status'] as const,
-  config: ['kite', 'config'] as const,
-  authUrl: ['kite', 'auth-url'] as const,
 }
 
 export function useKiteStatus() {
   return useQuery({
     queryKey: kiteKeys.status,
     queryFn: () => request<KiteStatus>('/api/v1/kite/status'),
-  })
-}
-
-export function useKiteConfig() {
-  return useQuery({
-    queryKey: kiteKeys.config,
-    queryFn: () => request<KiteConfig>('/api/v1/kite/config'),
-  })
-}
-
-export function useKiteAuthUrl() {
-  return useQuery({
-    queryKey: kiteKeys.authUrl,
-    queryFn: () => request<{ url: string }>('/api/v1/kite/auth/url'),
-    enabled: false,
   })
 }
 
