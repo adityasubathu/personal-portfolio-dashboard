@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-09-15 — Per-fund sector donut on the Fund Breakdown page
+
+- `app/services/composition.py` — `get_scheme_breakdown` now also returns `sector_summary`, grouping a fund's equity holdings by SEBI sector (via the new pure `_summarize_sectors` helper) and merging debt, cash, commodities, arbitrage and derivative rows into a single `Non-Equity` bucket that always sorts last, regardless of size.
+- `frontend/src/pages/FundBreakdown.tsx` — now renders two donuts side by side in a `SimpleGrid`: the existing market-cap/asset-class donut and a new sector donut using the same `colorMode="sector"` palette as the portfolio Sector tab.
+- `frontend/src/lib/colors.ts` — `sectorColor()` pins the `Non-Equity` label to a light grey (`#bdbdbd`), distinct from the darker grey already used for `Unknown`.
+
+---
+
 ## 2026-09-04 — Unit-NAV base date, OpenFin freshness diagnosis, Fund Breakdown staleness display
 
 - `app/services/nav_history.py` — `unit_nav` in `compute_nav_series` now compounds from a base date of 2022-11-05 (`UNIT_NAV_BASE_DATE`) instead of the first trade date (2022-02-04); the first nine months were a handful of isolated trades and compounded noise off a near-zero base. `unit_nav` is `null` before the base date so the chart line starts there instead of drawing a flat 100 stub. Guarded with `max(UNIT_NAV_BASE_DATE, start)` so a portfolio that begins after the base date is unaffected. `value`/`invested` still start at the first trade.

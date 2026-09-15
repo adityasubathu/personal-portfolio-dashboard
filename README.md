@@ -158,7 +158,7 @@ portfolio-mac-arm/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector, Composition, Direct Trades
-│       │   ├── FundBreakdown.tsx # Per-fund breakdown with autocomplete search
+│       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
 │       │   ├── NavChart.tsx     # Fund NAV area chart + compare mode (normalised % change)
@@ -325,7 +325,9 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /sector-stock-breakdown` | Per-sector individual stock holdings |
 | `GET /direct-trades` | Ticker-wise BUY/SELL breakdown |
 | `GET /schemes` | Schemes with breakdown data |
-| `GET /scheme/{scheme_isin}` | Per-fund holding list |
+| `GET /scheme/{scheme_isin}` | Per-fund holding list + market-cap/asset-class and sector summaries |
+
+The per-fund sector view collapses debt, cash, commodities and arbitrage/derivative holdings into a single `Non-Equity` slice, which is why an arbitrage fund's sector donut renders as almost entirely grey.
 
 ### Policy Tracker (`/api/v1/policy-tracker`)
 | Endpoint | Description |
