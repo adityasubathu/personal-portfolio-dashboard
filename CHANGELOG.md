@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-09-15 — ETFs were being taxed at slab rate; capital gains tests realigned
+
+- `app/services/capital_gains.py` — dropped the trailing `\b` from `_EQUITY_MF_RE`, `_GOLD_RE` and `_DEBT_MF_RE`. An ETF row carries its bare ticker as both `name` and `tradingsymbol`, and those tickers run words together (`NIFTYBEES`, `MIDCAPETF`, `GOLDBEES`), so a trailing word boundary meant *none* of the 14 ETFs matched any keyword: all of them fell through to `unknown_mf` → `debt_mf` → `debt_slab`, losing equity rates and the §112A ₹1.25L exemption. The `\b` on `_EQUITY_MF_RE` arrived with the keyword list in 5142b49 and also silently killed the `manufactur` keyword outright, which only exists as a prefix for "Manufacturing" — the tell that it was accidental. `NIFTYBEES`/`MIDCAPETF` now classify as equity and `GOLDBEES`/`GOLDCASE`/`SILVERIETF` as gold; all 28 MF names classify exactly as before.
+- `tests/test_capital_gains.py` — 5142b49 rewrote `classify_lot` and renamed the buckets but never updated the tests, leaving 34 failures. Realigned them with the rules that commit intended: `debt_mf` and `bond` are slab-only at every holding period (the `bond_stcg_slab` / `bond_ltcg_10` / `bond_ltcg_125` buckets no longer exist), and the intl/gold/hybrid categories assert the `hybrid_*` buckets instead of the old `debt_*` ones. `TestSetoff` swapped its deleted `bond_ltcg_*` keys for `hybrid_ltcg_*` ones that are actually in `_LTCG_KEYS` — with the old keys the set-off silently skipped them. `TestDebtIndexation` became `TestHybridIndexation`, exercising indexation through `gold_mf` (same CII arithmetic) since `debt_mf` no longer reaches that path, plus a companion test that a `debt_slab` lot leaves cost untouched. Added regression tests for bare-ticker ETF classification and for thematic equity funds not falling through to `unknown_mf`.
+
+**Known, unfixed:** `JUNIORBEES`, `AUTOBEES`, `SMALL250`, `SML100CASE` and `ICICIB22` (domestic equity) and `MON100` (should be `intl_etf`) still classify as `debt_mf` — their tickers contain no keyword at all, so they need new keywords rather than a boundary fix. Separately, the slab-only treatment of `debt_mf`/`bond` is broader than the statute: §50AA applies to Specified MF units *acquired on or after 1 Apr 2023* and does not cover plain listed bonds, which do get LTCG after 12 months.
+
+---
+
 ## 2026-09-15 — Per-fund sector donut on the Fund Breakdown page
 
 - `app/services/composition.py` — `get_scheme_breakdown` now also returns `sector_summary`, grouping a fund's equity holdings by SEBI sector (via the new pure `_summarize_sectors` helper) and merging debt, cash, commodities, arbitrage and derivative rows into a single `Non-Equity` bucket that always sorts last, regardless of size.

@@ -57,12 +57,14 @@ _LTCG_KEYS = {"equity_ltcg_10", "equity_ltcg_125", "hybrid_ltcg_20_indexed", "hy
 _112A_KEYS = {"equity_ltcg_10", "equity_ltcg_125"}
 
 # ── MF equity/debt classification ─────────────────────────────────────────────
+# No trailing \b on these: ETF names in the instrument table are bare tickers that run
+# words together (NIFTYBEES, MIDCAPETF, GOLDBEES), and "manufactur" is a deliberate prefix.
 _EQUITY_MF_RE = re.compile(
     r"\b(equity|elss|index|flexi.?cap|large.?cap|mid.?cap|small.?cap|multi.?cap|"
     r"aggressive.?hybrid|balanced.?advantage|nifty|sensex|arbitrage|"
     r"infrastructure|pharma|healthcare|technology|natural.?resources|new.?energy|"
     r"opportunities|consumption|manufactur|business.?cycle|value|contra|quant|"
-    r"dividend.?yield|focused|special.?situations|financial.?services)\b",
+    r"dividend.?yield|focused|special.?situations|financial.?services)",
     re.IGNORECASE,
 )
 _HYBRID_MF_RE = re.compile(r"\bmulti.?asset\b", re.IGNORECASE)
@@ -74,11 +76,11 @@ _INTL_FUND_RE = re.compile(
 _DEBT_MF_RE = re.compile(
     r"\b(debt|liquid|gilt|money.?market|low.?duration|ultra.?short|banking.?and.?psu|"
     r"credit.?risk|conservative.?hybrid|overnight|savings|floater|dynamic.?bond|"
-    r"short.?duration|medium.?duration|long.?duration|corporate.?bond|psu.?bond)\b",
+    r"short.?duration|medium.?duration|long.?duration|corporate.?bond|psu.?bond)",
     re.IGNORECASE,
 )
 _GOLD_RE = re.compile(
-    r"\b(gold|silver|commodity|precious.?metal)\b",
+    r"\b(gold|silver|commodity|precious.?metal)",
     re.IGNORECASE,
 )
 

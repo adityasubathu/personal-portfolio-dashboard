@@ -85,6 +85,9 @@ class TestEquityClassification:
 
 
 class TestDebtMFClassification:
+    """§50AA: genuine debt / money-market funds are deemed short-term and taxed at slab
+    rate, with no LTCG treatment at any holding period, either side of Budget 2024."""
+
     def test_50aa_new_buy_always_slab(self):
         # Bought 1 Apr 2023 (boundary) → §50AA applies
         assert classify_lot("debt_mf", date(2023, 4, 1), date(2025, 1, 1)) == "debt_slab"
@@ -94,44 +97,45 @@ class TestDebtMFClassification:
         assert classify_lot("debt_mf", date(2023, 3, 31), date(2024, 7, 22)) == "debt_slab"
 
     def test_50aa_old_buy_pre_budget_long(self):
-        # Bought 31 Mar 2023, sold before 23 Jul 2024, held 37m → LTCG 20% indexed
-        assert classify_lot("debt_mf", date(2021, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+        # Old buy, sold pre-budget, held 42m → still slab, no indexed LTCG
+        assert classify_lot("debt_mf", date(2021, 1, 1), date(2024, 7, 22)) == "debt_slab"
 
     def test_50aa_old_buy_post_budget_short(self):
-        # Bought 31 Mar 2023, sold 23 Jul 2024, held 15m → slab (need 24m for LTCG)
+        # Bought 31 Mar 2023, sold 23 Jul 2024, held 15m → slab
         assert classify_lot("debt_mf", date(2023, 3, 31), date(2024, 7, 23)) == "debt_slab"
 
     def test_50aa_old_buy_post_budget_long(self):
-        # Bought 31 Mar 2023, sold 23 Jul 2024, held >24m → LTCG 12.5%
-        assert classify_lot("debt_mf", date(2022, 1, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+        # Old buy, sold post-budget, held 30m → still slab, no 12.5% LTCG
+        assert classify_lot("debt_mf", date(2022, 1, 1), date(2024, 7, 23)) == "debt_slab"
 
-    def test_boundary_36_months_pre_budget(self):
-        # Exactly 36 months before 23 Jul 2024 → LTCG 20% indexed
+    def test_36_months_pre_budget_still_slab(self):
         buy = date(2021, 7, 22)
         sell = date(2024, 7, 22)
         assert _holding_months(buy, sell) == 36
-        assert classify_lot("debt_mf", buy, sell) == "debt_ltcg_20_indexed"
+        assert classify_lot("debt_mf", buy, sell) == "debt_slab"
 
-    def test_boundary_24_months_post_budget(self):
-        # Exactly 24 months, sell post-23-Jul-2024
+    def test_24_months_post_budget_still_slab(self):
         buy = date(2022, 7, 23)
         sell = date(2024, 7, 23)
         assert _holding_months(buy, sell) == 24
-        assert classify_lot("debt_mf", buy, sell) == "debt_ltcg_125"
+        assert classify_lot("debt_mf", buy, sell) == "debt_slab"
 
 
 class TestBondClassification:
-    def test_stcg_pre_budget(self):
-        assert classify_lot("bond", date(2024, 5, 1), date(2024, 7, 22)) == "bond_stcg_slab"
+    """Bonds are treated as a debt instrument — same slab-only bucket as debt_mf,
+    no LTCG concession at any holding period."""
 
-    def test_ltcg_pre_budget(self):
-        assert classify_lot("bond", date(2023, 1, 1), date(2024, 7, 22)) == "bond_ltcg_10"
+    def test_stcg_pre_budget(self):
+        assert classify_lot("bond", date(2024, 5, 1), date(2024, 7, 22)) == "debt_slab"
+
+    def test_long_held_pre_budget(self):
+        assert classify_lot("bond", date(2023, 1, 1), date(2024, 7, 22)) == "debt_slab"
 
     def test_stcg_post_budget(self):
-        assert classify_lot("bond", date(2024, 5, 1), date(2024, 7, 23)) == "bond_stcg_slab"
+        assert classify_lot("bond", date(2024, 5, 1), date(2024, 7, 23)) == "debt_slab"
 
-    def test_ltcg_post_budget(self):
-        assert classify_lot("bond", date(2023, 1, 1), date(2024, 7, 23)) == "bond_ltcg_125"
+    def test_long_held_post_budget(self):
+        assert classify_lot("bond", date(2023, 1, 1), date(2024, 7, 23)) == "debt_slab"
 
 
 # ── FIFO matching ─────────────────────────────────────────────────────────────
@@ -280,26 +284,42 @@ class TestGrandfathering:
         assert "grandfathered" not in lots[0].flags
 
 
-# ── Debt indexation ───────────────────────────────────────────────────────────
+# ── Hybrid/Specified MF indexation ────────────────────────────────────────────
 
-class TestDebtIndexation:
+class TestHybridIndexation:
     def test_indexed_gain_calculation(self):
-        """Debt MF: old buy, sell pre-23-Jul-2024, held >36m → indexed cost."""
+        """Hybrid/specified MF: pre-§50AA buy, sell pre-23-Jul-2024, held >36m → indexed cost.
+
+        Indexation is the only path that rewrites buy_value, and since 5142b49 the
+        hybrid_ltcg_20_indexed bucket is the only bucket that reaches it — debt_mf and
+        bond are slab-only at every holding period.
+        """
         # Buy 1 Apr 2020 (FY 2020-21, CII=301), sell 1 Apr 2024 (FY 2024-25, CII=363)
         # Cost = 1000, Indexed cost = 1000 * 363/301 = 1205.98
         trades = [
             trade("2020-04-01", "BUY", 1, 1000.0),
             trade("2024-04-01", "SELL", 1, 1400.0),
         ]
-        lots, _, _ = _fifo_match(trades, "DEBT", None, "debt_mf", None)
-        # sell is after 23 Jul 2024? No — 1 Apr 2024 is before. Wait, 1 Apr 2024 < 23 Jul 2024.
-        # Held: Apr 2020 → Apr 2024 = 48m → debt_ltcg_20_indexed
-        assert lots[0].tax_bucket == "debt_ltcg_20_indexed"
+        lots, _, _ = _fifo_match(trades, "GOLDFUND", None, "gold_mf", None)
+        # Buy predates the 1 Apr 2023 §50AA boundary, sell predates Budget 2024,
+        # held 48m ≥ 36m → old indexed LTCG rule
+        assert lots[0].tax_bucket == "hybrid_ltcg_20_indexed"
         buy_cii = CII["2020-21"]   # 301
         sell_cii = CII["2024-25"]  # 363
         expected_indexed_cost = 1000.0 * (sell_cii / buy_cii)
         assert lots[0].buy_value == pytest.approx(expected_indexed_cost, rel=1e-4)
         assert lots[0].gain == pytest.approx(1400.0 - expected_indexed_cost, rel=1e-4)
+
+    def test_slab_bucket_is_not_indexed(self):
+        """A debt_mf lot over the same period lands in debt_slab with cost untouched."""
+        trades = [
+            trade("2020-04-01", "BUY", 1, 1000.0),
+            trade("2024-04-01", "SELL", 1, 1400.0),
+        ]
+        lots, _, _ = _fifo_match(trades, "DEBT", None, "debt_mf", None)
+        assert lots[0].tax_bucket == "debt_slab"
+        assert lots[0].buy_value == pytest.approx(1000.0)
+        assert lots[0].gain == pytest.approx(400.0)
 
 
 # ── Set-off and §112A exemption ───────────────────────────────────────────────
@@ -316,20 +336,20 @@ class TestSetoff:
 
     def test_stcl_offsets_ltcg_after_stcg(self):
         # STCG 0, STCL 5k, non-112A LTCG 200k → STCL reduces LTCG; net taxable ≈ 195k
-        # Use bond LTCG to avoid §112A exemption interfering with the set-off test.
-        gains = {"equity_stcg_20": -5_000, "bond_ltcg_125": 200_000}
+        # Use hybrid LTCG to avoid §112A exemption interfering with the set-off test.
+        gains = {"equity_stcg_20": -5_000, "hybrid_ltcg_125": 200_000}
         result = {b["key"]: b for b in _apply_setoff(gains, "2024-25")}
-        assert result["bond_ltcg_125"]["taxable"] == pytest.approx(195_000, abs=1)
+        assert result["hybrid_ltcg_125"]["taxable"] == pytest.approx(195_000, abs=1)
 
     def test_ltcl_only_offsets_ltcg(self):
         # LTCL 5k, STCG 10k, non-112A LTCG 50k → LTCL reduces only LTCG
-        # Use bond buckets to avoid §112A exemption interfering.
-        gains = {"bond_ltcg_10": -5_000, "equity_stcg_15": 10_000, "bond_ltcg_125": 50_000}
+        # Use hybrid buckets to avoid §112A exemption interfering.
+        gains = {"hybrid_ltcg_20_indexed": -5_000, "equity_stcg_15": 10_000, "hybrid_ltcg_125": 50_000}
         result = {b["key"]: b for b in _apply_setoff(gains, "2024-25")}
         # STCG unaffected by LTCL
         assert result["equity_stcg_15"]["taxable"] == pytest.approx(10_000)
         # LTCG 50k - LTCL 5k = 45k taxable
-        assert result["bond_ltcg_125"]["taxable"] == pytest.approx(45_000, abs=100)
+        assert result["hybrid_ltcg_125"]["taxable"] == pytest.approx(45_000, abs=100)
 
     def test_112a_exemption_fy2425(self):
         # Equity LTCG 2L → exemption 1.25L → taxable 75k
@@ -375,13 +395,36 @@ class TestMFClassification:
         assert _classify_mf_orientation(None, "NIFTYBEES") == "equity"
         assert _classify_mf_orientation("Mirae Nifty 50 ETF", None) == "equity"
 
+    def test_bare_ticker_etfs_classify(self):
+        """ETF rows carry the bare ticker as both name and tradingsymbol, with words run
+        together. A trailing \\b in the keyword regex silently sent all of these to the
+        debt/slab bucket, so keyword matching must not require one."""
+        for ticker in ("NIFTYBEES", "MIDCAPETF"):
+            assert _classify_mf_orientation(ticker, ticker) == "equity", ticker
+        for ticker in ("GOLDBEES", "GOLDCASE", "SILVERIETF"):
+            assert _classify_mf_orientation(ticker, ticker) == "gold", ticker
+        for ticker in ("LIQUIDBEES", "LIQUIDCASE"):
+            assert _classify_mf_orientation(ticker, ticker) == "debt_mf", ticker
+
     def test_debt_keywords(self):
         assert _classify_mf_orientation("HDFC Liquid Fund", None) == "debt_mf"
         assert _classify_mf_orientation("Kotak Gilt Fund", None) == "debt_mf"
         assert _classify_mf_orientation("SBI Overnight Fund", None) == "debt_mf"
 
     def test_unknown(self):
-        assert _classify_mf_orientation("Aditya Birla Sun Life Special Opportunities Fund", None) == "unknown_mf"
+        # A name carrying no orientation keyword at all falls through to the
+        # conservative slab bucket.
+        assert _classify_mf_orientation("SBI Magnum Fund", None) == "unknown_mf"
+
+    def test_thematic_funds_are_equity_not_unknown(self):
+        # Regression for 5142b49: sectoral/thematic equity funds used to fall through
+        # to the debt/slab bucket as "unclassified".
+        assert _classify_mf_orientation("Aditya Birla Sun Life Special Opportunities Fund", None) == "equity"
+        assert _classify_mf_orientation("QUANT INFRASTRUCTURE FUND - DIRECT PLAN", None) == "equity"
+        assert _classify_mf_orientation("ICICI PRUDENTIAL TECHNOLOGY FUND - DIRECT PLAN", None) == "equity"
+        assert _classify_mf_orientation("DSP NATURAL RESOURCES AND NEW ENERGY FUND", None) == "equity"
+        # "manufactur" is a deliberate prefix — it must match "Manufacturing"
+        assert _classify_mf_orientation("Kotak Manufacturing Fund", None) == "equity"
 
     def test_international_etf_not_equity(self):
         # MON100 / Nasdaq 100 ETF — invests in US equities, NOT domestic equity-oriented.
@@ -406,23 +449,23 @@ class TestIntlETFClassification:
     """intl_etf: listed international ETF (MON100, FANG+) — 12m LTCG threshold post-Budget 2024."""
 
     def test_pre_budget_50aa(self):
-        assert classify_lot("intl_etf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+        assert classify_lot("intl_etf", date(2023, 4, 1), date(2024, 7, 22)) == "hybrid_stcg_slab"
 
     def test_pre_budget_old_buy_long(self):
-        assert classify_lot("intl_etf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+        assert classify_lot("intl_etf", date(2020, 1, 1), date(2024, 7, 22)) == "hybrid_ltcg_20_indexed"
 
     def test_post_budget_short(self):
         # Listed ETF: 12m threshold; held 11m → slab
-        assert classify_lot("intl_etf", date(2023, 9, 1), date(2024, 7, 23)) == "debt_slab"
+        assert classify_lot("intl_etf", date(2023, 9, 1), date(2024, 7, 23)) == "hybrid_stcg_slab"
 
     def test_post_budget_long(self):
         # Held ≥ 12m → LTCG 12.5% (no §112A exemption)
-        assert classify_lot("intl_etf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+        assert classify_lot("intl_etf", date(2023, 6, 1), date(2024, 7, 23)) == "hybrid_ltcg_125"
 
     def test_post_budget_exactly_12m(self):
         buy, sell = date(2023, 7, 23), date(2024, 7, 23)
         assert _holding_months(buy, sell) == 12
-        assert classify_lot("intl_etf", buy, sell) == "debt_ltcg_125"
+        assert classify_lot("intl_etf", buy, sell) == "hybrid_ltcg_125"
 
 
 class TestIntlFundClassification:
@@ -430,73 +473,73 @@ class TestIntlFundClassification:
 
     def test_pre_budget_50aa(self):
         # Bought Apr 2023 (§50AA boundary), sold before Budget 2024 → slab
-        assert classify_lot("intl_fund", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+        assert classify_lot("intl_fund", date(2023, 4, 1), date(2024, 7, 22)) == "hybrid_stcg_slab"
 
     def test_pre_budget_old_buy_short(self):
         # Old buy, sold pre-budget, held < 36m → slab
-        assert classify_lot("intl_fund", date(2022, 1, 1), date(2024, 7, 22)) == "debt_slab"
+        assert classify_lot("intl_fund", date(2022, 1, 1), date(2024, 7, 22)) == "hybrid_stcg_slab"
 
     def test_pre_budget_old_buy_long(self):
         # Old buy, sold pre-budget, held > 36m → indexed LTCG
-        assert classify_lot("intl_fund", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+        assert classify_lot("intl_fund", date(2020, 1, 1), date(2024, 7, 22)) == "hybrid_ltcg_20_indexed"
 
     def test_post_budget_short(self):
         # Sold post-budget, held < 24m → slab (no §112A)
-        assert classify_lot("intl_fund", date(2023, 6, 1), date(2024, 7, 23)) == "debt_slab"
+        assert classify_lot("intl_fund", date(2023, 6, 1), date(2024, 7, 23)) == "hybrid_stcg_slab"
 
     def test_post_budget_long(self):
         # Sold post-budget, held ≥ 24m → LTCG 12.5% (no §112A exemption)
-        assert classify_lot("intl_fund", date(2022, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+        assert classify_lot("intl_fund", date(2022, 6, 1), date(2024, 7, 23)) == "hybrid_ltcg_125"
 
     def test_intl_etf_vs_fund_differ_post_budget(self):
         # intl_etf uses 12m; intl_fund uses 24m. 13m holding: ETF is LTCG, MF is slab.
         buy, sell = date(2023, 6, 1), date(2024, 7, 23)
-        assert classify_lot("intl_etf", buy, sell) == "debt_ltcg_125"
-        assert classify_lot("intl_fund", buy, sell) == "debt_slab"
+        assert classify_lot("intl_etf", buy, sell) == "hybrid_ltcg_125"
+        assert classify_lot("intl_fund", buy, sell) == "hybrid_stcg_slab"
 
 
 class TestGoldETFClassification:
     def test_pre_budget_50aa(self):
-        assert classify_lot("gold_etf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+        assert classify_lot("gold_etf", date(2023, 4, 1), date(2024, 7, 22)) == "hybrid_stcg_slab"
 
     def test_pre_budget_old_buy_long(self):
-        assert classify_lot("gold_etf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+        assert classify_lot("gold_etf", date(2020, 1, 1), date(2024, 7, 22)) == "hybrid_ltcg_20_indexed"
 
     def test_post_budget_short(self):
         # Listed ETF: 12m threshold; held 11m → slab
-        assert classify_lot("gold_etf", date(2023, 9, 1), date(2024, 7, 23)) == "debt_slab"
+        assert classify_lot("gold_etf", date(2023, 9, 1), date(2024, 7, 23)) == "hybrid_stcg_slab"
 
     def test_post_budget_long(self):
         # Listed ETF: held ≥ 12m → LTCG 12.5%
-        assert classify_lot("gold_etf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+        assert classify_lot("gold_etf", date(2023, 6, 1), date(2024, 7, 23)) == "hybrid_ltcg_125"
 
     def test_post_budget_exactly_12m(self):
         buy = date(2023, 7, 23)
         sell = date(2024, 7, 23)
         assert _holding_months(buy, sell) == 12
-        assert classify_lot("gold_etf", buy, sell) == "debt_ltcg_125"
+        assert classify_lot("gold_etf", buy, sell) == "hybrid_ltcg_125"
 
 
 class TestGoldMFClassification:
     def test_pre_budget_50aa(self):
-        assert classify_lot("gold_mf", date(2023, 4, 1), date(2024, 7, 22)) == "debt_slab"
+        assert classify_lot("gold_mf", date(2023, 4, 1), date(2024, 7, 22)) == "hybrid_stcg_slab"
 
     def test_pre_budget_old_buy_long(self):
-        assert classify_lot("gold_mf", date(2020, 1, 1), date(2024, 7, 22)) == "debt_ltcg_20_indexed"
+        assert classify_lot("gold_mf", date(2020, 1, 1), date(2024, 7, 22)) == "hybrid_ltcg_20_indexed"
 
     def test_post_budget_short(self):
         # Fund-of-fund: 24m threshold; held 13m → slab
-        assert classify_lot("gold_mf", date(2023, 6, 1), date(2024, 7, 23)) == "debt_slab"
+        assert classify_lot("gold_mf", date(2023, 6, 1), date(2024, 7, 23)) == "hybrid_stcg_slab"
 
     def test_post_budget_long(self):
         # Held ≥ 24m → LTCG 12.5%
-        assert classify_lot("gold_mf", date(2022, 6, 1), date(2024, 7, 23)) == "debt_ltcg_125"
+        assert classify_lot("gold_mf", date(2022, 6, 1), date(2024, 7, 23)) == "hybrid_ltcg_125"
 
     def test_gold_etf_vs_mf_differ_post_budget(self):
         # gold_etf uses 12m; gold_mf uses 24m. 13m holding: ETF is LTCG, MF is slab.
         buy, sell = date(2023, 6, 1), date(2024, 7, 23)
-        assert classify_lot("gold_etf", buy, sell) == "debt_ltcg_125"
-        assert classify_lot("gold_mf", buy, sell) == "debt_slab"
+        assert classify_lot("gold_etf", buy, sell) == "hybrid_ltcg_125"
+        assert classify_lot("gold_mf", buy, sell) == "hybrid_stcg_slab"
 
 
 # ── CII helpers ───────────────────────────────────────────────────────────────
