@@ -21,6 +21,52 @@ _CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equit
 
 _NON_EQUITY_SECTORS = {"Fixed Income", "Liquid / Money Market", "Gold", "Silver"}
 
+# Categories that carry genuine equity market exposure. Everything else — debt, cash,
+# commodities, and arbitrage/derivative pairs that net to zero exposure — collapses into
+# one Non-Equity bucket on the per-fund sector donut.
+_EQUITY_CATEGORIES = {
+    "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
+    "Equity - Foreign", "Real Estate Trust",
+}
+
+NON_EQUITY_LABEL = "Non-Equity"
+
+
+def _summarize_sectors(rows: list[dict]) -> list[dict]:
+    """Groups one fund's holding rows into sector buckets.
+
+    Each row is {"category", "sector", "pct", "value"}. Equity rows bucket by their own
+    sector (NULL sector -> "Unknown"); everything else merges into a single Non-Equity
+    bucket that always sorts last. Buckets that net to zero or below are dropped.
+    """
+    pct_totals: dict[str, float] = {}
+    value_totals: dict[str, float] = {}
+
+    for r in rows:
+        if r["category"] in _EQUITY_CATEGORIES:
+            sector = r["sector"] or "Unknown"
+        else:
+            sector = NON_EQUITY_LABEL
+        pct_totals[sector] = pct_totals.get(sector, 0) + r["pct"]
+        value_totals[sector] = value_totals.get(sector, 0) + r["value"]
+
+    summary = [
+        {"sector": sec, "pct": round(pct, 2), "value": round(value_totals[sec], 2)}
+        for sec, pct in pct_totals.items()
+        if sec != NON_EQUITY_LABEL and pct > 0
+    ]
+    summary.sort(key=lambda x: x["pct"], reverse=True)
+
+    non_equity_pct = pct_totals.get(NON_EQUITY_LABEL, 0)
+    if non_equity_pct > 0:
+        summary.append({
+            "sector": NON_EQUITY_LABEL,
+            "pct": round(non_equity_pct, 2),
+            "value": round(value_totals[NON_EQUITY_LABEL], 2),
+        })
+
+    return summary
+
 
 async def get_available_schemes(db: AsyncSession) -> list[dict]:
     scheme_isins = (await db.execute(
@@ -58,7 +104,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     }
 
     if not rows:
-        return {"holdings": [], "category_summary": [], "as_of": None, "fetched_at": None, **freshness}
+        return {"holdings": [], "category_summary": [], "sector_summary": [], "as_of": None, "fetched_at": None, **freshness}
 
     # Resolve fund market value from the holding record
     holding_row = (await db.execute(
@@ -75,6 +121,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     holdings = []
     cat_value_totals: dict[str, float] = {}
     cat_pct_totals: dict[str, float] = {}
+    sector_rows: list[dict] = []
     for r in rows:
         pct = float(r.holdings_pct)
         value = round(fund_value * (pct / 100.0), 2)
@@ -87,6 +134,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
         })
         cat_value_totals[r.category] = cat_value_totals.get(r.category, 0) + value
         cat_pct_totals[r.category] = cat_pct_totals.get(r.category, 0) + pct
+        sector_rows.append({"category": r.category, "sector": r.sector, "pct": pct, "value": value})
 
     order = [
         "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
@@ -103,12 +151,15 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
                 "value": round(cat_value_totals.get(cat, 0), 2),
             })
 
+    sector_summary = _summarize_sectors(sector_rows)
+
     as_of = rows[0].as_of
     fetched_at = max((r.updated_at for r in rows), default=None)
 
     return {
         "holdings": holdings,
         "category_summary": category_summary,
+        "sector_summary": sector_summary,
         "as_of": as_of.isoformat() if as_of else None,
         "fetched_at": fetched_at.isoformat() if fetched_at else None,
         **freshness,
