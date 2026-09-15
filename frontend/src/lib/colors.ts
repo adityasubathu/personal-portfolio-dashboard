@@ -18,6 +18,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
 
 export function sectorColor(index: number, total: number, label?: string): string {
   if (label === 'Unknown') return '#616161'
+  if (label === 'Non-Equity') return '#bdbdbd'
   return `hsl(${Math.round((total - 1 - index) * 360 / Math.max(total, 1))}, 85%, 52%)`
 }
 

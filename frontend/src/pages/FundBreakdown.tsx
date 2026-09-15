@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Autocomplete, Box, Stack, Table, Text, Title } from '@mantine/core'
+import { Autocomplete, Box, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
@@ -20,9 +20,10 @@ export function FundBreakdown() {
     if (match) setSelectedIsin(match.value)
   }
 
-  // Build donut from category_summary
-  const labels = breakdown?.category_summary.map((s) => s.category) ?? []
-  const values = breakdown?.category_summary.map((s) => s.value) ?? []
+  const catLabels = breakdown?.category_summary.map((s) => s.category) ?? []
+  const catValues = breakdown?.category_summary.map((s) => s.value) ?? []
+  const sectorLabels = breakdown?.sector_summary.map((s) => s.sector) ?? []
+  const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
   return (
     <Stack gap="lg">
@@ -57,8 +58,21 @@ export function FundBreakdown() {
         </Box>
       )}
 
-      {breakdown && labels.length > 0 && (
-        <DonutChart labels={labels} values={values} />
+      {breakdown && (catLabels.length > 0 || sectorLabels.length > 0) && (
+        <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg">
+          {catLabels.length > 0 && (
+            <Box>
+              <Text fw={600} mb="xs">Market cap &amp; asset class</Text>
+              <DonutChart labels={catLabels} values={catValues} />
+            </Box>
+          )}
+          {sectorLabels.length > 0 && (
+            <Box>
+              <Text fw={600} mb="xs">Sector</Text>
+              <DonutChart labels={sectorLabels} values={sectorValues} colorMode="sector" />
+            </Box>
+          )}
+        </SimpleGrid>
       )}
 
       {breakdown && breakdown.holdings.length > 0 && (
