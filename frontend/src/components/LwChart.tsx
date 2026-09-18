@@ -371,6 +371,7 @@ export function LwChart({
     })
     ro.observe(containerRef.current)
 
+    const seriesMeta = seriesMetaRef.current
     return () => {
       chart.unsubscribeCrosshairMove(onCrosshairMove)
       ro.disconnect()
