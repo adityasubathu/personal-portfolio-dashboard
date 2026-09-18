@@ -4,6 +4,11 @@
 
 ## 2026-09-18-15-49-24 — NSE industry classification
 - Added `nse_industry_classification`, keyed by ISIN, and widened the sector columns on `amfi_market_cap` and `mf_scheme_breakdown` to hold all four NSE taxonomy levels; `mf_scheme_breakdown` now also carries each holding's own ISIN. (2026-09-18-15-49-24 · 79ea2ef)
+- Added `app/services/nse_industry.py`, isolating every NSE HTTP detail: the equity-master ISIN→symbol index and the per-symbol four-level classification fetch. (2026-09-18-15-50-35 · e2392b7)
+- `refresh_held_classifications` now collects every held ISIN, classifies the ones NSE hasn't told us about, and backfills all four taxonomy levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. (2026-09-18-15-52-05 · 7627829)
+- "Refresh disclosures" now runs the full chain end to end: AMFI market caps, OpenFin holdings, then NSE classification. Holding rows carry their own ISIN, sector data comes from NSE instead of the hand-downloaded `sector_master.csv` (now deleted), and matching is ISIN-only everywhere in this pipeline. (2026-09-18-16-08-41 · 072eebe)
+- `sector-composition` and `sector-stock-breakdown` take a `?level=` parameter and group by macro sector, sector, industry or basic industry; direct-stock sector resolution now joins on ISIN instead of fuzzy company-name matching. (2026-09-18-16-13-55 · 9940ee7)
+- The Breakdown page's Sector tab has a persisted Macro/Sector/Industry/Basic selector driving both the donut and the table, and the ingest result panel reports what NSE classified plus any held ISINs not on the NSE main board. (2026-09-18-17-16-55 · 07c7750)
 
 ---
 
