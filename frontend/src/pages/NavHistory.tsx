@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Group, Select, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Box, Button, Group, Select, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconPlayerStop, IconRefresh, IconUpload } from '@tabler/icons-react'
@@ -12,6 +12,8 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import type { NavPoint as NavSeriesPoint } from '../types/portfolio'
 import type { NavPoint } from '../types/charts'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 function navPriceFormatter(price: number): string {
   const abs = Math.abs(price)
@@ -65,7 +67,7 @@ export function NavHistory() {
     if (priceSyncSse.result) {
       qc.invalidateQueries({ queryKey: ['market-sentiment'] })
     }
-  }, [priceSyncSse.result])
+  }, [priceSyncSse.result, qc])
 
   // OHLC fetch SSE — url built from form state
   const [fetchTicker, setFetchTicker] = useState('')
@@ -112,13 +114,13 @@ export function NavHistory() {
 
   return (
     <Stack gap="lg">
-      <Title order={3}>Portfolio NAV History</Title>
+      <PageHeader title="Portfolio NAV History" />
 
       {navLoading && <Text size="sm" c="dimmed">Loading NAV history…</Text>}
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         {/* Portfolio value chart */}
         {valueData.length > 0 && (
-          <Box>
+          <Panel>
             <Text size="xs" c="dimmed" mb={4}>Blue = market value · Orange = invested cost</Text>
             <LwChart
               seriesType="line"
@@ -130,12 +132,12 @@ export function NavHistory() {
                 { data: investedData, label: 'Invested', color: '#f59e0b' },
               ]}
             />
-          </Box>
+          </Panel>
         )}
 
         {/* Unit NAV chart */}
         {unitNavData.length > 0 && (
-          <Box>
+          <Panel>
             <Text size="xs" c="dimmed" mb={4}>
               Unit NAV — performance excluding cash flows (base = 100 on 5 Nov 2022)
             </Text>
@@ -147,7 +149,7 @@ export function NavHistory() {
               compareLines={[{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }]}
               maskInPrivacy={false}
             />
-          </Box>
+          </Panel>
         )}
       </SimpleGrid>
 

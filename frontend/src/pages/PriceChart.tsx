@@ -1,7 +1,11 @@
-import { Select, Stack, Text, Title } from '@mantine/core'
+import { Select, Stack, Text } from '@mantine/core'
+import { IconChartCandle } from '@tabler/icons-react'
 import { useChartInstruments, usePriceChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 export function PriceChart() {
   const { data: instruments } = useChartInstruments()
@@ -15,8 +19,8 @@ export function PriceChart() {
 
   return (
     <Stack gap="md">
-      <Title order={3}>Price Chart</Title>
-
+      <PageHeader title="Price Chart" />
+      <Panel>
       <Select
         placeholder="Select instrument…"
         data={options}
@@ -28,6 +32,7 @@ export function PriceChart() {
         size="sm"
       />
 
+      {selectedId == null && <EmptyState icon={<IconChartCandle size={22} />} title="Select an instrument" description="Choose an instrument to view its price history." />}
       {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
 
       {chartData && selectedId != null && (
@@ -39,7 +44,7 @@ export function PriceChart() {
           defaultHeight={520}
           maskInPrivacy={false}
         />
-      )}
+      )}</Panel>
     </Stack>
   )
 }

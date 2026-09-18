@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Box, Button, Group, Select, Stack, Text, Title } from '@mantine/core'
-import { IconPlus, IconX } from '@tabler/icons-react'
+import { Box, Button, Group, Select, Stack, Text } from '@mantine/core'
+import { IconChartHistogram, IconPlus, IconX } from '@tabler/icons-react'
 import { useNavChartInstruments, useNavChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
 import { usePersistentState } from '../hooks/usePersistentState'
 import type { NavPoint } from '../types/charts'
+import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 function normalizeToPercent(data: NavPoint[]): NavPoint[] {
   if (!data.length) return []
@@ -82,9 +85,8 @@ export function NavChart() {
 
   return (
     <Stack gap="md">
-      <Title order={3}>Fund NAV Chart</Title>
-
-      <Group align="flex-end">
+      <PageHeader title="Fund NAV Chart" />
+      <Panel><Group align="flex-end">
         <Select
           placeholder="Select fund…"
           data={options}
@@ -114,10 +116,11 @@ export function NavChart() {
           </Group>
         )}
       </Group>
+      {selectedId == null && <EmptyState icon={<IconChartHistogram size={22} />} title="Select a fund" description="Choose a fund to view and compare NAV history." />}
 
       {compareMode && (
         <Text size="xs" c="dimmed">Compare mode: series normalised to % change from first point.</Text>
-      )}
+      )}</Panel>
 
       {mainLoading && <Text size="sm" c="dimmed">Loading…</Text>}
 

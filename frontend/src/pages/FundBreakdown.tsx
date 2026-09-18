@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { Autocomplete, Box, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core'
+import { Autocomplete, Box, SimpleGrid, Stack, Table, Text } from '@mantine/core'
+import { IconBuildingBank } from '@tabler/icons-react'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { shortDate, shortDateTime } from '../lib/format'
 import type { SchemeListItem } from '../types/mfBreakdown'
+import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
@@ -35,9 +39,8 @@ export function FundBreakdown() {
 
   return (
     <Stack gap="lg">
-      <Title order={3}>Fund Breakdown</Title>
-
-      <Autocomplete
+      <PageHeader title="Fund Detail" />
+      <Panel><Autocomplete
         placeholder="Search fund by name or ISIN…"
         data={schemeOptions.map((o) => o.label)}
         value={searchValue}
@@ -47,6 +50,7 @@ export function FundBreakdown() {
         size="sm"
       />
 
+      {selectedIsin == null && <EmptyState icon={<IconBuildingBank size={22} />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />}
       {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
 
       {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
@@ -66,7 +70,7 @@ export function FundBreakdown() {
             </Text>
           )}
         </Box>
-      )}
+      )}</Panel>
 
       {breakdown && (catLabels.length > 0 || sectorLabels.length > 0) && (
         <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg">
