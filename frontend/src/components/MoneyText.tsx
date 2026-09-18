@@ -12,10 +12,10 @@ interface MoneyTextProps extends Omit<TextProps, 'children'> {
 export function MoneyText({ value, compact, showSign, colorize, style, ...rest }: MoneyTextProps) {
   const { privacyMode } = usePrivacy()
 
-  if (value == null) return <Text component="span" {...rest}>—</Text>
+  if (value == null) return <Text component="span" data-numeric {...rest}>—</Text>
 
   if (privacyMode) {
-    return <Text component="span" {...rest}>₹•••</Text>
+    return <Text component="span" data-numeric {...rest}>₹•••</Text>
   }
 
   const formatted = compact ? inrCompact(value) : inr(value)
@@ -23,7 +23,7 @@ export function MoneyText({ value, compact, showSign, colorize, style, ...rest }
   const prefix = showSign && value > 0 ? '+' : ''
 
   return (
-    <Text component="span" style={{ color, ...style }} {...rest}>
+    <Text component="span" data-numeric style={{ color, ...style }} {...rest}>
       {prefix}{formatted}
     </Text>
   )

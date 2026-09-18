@@ -33,7 +33,7 @@ export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onCl
       : (heading ?? 'Running…')
 
   return (
-    <Paper withBorder p="sm" mt="sm" maw={maw}>
+    <Paper p="sm" mt="sm" maw={maw} style={{ background: 'var(--surface-panel)', border: '1px solid var(--border-subtle)' }}>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
           {!isDone && <Loader size="xs" />}
@@ -46,6 +46,7 @@ export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onCl
             variant="subtle"
             size="sm"
             onClick={() => { sse.reset(); onClose?.() }}
+            aria-label="Close operation panel"
           >
             <IconX size={14} />
           </ActionIcon>
@@ -61,8 +62,9 @@ export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onCl
             overflowY: 'auto',
             fontSize: '0.78rem',
             lineHeight: 1.5,
-            background: 'var(--mantine-color-gray-1)',
-            color: 'var(--mantine-color-gray-8)',
+            background: 'var(--surface-sunken)',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--mantine-font-family-monospace)',
             padding: '0.5rem',
             borderRadius: 4,
             margin: 0,

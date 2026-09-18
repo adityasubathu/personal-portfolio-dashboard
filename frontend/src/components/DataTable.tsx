@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Table, Text, UnstyledButton } from '@mantine/core'
+import { ScrollArea, Table, Text, UnstyledButton } from '@mantine/core'
 import { IconChevronUp, IconChevronDown, IconSelector } from '@tabler/icons-react'
 import { heatmapBg } from '../lib/format'
 
@@ -26,6 +26,10 @@ interface DataTableProps<T> {
   rowKey: (row: T) => string | number
   footer?: React.ReactNode
   striped?: boolean
+  minWidth?: number | string
+  stickyHeader?: boolean
+  stickyFirstColumn?: boolean
+  emptyMessage?: string
 }
 
 function SortIcon({ dir }: { dir: 'asc' | 'desc' | null }) {
@@ -43,6 +47,10 @@ export function DataTable<T>({
   rowKey,
   footer,
   striped,
+  minWidth = 'max-content',
+  stickyHeader = true,
+  stickyFirstColumn = false,
+  emptyMessage = 'No data available.',
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(defaultSort ?? '')
   const [dir, setDir] = useState<'asc' | 'desc'>(defaultDir)
@@ -82,7 +90,7 @@ export function DataTable<T>({
           style={{ textAlign: col.align ?? 'left', whiteSpace: 'nowrap' }}
         >
           {col.sortable ? (
-            <UnstyledButton onClick={() => handleSort(col.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <UnstyledButton onClick={() => handleSort(col.key)} aria-sort={sort === col.key ? dir === 'asc' ? 'ascending' : 'descending' : 'none'} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <Text size="xs" fw={600}>{col.label}</Text>
               <SortIcon dir={sort === col.key ? dir : null} />
             </UnstyledButton>
@@ -96,14 +104,15 @@ export function DataTable<T>({
 
   function renderRow(row: T, i: number) {
     return (
-      <Table.Tr key={rowKey(row)} style={striped && i % 2 === 1 ? { background: 'var(--mantine-color-gray-1)' } : {}}>
+      <Table.Tr key={rowKey(row)} style={striped && i % 2 === 1 ? { background: 'var(--surface-muted)' } : {}}>
         {columns.map((col) => {
           const heat = col.heatmap?.(row)
           const bg = heat ? heatmapBg(heat.value, heat.min, heat.max) : undefined
           return (
             <Table.Td
               key={col.key}
-              style={{ textAlign: col.align ?? 'left', background: bg, whiteSpace: 'nowrap' }}
+              data-numeric={col.align === 'right' || undefined}
+              style={{ textAlign: col.align ?? 'left', background: bg, whiteSpace: 'nowrap', ...(stickyFirstColumn && col === columns[0] ? { position: 'sticky', left: 0, zIndex: 1, background: bg ?? 'var(--surface-panel)' } : {}) }}
             >
               {col.render(row)}
             </Table.Td>
@@ -117,8 +126,8 @@ export function DataTable<T>({
   const flatSorted = sortRows(allRows)
 
   return (
-    <Table fz="xs" withColumnBorders={false} highlightOnHover>
-      <Table.Thead>{headerRow}</Table.Thead>
+    <ScrollArea><Table fz="xs" withColumnBorders={false} highlightOnHover style={{ minWidth }}>
+      <Table.Thead style={stickyHeader ? { position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-panel)' } : undefined}>{headerRow}</Table.Thead>
       <Table.Tbody>
         {sections && !sort
           ? sections.map((sec) => (
@@ -128,7 +137,7 @@ export function DataTable<T>({
                     <Table.Td
                       colSpan={columns.length}
                       style={{
-                        background: 'var(--mantine-color-gray-1)',
+                        background: 'var(--surface-muted)',
                         fontWeight: 600,
                         fontSize: '0.75rem',
                         padding: '4px 8px',
@@ -141,9 +150,9 @@ export function DataTable<T>({
                 {sec.rows.map((row, i) => renderRow(row, i))}
               </React.Fragment>
             ))
-          : flatSorted.map((row, i) => renderRow(row, i))}
+          : flatSorted.length ? flatSorted.map((row, i) => renderRow(row, i)) : <Table.Tr><Table.Td colSpan={columns.length}><Text c="dimmed" ta="center" py="md">{emptyMessage}</Text></Table.Td></Table.Tr>}
       </Table.Tbody>
       {footer && <Table.Tfoot>{footer}</Table.Tfoot>}
-    </Table>
+    </Table></ScrollArea>
   )
 }
