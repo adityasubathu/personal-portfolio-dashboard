@@ -56,8 +56,6 @@
 
 body {
   margin: 0;
-  background: var(--app-bg);
-  color: var(--text-primary);
 }
 
 .mantine-AppShell-navbar .mantine-NavLink-root:hover,

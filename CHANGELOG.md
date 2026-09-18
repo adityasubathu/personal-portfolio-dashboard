@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
+- Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
+
 ## 2026-09-18-23-37-05 — Neutral surfaces, blue navigation, system colour scheme
 
 - Retuned the design tokens: every surface, border and text colour in both themes is now neutral grey, with the blue tinge confined to the left navigation (`--nav-bg`, `--nav-hover`, `--nav-active`) and the Mantine primary swapped from `portfolioTeal` to `portfolioBlue`.
