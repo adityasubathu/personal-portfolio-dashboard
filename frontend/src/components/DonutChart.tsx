@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
-import { Box, Group, Stack, Text } from '@mantine/core'
+import { Box, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
@@ -18,6 +18,7 @@ interface DonutChartProps {
 
 export function DonutChart({ labels, values, total, colorMode = 'category', size = 220 }: DonutChartProps) {
   const { privacyMode } = usePrivacy()
+  const scheme = useComputedColorScheme('light')
   const [hovered, setHovered] = useState<number | null>(null)
   const colors = useMemo(
     () =>
@@ -33,6 +34,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
       {
         data: values,
         backgroundColor: colors,
+        borderColor: scheme === 'dark' ? 'var(--surface-panel)' : 'transparent',
         borderWidth: 1,
         cutout: '70%',
       },
@@ -43,7 +45,8 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   const totalPct = values.reduce((a, b) => a + b, 0)
 
   const options = {
-    responsive: false,
+    responsive: true,
+    maintainAspectRatio: false,
     onHover: (_: unknown, activeElements: { index: number }[]) => {
       setHovered(activeElements.length > 0 ? activeElements[0].index : null)
     },
@@ -59,9 +62,9 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   }, [values, totalPct])
 
   return (
-    <Group align="flex-start" gap="lg" wrap="nowrap" justify="center">
-      <Box style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-        <Doughnut key={privacyMode ? 'private' : 'public'} data={data} options={options} width={size} height={size} />
+    <Group align="flex-start" gap="lg" wrap="wrap" justify="center">
+      <Box style={{ position: 'relative', width: '100%', maxWidth: size, height: size, flexShrink: 0 }}>
+        <Doughnut key={`${privacyMode}-${scheme}`} data={data} options={options} />
         <Box
           style={{
             position: 'absolute',
@@ -88,7 +91,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
         </Box>
       </Box>
 
-      <Stack gap={4} w={280}>
+      <Stack gap={4} style={{ width: 'min(100%, 280px)', flex: 1 }}>
         {labels.map((label, i) => (
           <Group key={label} gap="xs" wrap="nowrap">
             <Box style={{ width: 10, height: 10, borderRadius: 2, background: colors[i], flexShrink: 0 }} />

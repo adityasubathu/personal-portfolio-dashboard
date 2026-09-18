@@ -5,7 +5,8 @@
 - Established the semantic light/dark design foundation and local system typography. (2026-09-18-22-38-36 · 3324d8f)
 - Added reusable headers, panels, metric, empty, and confirmation action primitives. (2026-09-18-22-40-05 · 699ec06)
 - Rebuilt navigation and deferred route code until each page is visited. (2026-09-18-22-45-37 · 3fe0cf9)
-- Standardized shared table, currency, SSE, and heatmap presentation. (2026-09-18-22-48-39 · pending)
+- Standardized shared table, currency, SSE, and heatmap presentation. (2026-09-18-22-48-39 · 06eee83)
+- Improved responsive chart rendering and resolved shared chart lint issues. (2026-09-18-22-51-53 · pending)
 
 ---
 

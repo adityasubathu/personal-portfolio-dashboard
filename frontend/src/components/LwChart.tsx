@@ -72,7 +72,6 @@ function formatTooltipDate(time: Time): string {
   return `${d} ${MONTHS[parseInt(m) - 1]} ${y}`
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractSeriesValue(data: unknown): number | null {
   if (data == null) return null
   if (typeof data === 'object') {
@@ -152,9 +151,7 @@ export function LwChart({
   const { privacyMode: privacyModeRaw } = usePrivacy()
   const privacyMode = privacyModeRaw && maskInPrivacy
   const privacyModeRef = useRef(privacyMode)
-  privacyModeRef.current = privacyMode
   const priceFormatterRef = useRef(priceFormatter)
-  priceFormatterRef.current = priceFormatter
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -171,10 +168,13 @@ export function LwChart({
 
   const [height, setHeight] = usePersistentState<number>(persistKey, defaultHeight)
   const heightRef = useRef(height)
-  heightRef.current = height
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
   const dragStartH = useRef(0)
+
+  useEffect(() => { privacyModeRef.current = privacyMode }, [privacyMode])
+  useEffect(() => { priceFormatterRef.current = priceFormatter }, [priceFormatter])
+  useEffect(() => { heightRef.current = height }, [height])
 
   // Build chart once
   useEffect(() => {
@@ -375,7 +375,7 @@ export function LwChart({
       chart.unsubscribeCrosshairMove(onCrosshairMove)
       ro.disconnect()
       markersPluginRef.current = null
-      seriesMetaRef.current.clear()
+      seriesMeta.clear()
       tooltipRootRef.current = null
       dateElRef.current = null
       chart.remove()
@@ -470,15 +470,16 @@ export function LwChart({
       return s
     })
 
+    const seriesMeta = seriesMetaRef.current
     return () => {
       if (chartRef.current === chart) {
         series.forEach((s) => {
-          const meta = seriesMetaRef.current.get(s)
+          const meta = seriesMeta.get(s)
           if (meta && root) {
             root.removeChild(meta.tag.wrap)
             root.removeChild(meta.tag.connector)
           }
-          seriesMetaRef.current.delete(s)
+          seriesMeta.delete(s)
           chart.removeSeries(s)
         })
       }
