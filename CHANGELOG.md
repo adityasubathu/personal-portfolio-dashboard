@@ -9,6 +9,7 @@
 - Improved responsive chart rendering and resolved shared chart lint issues. (2026-09-18-22-51-53 · fa2f72b)
 - Redesigned the dashboard with responsive holdings, persisted sorting, and safer manual asset actions. (2026-09-18-22-57-51 · 36b5d8b)
 - Redesigned allocation analysis with responsive panels, table scrolling, and lint-safe state handling. (2026-09-18-23-03-02 · 9b0ddab)
+- Redesigned Market Sentiment surfaces for responsive chart and analysis presentation. (2026-09-18-23-05-28 · efd3544)
 
 ---
 

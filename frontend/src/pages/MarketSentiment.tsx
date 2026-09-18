@@ -21,6 +21,8 @@ import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-reac
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
@@ -156,7 +158,7 @@ function OscillatorChart({
   formatter: (v: number) => string
 } & React.ComponentProps<typeof LwChart>) {
   return (
-    <Box px={128}>
+    <Panel p="md">
       <Group justify="center" align="center" gap={6} mb={4}>
         <Text fz="1.75rem" fw={500} c="dimmed">{caption}</Text>
         <ChartInfo text={info} />
@@ -170,7 +172,7 @@ function OscillatorChart({
         hideControls
         maskInPrivacy={false}
       />
-    </Box>
+    </Panel>
   )
 }
 
@@ -261,7 +263,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
   ]
 
   return (
-    <Box px={128}>
+    <Panel p="md">
       <Table withTableBorder withColumnBorders fz="md">
         <Table.Thead>
           <Table.Tr>
@@ -303,7 +305,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
           ))}
         </Table.Tbody>
       </Table>
-    </Box>
+    </Panel>
   )
 }
 
@@ -467,7 +469,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
   const toneColor = tone === 'risk_on' ? 'green' : 'yellow'
 
   return (
-    <Box px={128}>
+    <Panel p="md">
       <Table withTableBorder withColumnBorders fz="md">
         <Table.Thead>
           <Table.Tr>
@@ -529,7 +531,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
           </Table.Tr>
         </Table.Tbody>
       </Table>
-    </Box>
+    </Panel>
   )
 }
 
@@ -672,7 +674,7 @@ function SectorTrendsTable() {
   const subHd: React.CSSProperties = { textAlign: 'center', color: 'var(--mantine-color-dimmed)', fontWeight: 400, fontSize: 'var(--mantine-font-size-xs)' }
 
   return (
-    <Box px={128}>
+    <Panel p="md">
       <Group justify="space-between" align="center" mb="xs" wrap="wrap" gap="xs">
         <Group gap={6} align="center">
           <Text fw={600}>Sector Trends</Text>
@@ -758,7 +760,7 @@ function SectorTrendsTable() {
           </Table.Tbody>
         </Table>
       </ScrollArea>
-    </Box>
+    </Panel>
   )
 }
 
@@ -802,7 +804,7 @@ export function MarketSentiment() {
       color: d.color,
       data: filterByDays(toNavPoints(series.overlays![d.key]), rangeDays),
     }))
-  }, [series?.overlays, enabledOverlays, rangeDays])
+  }, [series, enabledOverlays, rangeDays])
 
   const oscData = useMemo(() => {
     if (!series?.oscillators) return null
@@ -817,7 +819,7 @@ export function MarketSentiment() {
       rv20: toNavPoints(filterByDays(osc.realized_vol_20, d)),
       rv60: toNavPoints(filterByDays(osc.realized_vol_60, d)),
     }
-  }, [series?.oscillators, rangeDays])
+  }, [series, rangeDays])
 
   function toggleOverlay(key: OverlayKey) {
     const next = enabledOverlays.includes(key)
@@ -837,16 +839,7 @@ export function MarketSentiment() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="center">
-        <Box>
-          <Title order={3}>Market Sentiment — {indexLabel}</Title>
-          {summary?.as_of && (
-            <Text fz="xs" c="dimmed">
-              As of {summary.as_of} · Close: {summary.close?.toLocaleString('en-IN')}
-            </Text>
-          )}
-        </Box>
-        <Group gap="xs">
+      <PageHeader title={`Market Sentiment — ${indexLabel}`} meta={summary?.as_of && `As of ${summary.as_of} · Close: ${summary.close?.toLocaleString('en-IN')}`} actions={<Group gap="xs">
           <SegmentedControl
             size="xs"
             value={index}
@@ -890,17 +883,16 @@ export function MarketSentiment() {
           >
             Refresh
           </Button>
-        </Group>
-      </Group>
+        </Group>} />
 
       {summary?.horizons && <SentimentSummaryCard data={summary} />}
-      {summary?.flags && <Box px={128}><FlagsBanner flags={summary.flags} /></Box>}
+      {summary?.flags && <Panel><FlagsBanner flags={summary.flags} /></Panel>}
 
       {/* Market breadth table + ratio chart */}
       {breadthData && !breadthData.no_data && (
         <>
           <MarketBreadthCard data={breadthData} />
-          <Box px={128}>
+          <Panel>
             <Group justify="center" align="center" gap={6} mb={4}>
               <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap ({breadthData.ratios!.benchmark}, rebased, 1Y) ↓</Text>
               <ChartInfo text={EXPLANATIONS.breadthRatioChart} />
@@ -918,7 +910,7 @@ export function MarketSentiment() {
               hideControls
             maskInPrivacy={false}
             />
-          </Box>
+          </Panel>
         </>
       )}
 
