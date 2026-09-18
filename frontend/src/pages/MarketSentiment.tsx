@@ -111,7 +111,9 @@ const EXPLANATIONS = {
   sectorTrends: `Trend labels use the same scoring as the summary card at the top of the page, so the two always agree for Nifty 50 and Nifty 500. Each horizon asks three yes/no questions — is the price above its moving average, is the trend still gaining strength, and has the price actually risen — and counts the yeses:\n\n• Short (weeks) — 20-day average, MACD, 1-month return\n• Mid (months) — 50-day average, +DI/−DI, 3-month return\n• Long (year+) — 200-day average, 200-day slope, 1-year return\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\nClick any badge to see which questions passed. ↘ means "losing steam" — the price is up, but the trend has stopped gaining strength.\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
 }
 
-function ChartInfo({ text }: { text: string }) {
+/** Click-to-open explainer popover. `target` is rendered inside Popover.Target,
+ *  so it receives the toggle handler from the caller. */
+function InfoPopover({ text, target }: { text: string; target: (toggle: () => void) => React.ReactNode }) {
   const [opened, setOpened] = useState(false)
   return (
     <Popover
@@ -124,15 +126,7 @@ function ChartInfo({ text }: { text: string }) {
       clickOutsideEvents={['mousedown', 'touchstart']}
     >
       <Popover.Target>
-        <ActionIcon
-          variant="subtle"
-          color="gray"
-          size="sm"
-          onClick={() => setOpened((o) => !o)}
-          style={{ flexShrink: 0 }}
-        >
-          <IconInfoCircle size={16} />
-        </ActionIcon>
+        {target(() => setOpened((o) => !o))}
       </Popover.Target>
       <Popover.Dropdown maw={320}>
         <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
@@ -140,6 +134,56 @@ function ChartInfo({ text }: { text: string }) {
         </Text>
       </Popover.Dropdown>
     </Popover>
+  )
+}
+
+/** One oscillator panel: centred caption + explainer, then a short chart that
+ *  shares the price-scale width of every other chart on the page. */
+function OscillatorChart({
+  caption,
+  info,
+  scaleKey,
+  scaleWidth,
+  onScaleWidth,
+  formatter,
+  ...chart
+}: {
+  caption: React.ReactNode
+  info: string
+  scaleKey: string
+  scaleWidth: number | undefined
+  onScaleWidth: (key: string, w: number) => void
+  formatter: (v: number) => string
+} & React.ComponentProps<typeof LwChart>) {
+  return (
+    <Box px={128}>
+      <Group justify="center" align="center" gap={6} mb={4}>
+        <Text fz="1.75rem" fw={500} c="dimmed">{caption}</Text>
+        <ChartInfo text={info} />
+      </Group>
+      <LwChart
+        {...chart}
+        priceScaleWidth={scaleWidth}
+        onPriceScaleWidth={(w) => onScaleWidth(scaleKey, w)}
+        defaultHeight={130}
+        priceFormatter={formatter}
+        hideControls
+        maskInPrivacy={false}
+      />
+    </Box>
+  )
+}
+
+function ChartInfo({ text }: { text: string }) {
+  return (
+    <InfoPopover
+      text={text}
+      target={(toggle) => (
+        <ActionIcon variant="subtle" color="gray" size="sm" onClick={toggle} style={{ flexShrink: 0 }}>
+          <IconInfoCircle size={16} />
+        </ActionIcon>
+      )}
+    />
   )
 }
 
@@ -266,33 +310,15 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
 // ── Flags banner ──────────────────────────────────────────────────────────────
 
 function FlagChip({ label, color, info }: { label: string; color: string; info: string }) {
-  const [opened, setOpened] = useState(false)
   return (
-    <Popover
-      opened={opened}
-      onChange={setOpened}
-      width={320}
-      position="bottom"
-      withArrow
-      shadow="md"
-      clickOutsideEvents={['mousedown', 'touchstart']}
-    >
-      <Popover.Target>
-        <Badge
-          color={color}
-          variant="light"
-          size="sm"
-          fz="0.825rem"
-          style={{ cursor: 'pointer' }}
-          onClick={() => setOpened((o) => !o)}
-        >
+    <InfoPopover
+      text={info}
+      target={(toggle) => (
+        <Badge color={color} variant="light" size="sm" fz="0.825rem" style={{ cursor: 'pointer' }} onClick={toggle}>
           {label}
         </Badge>
-      </Popover.Target>
-      <Popover.Dropdown maw={320}>
-        <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>{info}</Text>
-      </Popover.Dropdown>
-    </Popover>
+      )}
+    />
   )
 }
 
@@ -962,107 +988,77 @@ export function MarketSentiment() {
           <Divider mt="lg" mb="xs" label={<Title order={2} c="black">Oscillators</Title>} labelPosition="center" />
 
           <Stack gap="lg">
-            <Box px={128}>
-              <Group justify="center" align="center" gap={6} mb={4}>
-                <Text fz="1.75rem" fw={500} c="dimmed">RSI — overbought &gt;70 / oversold &lt;30 ↓</Text>
-                <ChartInfo text={EXPLANATIONS.rsi} />
-              </Group>
-              <LwChart
-                seriesType="line"
-                line={oscData.rsi14}
-                label="Daily RSI"
-                compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
-                horizontalLines={[
-                  { value: 70, color: '#dc2626', label: 'Overbought' },
-                  { value: 30, color: '#2563eb', label: 'Oversold' },
-                ]}
-                persistKey="market-sentiment-rsi"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('rsi', w)}
-                defaultHeight={130}
-                priceFormatter={oscFormatter}
-                hideControls
-              maskInPrivacy={false}
-              />
-            </Box>
+            <OscillatorChart
+              caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
+              info={EXPLANATIONS.rsi}
+              scaleKey="rsi"
+              scaleWidth={chartPriceScaleWidth}
+              onScaleWidth={reportScaleWidth}
+              formatter={oscFormatter}
+              seriesType="line"
+              line={oscData.rsi14}
+              label="Daily RSI"
+              compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
+              horizontalLines={[
+                { value: 70, color: '#dc2626', label: 'Overbought' },
+                { value: 30, color: '#2563eb', label: 'Oversold' },
+              ]}
+              persistKey="market-sentiment-rsi"
+            />
 
-            <Box px={128}>
-              <Group justify="center" align="center" gap={6} mb={4}>
-                <Text fz="1.75rem" fw={500} c="dimmed">MACD Histogram ↓</Text>
-                <ChartInfo text={EXPLANATIONS.macd} />
-              </Group>
-              <LwChart
-                seriesType="histogram"
-                line={oscData.macd_hist}
-                persistKey="market-sentiment-macd"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('macd', w)}
-                defaultHeight={130}
-                priceFormatter={oscFormatter}
-                hideControls
-              maskInPrivacy={false}
-              />
-            </Box>
+            <OscillatorChart
+              caption={<>MACD Histogram ↓</>}
+              info={EXPLANATIONS.macd}
+              scaleKey="macd"
+              scaleWidth={chartPriceScaleWidth}
+              onScaleWidth={reportScaleWidth}
+              formatter={oscFormatter}
+              seriesType="histogram"
+              line={oscData.macd_hist}
+              persistKey="market-sentiment-macd"
+            />
 
-            <Box px={128}>
-              <Group justify="center" align="center" gap={6} mb={4}>
-                <Text fz="1.75rem" fw={500} c="dimmed">ADX — trend strength (&gt;25 = trending) ↓</Text>
-                <ChartInfo text={EXPLANATIONS.adx} />
-              </Group>
-              <LwChart
-                seriesType="line"
-                line={oscData.adx}
-                persistKey="market-sentiment-adx"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('adx', w)}
-                defaultHeight={130}
-                priceFormatter={oscFormatter}
-                hideControls
-              maskInPrivacy={false}
-              />
-            </Box>
+            <OscillatorChart
+              caption={<>ADX — trend strength (&gt;25 = trending) ↓</>}
+              info={EXPLANATIONS.adx}
+              scaleKey="adx"
+              scaleWidth={chartPriceScaleWidth}
+              onScaleWidth={reportScaleWidth}
+              formatter={oscFormatter}
+              seriesType="line"
+              line={oscData.adx}
+              persistKey="market-sentiment-adx"
+            />
           </Stack>
 
           <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Volatility</Title>} labelPosition="center" />
 
           <Stack gap="lg">
-            <Box px={128}>
-              <Group justify="center" align="center" gap={6} mb={4}>
-                <Text fz="1.75rem" fw={500} c="dimmed">ATR % ↓</Text>
-                <ChartInfo text={EXPLANATIONS.atr} />
-              </Group>
-              <LwChart
-                seriesType="line"
-                line={oscData.atr_pct}
-                persistKey="market-sentiment-atr"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('atr', w)}
-                defaultHeight={130}
-                priceFormatter={oscFormatter}
-                hideControls
-              maskInPrivacy={false}
-              />
-            </Box>
+            <OscillatorChart
+              caption={<>ATR % ↓</>}
+              info={EXPLANATIONS.atr}
+              scaleKey="atr"
+              scaleWidth={chartPriceScaleWidth}
+              onScaleWidth={reportScaleWidth}
+              formatter={oscFormatter}
+              seriesType="line"
+              line={oscData.atr_pct}
+              persistKey="market-sentiment-atr"
+            />
 
-            <Box px={128}>
-              <Group justify="center" align="center" gap={6} mb={4}>
-                <Text fz="1.75rem" fw={500} c="dimmed">Realized Volatility (annualized %) ↓</Text>
-                <ChartInfo text={EXPLANATIONS.vol} />
-              </Group>
-              <LwChart
-                seriesType="line"
-                line={oscData.rv20}
-                label="RV 20"
-                compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
-                persistKey="market-sentiment-vol"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('vol', w)}
-                defaultHeight={130}
-                priceFormatter={oscFormatter}
-                hideControls
-              maskInPrivacy={false}
-              />
-            </Box>
+            <OscillatorChart
+              caption={<>Realized Volatility (annualized %) ↓</>}
+              info={EXPLANATIONS.vol}
+              scaleKey="vol"
+              scaleWidth={chartPriceScaleWidth}
+              onScaleWidth={reportScaleWidth}
+              formatter={oscFormatter}
+              seriesType="line"
+              line={oscData.rv20}
+              label="RV 20"
+              compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
+              persistKey="market-sentiment-vol"
+            />
           </Stack>
         </>
       )}

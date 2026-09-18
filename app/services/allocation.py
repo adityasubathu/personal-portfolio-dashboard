@@ -11,6 +11,47 @@ from app.services.manual_assets import get_manual_assets_summary
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, _SGB_RE, normalize_company_name
 
 
+def _comparison_row(
+    category: str,
+    target_pct: float,
+    cur_pct: float,
+    cur_val: float,
+    cur_ideal: float,
+    inv_pct: float,
+    inv_val: float,
+    inv_ideal: float,
+    **extra,
+) -> dict:
+    """One row of a target-vs-actual comparison table, shared by the market-cap
+    and asset-class views so both always emit the same keys."""
+    return {
+        "category": category,
+        "target_pct": target_pct,
+        **extra,
+        "current_pct": round(cur_pct, 2),
+        "current_value": round(cur_val, 2),
+        "current_diff": round(cur_pct - target_pct, 2),
+        "invested_pct": round(inv_pct, 2),
+        "invested_value": round(inv_val, 2),
+        "invested_diff": round(inv_pct - target_pct, 2),
+        "current_ideal_value": round(cur_ideal, 2),
+        "current_value_diff": round(cur_val - cur_ideal, 2),
+        "invested_ideal_value": round(inv_ideal, 2),
+        "invested_value_diff": round(inv_val - inv_ideal, 2),
+    }
+
+
+async def load_portfolio_holdings(db: AsyncSession):
+    """Every (Holding, Instrument) pair that carries market value — the input to
+    both the allocation and the composition rollups."""
+    result = await db.execute(
+        select(Holding, Instrument)
+        .join(Instrument, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
+    )
+    return result.all()
+
+
 async def _load_amfi_lookups(db: AsyncSession) -> tuple[dict[str, str], dict[str, str]]:
     """Returns (isin_to_cat, norm_name_to_cat) from AmfiMarketCap."""
     amfi_rows = (await db.execute(select(AmfiMarketCap))).scalars().all()
@@ -60,8 +101,7 @@ async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: 
         if use_cost:
             value = float(h.total_cost or 0)
         else:
-            ltp = float(h.last_price) if h.last_price else None
-            value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            value = h.market_value
 
         if i.instrument_type == "STOCK":
             cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
@@ -83,8 +123,7 @@ async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: 
             if use_cost:
                 hv[i.isin] = float(h.total_cost or 0)
             else:
-                ltp = float(h.last_price) if h.last_price else None
-                hv[i.isin] = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+                hv[i.isin] = h.market_value
 
     if hv:
         breakdown_rows = (await db.execute(
@@ -113,12 +152,7 @@ async def _build_category_totals_full(db: AsyncSession, all_holdings, use_cost: 
 
 
 async def get_breakdown_chart_data(db: AsyncSession) -> dict:
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
     category_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
 
     if not category_totals:
@@ -229,12 +263,7 @@ _AC_PRECIOUS_METALS = {"Gold", "Silver"}
 
 
 async def get_asset_class_comparison(db: AsyncSession) -> dict:
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
     category_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
     manual = await get_manual_assets_summary(db)
 
@@ -318,12 +347,7 @@ def _foreign_anchor_ratio(foreign_target: float, large_target: float) -> float:
 async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") -> dict:
     targets = await get_allocation_targets(db, mode=mode)
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
 
     current_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
     invested_totals = await _build_category_totals_full(db, all_holdings, use_cost=True)
@@ -365,20 +389,9 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
         else:
             cur_ideal_val = cur_large * (target_pct / large_target) if large_target > 0 else 0
             inv_ideal_val = inv_large * (target_pct / large_target) if large_target > 0 else 0
-        rows.append({
-            "category": cat,
-            "target_pct": target_pct,
-            "current_pct": round(cur_pct, 2),
-            "current_value": round(cur_val, 2),
-            "current_diff": round(cur_pct - target_pct, 2),
-            "invested_pct": round(inv_pct, 2),
-            "invested_value": round(inv_val, 2),
-            "invested_diff": round(inv_pct - target_pct, 2),
-            "current_ideal_value": round(cur_ideal_val, 2),
-            "current_value_diff": round(cur_val - cur_ideal_val, 2),
-            "invested_ideal_value": round(inv_ideal_val, 2),
-            "invested_value_diff": round(inv_val - inv_ideal_val, 2),
-        })
+        rows.append(_comparison_row(
+            cat, target_pct, cur_pct, cur_val, cur_ideal_val, inv_pct, inv_val, inv_ideal_val,
+        ))
 
     anchor_ratio = _foreign_anchor_ratio(foreign_target, large_target)
     cur_foreign_ideal = cur_large * anchor_ratio
@@ -387,21 +400,12 @@ async def get_allocation_comparison(db: AsyncSession, mode: str = "anchored") ->
     foreign_inv_pct = (foreign_inv / invested_equity * 100) if invested_equity > 0 else 0
     foreign_display_target = round(cur_foreign_ideal / current_equity * 100, 2) if current_equity > 0 else 0
 
-    rows.append({
-        "category": "Equity - Foreign",
-        "target_pct": foreign_display_target,
-        "anchor_note": f"{anchor_ratio * 100:.1f}% of LC",
-        "current_pct": round(foreign_cur_pct, 2),
-        "current_value": round(foreign_cur, 2),
-        "current_diff": round(foreign_cur_pct - foreign_display_target, 2),
-        "invested_pct": round(foreign_inv_pct, 2),
-        "invested_value": round(foreign_inv, 2),
-        "invested_diff": round(foreign_inv_pct - foreign_display_target, 2),
-        "current_ideal_value": round(cur_foreign_ideal, 2),
-        "current_value_diff": round(foreign_cur - cur_foreign_ideal, 2),
-        "invested_ideal_value": round(inv_foreign_ideal, 2),
-        "invested_value_diff": round(foreign_inv - inv_foreign_ideal, 2),
-    })
+    rows.append(_comparison_row(
+        "Equity - Foreign", foreign_display_target,
+        foreign_cur_pct, foreign_cur, cur_foreign_ideal,
+        foreign_inv_pct, foreign_inv, inv_foreign_ideal,
+        anchor_note=f"{anchor_ratio * 100:.1f}% of LC",
+    ))
 
     domestic_cur_pct = (domestic_cur / current_equity * 100) if current_equity > 0 else 0
     domestic_inv_pct = (domestic_inv / invested_equity * 100) if invested_equity > 0 else 0
@@ -654,21 +658,10 @@ async def _get_free_float_comparison(
         inv_pct = (inv_val / pool_inv * 100) if pool_inv > 0 else 0
         cur_ideal = pool_cur * target_pct / 100
         inv_ideal = pool_inv * target_pct / 100
-        rows.append({
-            "category": cat,
-            "target_pct": target_pct,
-            "anchor_note": None,
-            "current_pct": round(cur_pct, 2),
-            "current_value": round(cur_val, 2),
-            "current_diff": round(cur_pct - target_pct, 2),
-            "invested_pct": round(inv_pct, 2),
-            "invested_value": round(inv_val, 2),
-            "invested_diff": round(inv_pct - target_pct, 2),
-            "current_ideal_value": round(cur_ideal, 2),
-            "current_value_diff": round(cur_val - cur_ideal, 2),
-            "invested_ideal_value": round(inv_ideal, 2),
-            "invested_value_diff": round(inv_val - inv_ideal, 2),
-        })
+        rows.append(_comparison_row(
+            cat, target_pct, cur_pct, cur_val, cur_ideal, inv_pct, inv_val, inv_ideal,
+            anchor_note=None,
+        ))
 
     foreign_cur_pct = (foreign_cur / pool_cur * 100) if pool_cur > 0 else 0
     return {

@@ -25,3 +25,9 @@ class Holding(Base):
     xirr_as_of: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     instrument: Mapped["Instrument"] = relationship(back_populates="holding")
+
+    @property
+    def market_value(self) -> float:
+        """Quantity x last price, falling back to book cost when no price is known."""
+        ltp = float(self.last_price) if self.last_price else None
+        return float(self.quantity) * ltp if ltp else float(self.total_cost or 0)

@@ -40,16 +40,18 @@ _GRANDFATHERING_FMV_DATE = date(2018, 1, 31)
 _FY_FLOOR = "2020-21"
 
 # ── Bucket metadata ───────────────────────────────────────────────────────────
+# Display label and headline rate per bucket. Short/long and §112A membership are
+# decided by _STCG_KEYS / _LTCG_KEYS / _112A_KEYS below — the single source of truth.
 BUCKET_META: dict[str, dict] = {
-    "equity_stcg_15":       {"label": "Equity STCG (15%) §111A",          "rate": 15.0,  "term": "short"},
-    "equity_stcg_20":       {"label": "Equity STCG (20%) §111A",          "rate": 20.0,  "term": "short"},
-    "equity_ltcg_10":       {"label": "Equity LTCG (10%) §112A",          "rate": 10.0,  "term": "long",  "is_112a": True},
-    "equity_ltcg_125":      {"label": "Equity LTCG (12.5%) §112A",        "rate": 12.5,  "term": "long",  "is_112a": True},
-    "debt_slab":            {"label": "Debt / Non-Equity — Slab rate",    "rate": None,  "term": "short"},
-    "hybrid_stcg_slab":     {"label": "Hybrid/Specified MF — Slab rate",  "rate": None,  "term": "short"},
-    "hybrid_ltcg_20_indexed": {"label": "Hybrid/Specified MF LTCG (20% + indexation)", "rate": 20.0, "term": "long", "indexed": True},
-    "hybrid_ltcg_125":      {"label": "Hybrid/Specified MF LTCG (12.5%)", "rate": 12.5,  "term": "long"},
-    "unknown_mf_slab":      {"label": "Unclassified MF — Slab (conservative)", "rate": None, "term": "short"},
+    "equity_stcg_15":         {"label": "Equity STCG (15%) §111A",                        "rate": 15.0},
+    "equity_stcg_20":         {"label": "Equity STCG (20%) §111A",                        "rate": 20.0},
+    "equity_ltcg_10":         {"label": "Equity LTCG (10%) §112A",                        "rate": 10.0},
+    "equity_ltcg_125":        {"label": "Equity LTCG (12.5%) §112A",                      "rate": 12.5},
+    "debt_slab":              {"label": "Debt / Non-Equity — Slab rate",                  "rate": None},
+    "hybrid_stcg_slab":       {"label": "Hybrid/Specified MF — Slab rate",                "rate": None},
+    "hybrid_ltcg_20_indexed": {"label": "Hybrid/Specified MF LTCG (20% + indexation)", "rate": 20.0},
+    "hybrid_ltcg_125":        {"label": "Hybrid/Specified MF LTCG (12.5%)",            "rate": 12.5},
+    "unknown_mf_slab":        {"label": "Unclassified MF — Slab (conservative)",          "rate": None},
 }
 
 _STCG_KEYS = {"equity_stcg_15", "equity_stcg_20", "debt_slab", "hybrid_stcg_slab", "unknown_mf_slab"}
@@ -373,7 +375,7 @@ def _apply_setoff(bucket_gains: dict[str, float], fy: str) -> list[dict]:
     for key, gross_gain in bucket_gains.items():
         if gross_gain == 0:
             continue
-        meta = BUCKET_META.get(key, {"label": key, "rate": None, "term": "short"})
+        meta = BUCKET_META.get(key, {"label": key, "rate": None})
 
         setoff_applied = 0.0
         exemption_applied = 0.0

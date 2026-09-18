@@ -9,7 +9,7 @@ from app.models.app_config import AppConfig
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown, NseIndustryClassification
-from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
+from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups, load_portfolio_holdings
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, load_level_overrides, normalize_company_name
 from app.services.nse_industry import (
     CLASSIFICATION_LEVELS,
@@ -37,6 +37,11 @@ _EQUITY_CATEGORIES = {
     "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity",
     "Equity - Foreign", "Real Estate Trust",
 }
+
+# Categories that carry no net equity market exposure and must never land in an
+# equity-only sector rollup: the arbitrage pair's matched notional, and any
+# leftover derivative/futures leg (long or short — both are Derivatives - Leveraged).
+_NON_EQUITY_CATEGORIES = {"Equity - Arbitrage", "Derivatives - Leveraged"}
 
 NON_EQUITY_LABEL = "Non-Equity"
 
@@ -124,8 +129,7 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
     fund_value = 0.0
     if holding_row:
         h, _ = holding_row
-        ltp = float(h.last_price) if h.last_price else None
-        fund_value = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        fund_value = h.market_value
 
     holdings = []
     cat_value_totals: dict[str, float] = {}
@@ -179,12 +183,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     """Returns per-category breakdown showing each contributing source and its value."""
     from app.services.manual_assets import get_manual_assets_summary
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
 
     isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
 
@@ -198,8 +197,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     fund_values: dict[str, tuple[float, str]] = {}
     for h, i in all_holdings:
         if i.instrument_type in ("MF", "ETF") and i.isin:
-            ltp = float(h.last_price) if h.last_price else None
-            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            val = h.market_value
             commodity_cat = COMMODITY_ETF_CATEGORY.get(i.isin)
             if commodity_cat:
                 _add(commodity_cat, {"name": i.name or i.tradingsymbol or i.isin, "source_type": "etf", "fund_pct": 100.0, "contribution": round(val, 2)})
@@ -225,8 +223,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     # Direct stocks
     for h, i in all_holdings:
         if i.instrument_type == "STOCK":
-            ltp = float(h.last_price) if h.last_price else None
-            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            val = h.market_value
             if val <= 0:
                 continue
             cat = _classify_stock_instrument(i.isin, i.name, i.tradingsymbol, isin_to_cat, name_to_cat)
@@ -235,8 +232,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     # Bonds: SGB → Gold, everything else → Debt
     for h, i in all_holdings:
         if i.instrument_type == "BOND":
-            ltp = float(h.last_price) if h.last_price else None
-            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            val = h.market_value
             if val <= 0:
                 continue
             if i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
@@ -282,12 +278,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
 
     level = _resolve_level(level)
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
 
     # Classification lookup for direct stocks, keyed by ISIN only.
     classification_lookup = await load_classification_lookup(db)
@@ -301,8 +292,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
     fund_values: dict[str, tuple[float, str]] = {}
     for h, i in all_holdings:
         if i.instrument_type in ("MF", "ETF") and i.isin:
-            ltp = float(h.last_price) if h.last_price else None
-            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            val = h.market_value
             commodity_cat = COMMODITY_ETF_CATEGORY.get(i.isin)
             if commodity_cat:
                 _add(commodity_cat, {"name": i.name or i.tradingsymbol or i.isin, "source_type": "etf", "fund_pct": 100.0, "contribution": round(val, 2)})
@@ -313,7 +303,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
         breakdown_rows = (await db.execute(
             select(MfSchemeBreakdown).where(
                 MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
-                MfSchemeBreakdown.category != "Equity - Arbitrage",
+                ~MfSchemeBreakdown.category.in_(_NON_EQUITY_CATEGORIES),
             )
         )).scalars().all()
 
@@ -333,8 +323,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
     level_overrides = await load_level_overrides(db)
     for h, i in all_holdings:
         if i.instrument_type == "STOCK":
-            ltp = float(h.last_price) if h.last_price else None
-            val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+            val = h.market_value
             if val <= 0:
                 continue
             name = i.name or i.tradingsymbol or "Unknown"
@@ -350,8 +339,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
         # Bonds: SGB → Gold sector, everything else → Fixed Income
         for h, i in all_holdings:
             if i.instrument_type == "BOND":
-                ltp = float(h.last_price) if h.last_price else None
-                val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+                val = h.market_value
                 if val <= 0:
                     continue
                 if i.tradingsymbol and _SGB_RE.match(i.tradingsymbol):
@@ -397,8 +385,7 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
     )
     fund_values: dict[str, float] = {}
     for h, i in fund_result.all():
-        ltp = float(h.last_price) if h.last_price else None
-        val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        val = h.market_value
         if val > 0:
             fund_values[i.isin] = val
 
@@ -415,7 +402,7 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
         rows = (await db.execute(
             select(MfSchemeBreakdown).where(
                 MfSchemeBreakdown.scheme_isin.in_(list(fund_values.keys())),
-                MfSchemeBreakdown.category != "Equity - Arbitrage",
+                ~MfSchemeBreakdown.category.in_(_NON_EQUITY_CATEGORIES),
                 or_(
                     MfSchemeBreakdown.sector.is_(None),
                     ~MfSchemeBreakdown.sector.in_(list(_NON_EQUITY_SECTORS)),
@@ -441,8 +428,7 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
         .where(Instrument.instrument_type == "STOCK")
     )
     for h, i in stock_result.all():
-        ltp = float(h.last_price) if h.last_price else None
-        val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
+        val = h.market_value
         if val <= 0:
             continue
         name = i.name or i.tradingsymbol or "Unknown"

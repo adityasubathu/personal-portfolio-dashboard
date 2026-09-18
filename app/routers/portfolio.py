@@ -38,55 +38,6 @@ async def direct_holdings(
     return await get_direct_holdings(db, sort=sort, direction=dir, sections=sections, compare=compare)
 
 
-@router.get("/summary")
-async def portfolio_summary(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-    )
-    rows = result.all()
-
-    non_mf_ids = [instr.id for _, instr in rows if instr.instrument_type != "MF"]
-    ohlc_ltp_map: dict[int, tuple[float, date]] = {}
-    if non_mf_ids:
-        sub = select(
-            PriceHistory.instrument_id,
-            PriceHistory.close,
-            PriceHistory.price_date,
-            func.row_number().over(
-                partition_by=PriceHistory.instrument_id,
-                order_by=PriceHistory.price_date.desc(),
-            ).label("rn"),
-        ).where(PriceHistory.instrument_id.in_(non_mf_ids)).subquery()
-        for r in (await db.execute(select(sub).where(sub.c.rn == 1))).all():
-            ohlc_ltp_map[r.instrument_id] = (float(r.close), r.price_date)
-
-    total_cost = sum(float(h.total_cost or 0) for h, _ in rows)
-    total_value = 0.0
-    for h, instr in rows:
-        cost = float(h.total_cost or 0)
-        if instr.instrument_type != "MF" and instr.id in ohlc_ltp_map:
-            ohlc_close, ohlc_date = ohlc_ltp_map[instr.id]
-            holding_ltp = float(h.last_price) if h.last_price else None
-            holding_date = h.last_price_at.date() if h.last_price_at else None
-            if holding_ltp is not None and holding_date is not None and holding_date >= ohlc_date:
-                ltp = holding_ltp
-            else:
-                ltp = ohlc_close
-        elif h.last_price:
-            ltp = float(h.last_price)
-        else:
-            ltp = None
-        total_value += float(h.quantity) * ltp if ltp else cost
-
-    return {
-        "total_cost": round(total_cost, 2),
-        "total_value": round(total_value, 2),
-        "total_pnl": round(total_value - total_cost, 2),
-        "holdings_count": len(rows),
-    }
-
-
 @router.get("/summary-cards", response_model=SummaryCards)
 async def summary_cards(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -198,6 +149,20 @@ async def traded_instruments(db: AsyncSession = Depends(get_db)):
 _price_sync_lock = asyncio.Lock()
 
 
+async def _refresh_ltp_and_xirr(db: AsyncSession, on_progress) -> dict | None:
+    """Tail step shared by both price-fetch streams: refresh LTPs, then XIRR."""
+    await on_progress("Updating LTPs from Kite…")
+    ltp_result = None
+    try:
+        ltp_result = await kite_sync.update_ltp(db)
+        await on_progress(f"LTP updated: {ltp_result['updated']} instruments")
+    except Exception as ltp_err:
+        await on_progress(f"LTP update skipped: {ltp_err}")
+    await on_progress("Recomputing XIRR…")
+    await recompute_and_store_xirr(db)
+    return ltp_result
+
+
 @router.get("/sync-price-history/stream")
 async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
     async def _runner(on_progress):
@@ -208,15 +173,7 @@ async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
             await on_progress(f"Indices: {index_result['instruments_synced']} synced, {index_result['rows_added']} rows")
         except Exception as idx_err:
             await on_progress(f"Index sync skipped: {idx_err}")
-        await on_progress("Updating LTPs from Kite…")
-        ltp_result = None
-        try:
-            ltp_result = await kite_sync.update_ltp(db)
-            await on_progress(f"LTP updated: {ltp_result['updated']} instruments")
-        except Exception as ltp_err:
-            await on_progress(f"LTP update skipped: {ltp_err}")
-        await on_progress("Recomputing XIRR…")
-        await recompute_and_store_xirr(db)
+        ltp_result = await _refresh_ltp_and_xirr(db, on_progress)
         return {"result": result, "ltp": ltp_result}
 
     return sse_stream(_runner, lock=_price_sync_lock, busy_msg="A price history sync is already running.")
@@ -242,28 +199,6 @@ async def upload_ohlc(
 ):
     content = await file.read()
     result = await ingest_ohlc_csv(db, instrument_id, content)
-    return JSONResponse(result)
-
-
-@router.post("/fetch-ohlc")
-async def fetch_ohlc(
-    ticker: str = Form(...),
-    start_date: str = Form(...),
-    end_date: str = Form(""),
-    db: AsyncSession = Depends(get_db),
-):
-    start = parse_flexible_date(start_date)
-    if start is None:
-        return JSONResponse({"error": f"Unrecognised start date: '{start_date}'"}, status_code=400)
-    end = None
-    if end_date.strip():
-        end = parse_flexible_date(end_date)
-        if end is None:
-            return JSONResponse({"error": f"Unrecognised end date: '{end_date}'"}, status_code=400)
-    try:
-        result = await fetch_ohlc_for_ticker(db, ticker=ticker, start_date=start, end_date=end)
-    except Exception as e:
-        result = {"error": str(e)}
     return JSONResponse(result)
 
 
@@ -297,15 +232,7 @@ async def fetch_ohlc_stream(
             skip_token_check=skip_token_check,
             on_progress=on_progress,
         )
-        await on_progress("Updating LTPs from Kite…")
-        ltp_result = None
-        try:
-            ltp_result = await kite_sync.update_ltp(db)
-            await on_progress(f"LTP updated: {ltp_result['updated']} instruments")
-        except Exception as ltp_err:
-            await on_progress(f"LTP update skipped: {ltp_err}")
-        await on_progress("Recomputing XIRR…")
-        await recompute_and_store_xirr(db)
+        ltp_result = await _refresh_ltp_and_xirr(db, on_progress)
         return {"result": result, "ltp": ltp_result}
 
     return sse_stream(_runner)

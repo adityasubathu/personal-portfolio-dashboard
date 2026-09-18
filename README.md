@@ -96,7 +96,7 @@ portfolio-mac-arm/
 │   │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
 │   │   ├── mf_breakdown.py      # Ingest OpenFin disclosures, batch classify, chart data
 │   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
-│   │   ├── usdinr.py            # USDINR rate: stored read, Kite refresh, manual set
+│   │   ├── usdinr.py            # USDINR rate: Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   ├── settings.py          # Danger-zone bulk deletes, DB info
 │   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth, /sector-trends; POST /refresh-indices
@@ -116,7 +116,7 @@ portfolio-mac-arm/
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
 │       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, manual taxonomy overrides (any of the four NSE levels, cascading up the hierarchy)
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
-│       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read
+│       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read stored rate
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
 │       ├── nav_history.py       # Day-by-day portfolio value reconstruction
 │       ├── policy_tracker.py    # 15 trigger evaluators across 7 sections; returns section/trigger tree
@@ -349,7 +349,6 @@ The per-fund sector view collapses debt, cash, commodities and arbitrage/derivat
 ### USDINR (`/api/v1/usdinr`)
 | Endpoint | Description |
 |---|---|
-| `GET /` | Stored rate info `{rate, source, fetched_at}` |
 | `POST /refresh` | Fetch live rate from Kite CDS USDINR near-month futures |
 | `POST /manual` | Override rate manually |
 

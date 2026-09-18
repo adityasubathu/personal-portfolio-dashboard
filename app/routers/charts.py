@@ -23,10 +23,7 @@ async def chart_instruments(db: AsyncSession = Depends(get_db)):
         .distinct()
         .order_by(Instrument.tradingsymbol)
     )
-    return [
-        {"id": i.id, "symbol": i.tradingsymbol, "isin": i.isin, "name": i.name, "type": i.instrument_type}
-        for i in result.scalars().all()
-    ]
+    return _instrument_options(result)
 
 
 @router.get("/nav-instruments")
@@ -39,21 +36,12 @@ async def nav_chart_instruments(db: AsyncSession = Depends(get_db)):
         .distinct()
         .order_by(Instrument.instrument_type, Instrument.name)
     )
-    return [
-        {"id": i.id, "symbol": i.tradingsymbol, "isin": i.isin, "name": i.name, "type": i.instrument_type}
-        for i in result.scalars().all()
-    ]
+    return _instrument_options(result)
 
 
 @router.get("/price/{instrument_id}")
 async def price_chart_data(instrument_id: int, db: AsyncSession = Depends(get_db)):
-    rows = (
-        await db.execute(
-            select(PriceHistory)
-            .where(PriceHistory.instrument_id == instrument_id)
-            .order_by(PriceHistory.price_date)
-        )
-    ).scalars().all()
+    rows = await _price_rows(db, instrument_id)
 
     candles = [
         {
@@ -85,13 +73,7 @@ async def nav_chart_data(instrument_id: int, db: AsyncSession = Depends(get_db))
 
     prices = []
     if instrument and instrument.instrument_type == "ETF":
-        price_rows = (
-            await db.execute(
-                select(PriceHistory)
-                .where(PriceHistory.instrument_id == instrument_id)
-                .order_by(PriceHistory.price_date)
-            )
-        ).scalars().all()
+        price_rows = await _price_rows(db, instrument_id)
         prices = [{"time": r.price_date.isoformat(), "value": float(r.close)} for r in price_rows]
 
     return {
@@ -100,6 +82,24 @@ async def nav_chart_data(instrument_id: int, db: AsyncSession = Depends(get_db))
         "instrument_type": instrument.instrument_type if instrument else "MF",
         "markers": await _trade_markers(db, instrument_id),
     }
+
+
+def _instrument_options(result) -> list[dict]:
+    """Dropdown shape for the chart instrument pickers."""
+    return [
+        {"id": i.id, "symbol": i.tradingsymbol, "isin": i.isin, "name": i.name, "type": i.instrument_type}
+        for i in result.scalars().all()
+    ]
+
+
+async def _price_rows(db: AsyncSession, instrument_id: int) -> list[PriceHistory]:
+    return (
+        await db.execute(
+            select(PriceHistory)
+            .where(PriceHistory.instrument_id == instrument_id)
+            .order_by(PriceHistory.price_date)
+        )
+    ).scalars().all()
 
 
 async def _trade_markers(db: AsyncSession, instrument_id: int) -> list[dict]:

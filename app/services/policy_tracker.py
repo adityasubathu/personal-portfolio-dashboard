@@ -16,7 +16,6 @@ THRESHOLDS = {
     "mon100_premium_high": 8.0,
     "toplevel_drift_breach": 5.0,
     "mcap_anchor_tolerance": 5.0,
-    "ltcg_exemption": 125_000,
     "emergency_fund_min": 1_000_000,
     "nifty_drawdown_rungs": [
         (15, 300_000, "₹3L"),
@@ -66,7 +65,7 @@ def _t(key, label, section, mode, status, summary, detail=None, cta=None, thresh
 
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
-def _eval_mon100_premium(ltp, nav, nav_date, states) -> dict:
+def _eval_mon100_premium(ltp, nav, nav_date) -> dict:
     key, label, section = "mon100_premium", "MON100 Premium", "A — Foreign Sleeve"
     if ltp is None or nav is None:
         return _t(key, label, section, "auto", "watch",
@@ -105,7 +104,7 @@ def _eval_sp500_inflows(states) -> dict:
               "S&P 500 fund closed to inflows — update manually")
 
 
-def _eval_foreign_sleeve_funded(alloc, states) -> dict:
+def _eval_foreign_sleeve_funded(alloc) -> dict:
     key, label, section = "foreign_sleeve_funded", "Foreign Sleeve Funded", "A — Foreign Sleeve"
     if alloc is None:
         return _t(key, label, section, "auto", "watch", "Allocation data unavailable")
@@ -121,7 +120,7 @@ def _eval_foreign_sleeve_funded(alloc, states) -> dict:
               f"Foreign sleeve {foreign['current_pct']:.1f}% — within tolerance", detail)
 
 
-def _eval_toplevel_drift(ac, states) -> dict:
+def _eval_toplevel_drift(ac) -> dict:
     key, label, section = "toplevel_drift", "Top-level Drift", "B — Allocation Drift"
     if ac is None:
         return _t(key, label, section, "auto", "watch", "Asset class data unavailable")
@@ -138,7 +137,7 @@ def _eval_toplevel_drift(ac, states) -> dict:
               "All asset class buckets within tolerance", detail, threshold=thresh)
 
 
-def _eval_mcap_anchor_drift(alloc, states) -> dict:
+def _eval_mcap_anchor_drift(alloc) -> dict:
     key, label, section = "mcap_anchor_drift", "Market-cap Anchor Drift", "B — Allocation Drift"
     if alloc is None:
         return _t(key, label, section, "auto", "watch", "Allocation data unavailable")
@@ -168,7 +167,7 @@ def _eval_ltcg_harvest(states) -> dict:
               {"fy": fy}, "Harvest LTCG exemption (₹1.25L/FY)")
 
 
-def _eval_advance_tax(states) -> dict:
+def _eval_advance_tax() -> dict:
     key, label, section = "advance_tax_due", "Advance Tax", "C — Tax"
     today = date.today()
     fy_start = _current_fy_start()
@@ -232,7 +231,7 @@ def _eval_one_time_ack(key, label, section, done_summary, pending_summary, state
     return _t(key, label, section, "manual_ack", "manual", pending_summary)
 
 
-def _eval_emergency_fund(manual, states) -> dict:
+def _eval_emergency_fund(manual) -> dict:
     key, label, section = "emergency_fund_intact", "Emergency Fund", "E — Cleanup / Housekeeping"
     total = manual.get("emergency_total", 0)
     minimum = THRESHOLDS["emergency_fund_min"]
@@ -246,7 +245,7 @@ def _eval_emergency_fund(manual, states) -> dict:
               f"Emergency fund intact (₹{total:,.0f})", detail, threshold=thresh)
 
 
-def _eval_nifty_drawdown(peak, current, states) -> dict:
+def _eval_nifty_drawdown(peak, current) -> dict:
     key, label, section = "nifty_drawdown_ladder", "Nifty Drawdown Ladder", "F — Drawdown Ladder"
     if peak is None or current is None:
         return _t(key, label, section, "auto", "manual",
@@ -351,13 +350,13 @@ async def evaluate_all(db: AsyncSession) -> dict:
 
     # Evaluate all triggers
     triggers = [
-        _eval_mon100_premium(mon100_ltp, mon100_nav, mon100_nav_date, states),
+        _eval_mon100_premium(mon100_ltp, mon100_nav, mon100_nav_date),
         _eval_sp500_inflows(states),
-        _eval_foreign_sleeve_funded(alloc, states),
-        _eval_toplevel_drift(ac, states),
-        _eval_mcap_anchor_drift(alloc, states),
+        _eval_foreign_sleeve_funded(alloc),
+        _eval_toplevel_drift(ac),
+        _eval_mcap_anchor_drift(alloc),
         _eval_ltcg_harvest(states),
-        _eval_advance_tax(states),
+        _eval_advance_tax(),
         _eval_regime_review(states),
         _eval_fund_audit("kotak_midcap_audit", "Kotak Midcap Audit", "Midcap 150 TRI", states),
         _eval_fund_audit("bandhan_smallcap_audit", "Bandhan Smallcap Audit", "Smallcap 250 TRI", states),
@@ -367,8 +366,8 @@ async def evaluate_all(db: AsyncSession) -> dict:
         _eval_one_time_ack("goi2064_exit", "GOI 2064 Exit",
                            "E — Cleanup / Housekeeping",
                            "GOI 2064 exited + loss harvested", "Exit GOI 2064 and harvest loss", states),
-        _eval_emergency_fund(manual, states),
-        _eval_nifty_drawdown(nifty_peak, nifty_current, states),
+        _eval_emergency_fund(manual),
+        _eval_nifty_drawdown(nifty_peak, nifty_current),
         _eval_house_trigger(states),
     ]
 

@@ -3,15 +3,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.services.usdinr import get_usdinr_info, refresh_usdinr_rate, set_usdinr_rate_manual
+from app.services.usdinr import refresh_usdinr_rate, set_usdinr_rate_manual
 
 router = APIRouter(prefix="/api/v1/usdinr", tags=["usdinr"])
-
-
-@router.get("")
-async def get_rate(db: AsyncSession = Depends(get_db)):
-    info = await get_usdinr_info(db)
-    return JSONResponse(info)
 
 
 @router.post("/refresh")
