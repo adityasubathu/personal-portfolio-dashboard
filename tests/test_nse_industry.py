@@ -1,5 +1,13 @@
 """Parser tests for the NSE adapter — pure functions, no network."""
-from app.services.nse_industry import extract_classification, parse_equity_master
+from app.services.nse_industry import (
+    STATUS_API_ERROR,
+    STATUS_CLASSIFIED,
+    STATUS_ISIN_MISMATCH,
+    STATUS_UNCLASSIFIED,
+    decide_status,
+    extract_classification,
+    parse_equity_master,
+)
 
 _MASTER = (
     b"SYMBOL,NAME OF COMPANY, SERIES, DATE OF LISTING, PAID UP VALUE, MARKET LOT,"
@@ -57,3 +65,48 @@ class TestExtractClassification:
     def test_empty_response_does_not_raise(self):
         out = extract_classification({})
         assert all(v is None for v in out.values())
+
+
+class TestClassificationStatus:
+    def test_error_yields_api_error_with_error_text(self):
+        status, message = decide_status("INE009A01021", None, "HTTP 500")
+        assert status == STATUS_API_ERROR
+        assert message == "HTTP 500"
+
+    def test_isin_mismatch_names_both_isins(self):
+        result = {level: "x" for level in
+                  ("macro_sector", "sector", "industry", "basic_industry")}
+        result["isin"] = "INE999Z01099"
+        status, message = decide_status("INE009A01021", result, None)
+        assert status == STATUS_ISIN_MISMATCH
+        assert "INE009A01021" in message
+        assert "INE999Z01099" in message
+
+    def test_all_four_levels_yields_classified(self):
+        result = {
+            "macro_sector": "Information Technology",
+            "sector": "Information Technology",
+            "industry": "IT - Software",
+            "basic_industry": "Computers - Software & Consulting",
+            "isin": "INE009A01021",
+        }
+        status, message = decide_status("INE009A01021", result, None)
+        assert status == STATUS_CLASSIFIED
+        assert message is None
+
+    def test_no_levels_yields_unclassified(self):
+        result = {
+            "macro_sector": None, "sector": None, "industry": None,
+            "basic_industry": None, "isin": "INE009A01021",
+        }
+        status, _ = decide_status("INE009A01021", result, None)
+        assert status == STATUS_UNCLASSIFIED
+
+    def test_missing_isin_is_not_a_mismatch(self):
+        result = {
+            "macro_sector": "Industrials", "sector": "Capital Goods",
+            "industry": "Electrical Equipment", "basic_industry": "Heavy Electrical Equipment",
+            "isin": None,
+        }
+        status, _ = decide_status("INE009A01021", result, None)
+        assert status == STATUS_CLASSIFIED

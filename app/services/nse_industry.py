@@ -143,3 +143,234 @@ async def fetch_classification(client: httpx.AsyncClient, symbol: str) -> tuple[
         except ValueError as exc:
             last_error = f"malformed response: {exc}"
     return None, last_error
+
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.holding import Holding
+from app.models.instrument import Instrument
+from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown, NseIndustryClassification
+from app.time_util import now_ist
+
+# Categories whose rows are a real Indian listed company. Equity - Foreign is
+# excluded because NSE has no classification for US stocks; Real Estate Trust is
+# excluded because the ingest already gives it a synthetic value at every level.
+_CLASSIFIABLE_CATEGORIES = {
+    "Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Arbitrage",
+}
+
+# Rows in these states are worth another attempt next run; CLASSIFIED never is,
+# because a company's industry does not change.
+_RETRY_STATUSES = {STATUS_UNCLASSIFIED, STATUS_API_ERROR, STATUS_ISIN_MISMATCH}
+
+
+def decide_status(isin: str, result: dict | None, error: str | None) -> tuple[str, str | None]:
+    """Decides a classification row's status from one fetch_classification result.
+
+    A response's ISIN is verified against the one we looked the symbol up by,
+    which is what keeps ISIN authoritative even though the request is addressed
+    by symbol — this is the guard, so it is kept separate from the DB loop so it
+    can be tested without a session. NSE occasionally omits metaData.isinCode
+    entirely; that is not treated as a mismatch, just classified on level data.
+    """
+    if error:
+        return STATUS_API_ERROR, error
+    if result["isin"] and result["isin"] != isin:
+        return STATUS_ISIN_MISMATCH, f"expected {isin}, NSE returned {result['isin']}"
+    if any(result[level] for level in CLASSIFICATION_LEVELS):
+        return STATUS_CLASSIFIED, None
+    return STATUS_UNCLASSIFIED, "NSE returned no industry data"
+
+
+async def _held_isins(db: AsyncSession) -> dict[str, str]:
+    """Returns {isin: display_name} for every Indian equity we hold, directly or
+    inside a fund. ISIN is the only identifier used — a holding without one cannot
+    be classified."""
+    held: dict[str, str] = {}
+
+    rows = await db.execute(
+        select(MfSchemeBreakdown.isin, MfSchemeBreakdown.name)
+        .where(
+            MfSchemeBreakdown.category.in_(_CLASSIFIABLE_CATEGORIES),
+            MfSchemeBreakdown.isin.is_not(None),
+        )
+        .distinct()
+    )
+    for isin, name in rows.all():
+        if isin.startswith("IN"):
+            held.setdefault(isin, name)
+
+    rows = await db.execute(
+        select(Instrument.isin, Instrument.name, Instrument.tradingsymbol)
+        .join(Holding, Holding.instrument_id == Instrument.id)
+        .where(Instrument.instrument_type == "STOCK", Instrument.isin.is_not(None))
+        .distinct()
+    )
+    for isin, name, tradingsymbol in rows.all():
+        if isin.startswith("IN"):
+            held.setdefault(isin, name or tradingsymbol or isin)
+
+    return held
+
+
+async def refresh_held_classifications(db: AsyncSession, on_progress=None) -> dict:
+    """Classify every held ISIN NSE hasn't told us about yet, then backfill.
+
+    Classification never changes for a company, so a CLASSIFIED row is never
+    re-fetched and no row is ever deleted. Only unclassified, errored and
+    ISIN-mismatched rows come back round on the next run.
+    """
+    held = await _held_isins(db)
+    if not held:
+        return {"held_isins": 0, "resolved": 0, "queried": 0, "classified": 0,
+                "unclassified": 0, "errors": 0, "mismatched": 0, "skipped_cached": 0,
+                "amfi_enriched": 0, "breakdown_backfilled": 0, "unresolved_isins": []}
+
+    existing = {
+        row.isin: row
+        for row in (await db.execute(select(NseIndustryClassification))).scalars().all()
+    }
+
+    classified = unclassified = errors = mismatched = 0
+    unresolved: list[dict] = []
+
+    async with new_client() as client:
+        try:
+            master = await fetch_equity_master(client)
+        except httpx.HTTPError as exc:
+            if on_progress:
+                await on_progress(f"NSE equity master unavailable ({exc}) — skipping classification")
+            return {"held_isins": len(held), "resolved": 0, "queried": 0, "classified": 0,
+                    "unclassified": 0, "errors": 0, "mismatched": 0, "skipped_cached": 0,
+                    "amfi_enriched": 0, "breakdown_backfilled": 0,
+                    "unresolved_isins": [], "error": str(exc)}
+
+        if on_progress:
+            await on_progress(f"NSE equity master: {len(master)} securities")
+
+        pending: list[tuple[str, str]] = []          # (isin, symbol)
+        skipped = 0
+        for isin in sorted(held):
+            entry = master.get(isin)
+            if not entry:
+                unresolved.append({"isin": isin, "name": held[isin]})
+                continue
+            row = existing.get(isin)
+            if row is not None and row.status not in _RETRY_STATUSES:
+                skipped += 1
+                continue
+            pending.append((isin, entry["symbol"]))
+
+        if on_progress:
+            await on_progress(
+                f"Held ISINs: {len(held)} total, {len(unresolved)} not on NSE, "
+                f"{skipped} already classified, {len(pending)} to fetch"
+            )
+
+        for done, (isin, symbol) in enumerate(pending, start=1):
+            result, error = await fetch_classification(client, symbol)
+            row = existing.get(isin)
+            if row is None:
+                row = NseIndustryClassification(isin=isin, first_seen_at=now_ist())
+                db.add(row)
+                existing[isin] = row
+            row.symbol = symbol
+            row.series = (master.get(isin) or {}).get("series")
+
+            status, error_message = decide_status(isin, result, error)
+            row.status, row.error_message = status, error_message
+            if status == STATUS_API_ERROR:
+                errors += 1
+            elif status == STATUS_ISIN_MISMATCH:
+                mismatched += 1
+            elif status == STATUS_CLASSIFIED:
+                for level in CLASSIFICATION_LEVELS:
+                    setattr(row, level, result[level])
+                row.company_name = result["company_name"] or (master.get(isin) or {}).get("company_name")
+                classified += 1
+            else:
+                unclassified += 1
+            row.updated_at = now_ist()
+
+            if done % 25 == 0:
+                await db.flush()
+                if on_progress:
+                    await on_progress(f"Classified {done}/{len(pending)} ISINs…")
+            await asyncio.sleep(NSE_REQUEST_DELAY_SECONDS)
+
+    await db.flush()
+    enriched, backfilled = await apply_classifications(db)
+    if on_progress:
+        await on_progress(
+            f"NSE classification: {classified} new, {unclassified} unclassified, "
+            f"{errors} errors, {mismatched} ISIN mismatches; enriched {enriched} AMFI rows "
+            f"and {backfilled} holding rows"
+        )
+
+    return {
+        "held_isins": len(held),
+        "resolved": len(held) - len(unresolved),
+        "queried": len(pending),
+        "classified": classified,
+        "unclassified": unclassified,
+        "errors": errors,
+        "mismatched": mismatched,
+        "skipped_cached": skipped,
+        "amfi_enriched": enriched,
+        "breakdown_backfilled": backfilled,
+        "unresolved_isins": sorted(unresolved, key=lambda r: r["isin"]),
+    }
+
+
+async def load_classification_lookup(db: AsyncSession) -> dict[str, dict]:
+    """Returns {isin: {level: value}} for every classified stock.
+
+    Replaces the old sector_master.csv loader. ISIN is the only key.
+    """
+    rows = (await db.execute(
+        select(NseIndustryClassification)
+        .where(NseIndustryClassification.status == STATUS_CLASSIFIED)
+    )).scalars().all()
+    return {
+        row.isin: {level: getattr(row, level) for level in CLASSIFICATION_LEVELS}
+        for row in rows
+    }
+
+
+async def apply_classifications(db: AsyncSession) -> tuple[int, int]:
+    """Push learned levels onto amfi_market_cap and mf_scheme_breakdown, by ISIN.
+
+    Runs at the end of a refresh so a cold start needs one ingest, not two. Mirrors
+    the write-back save_sector_overrides already does for manual sector fixes.
+    """
+    lookup = await load_classification_lookup(db)
+    if not lookup:
+        return 0, 0
+
+    enriched = 0
+    for row in (await db.execute(select(AmfiMarketCap))).scalars().all():
+        levels = lookup.get(row.isin or "")
+        if not levels:
+            continue
+        for level in CLASSIFICATION_LEVELS:
+            setattr(row, level, levels[level])
+        enriched += 1
+
+    backfilled = 0
+    breakdown = (await db.execute(
+        select(MfSchemeBreakdown).where(
+            MfSchemeBreakdown.category.in_(_CLASSIFIABLE_CATEGORIES),
+            MfSchemeBreakdown.isin.is_not(None),
+        )
+    )).scalars().all()
+    for row in breakdown:
+        levels = lookup.get(row.isin or "")
+        if not levels:
+            continue
+        for level in CLASSIFICATION_LEVELS:
+            setattr(row, level, levels[level])
+        backfilled += 1
+
+    await db.flush()
+    return enriched, backfilled
