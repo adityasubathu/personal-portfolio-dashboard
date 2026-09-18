@@ -1,13 +1,13 @@
 import { createTheme, type MantineColorsTuple } from '@mantine/core'
 
-const portfolioTeal: MantineColorsTuple = [
-  '#e8f7f3', '#d3eee7', '#a9dccf', '#7bc8b5', '#54b59e',
-  '#359f87', '#218b75', '#147362', '#0e5d50', '#0a4b41',
+const portfolioBlue: MantineColorsTuple = [
+  '#eef4ff', '#dbe6fb', '#b7cbf4', '#8dadea', '#6b93e2',
+  '#5583dd', '#487adb', '#3a68c2', '#315cae', '#254e9a',
 ]
 
 export const theme = createTheme({
-  colors: { portfolioTeal },
-  primaryColor: 'portfolioTeal',
+  colors: { portfolioBlue },
+  primaryColor: 'portfolioBlue',
   primaryShade: { light: 7, dark: 5 },
   defaultRadius: 'md',
   fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-18-23-37-05 — Neutral surfaces, blue navigation, system colour scheme
+
+- Retuned the design tokens: every surface, border and text colour in both themes is now neutral grey, with the blue tinge confined to the left navigation (`--nav-bg`, `--nav-hover`, `--nav-active`) and the Mantine primary swapped from `portfolioTeal` to `portfolioBlue`.
+- Replaced Mantine's grey NavLink hover, which was unreadable against the dark navigation panel, with a navigation-scoped blue hover.
+- Moved the shell to `layout="alt"` so the navigation panel reaches the top of the page and the top bar spans only the content column; added an in-panel burger since the open mobile panel now covers the header.
+- Cut the page gutters (`px` 32px → 10px) and dropped the 1600px content cap so tables use the full width.
+- Removed the ambient green from the dashboard: positive heat fills are blue (losses stay red), fill intensity softened to 7–18%, and the metric card tone moved from a coloured top stripe onto the value text. Gain/loss figures stay green/red.
+- The colour scheme now follows the operating system with no manual toggle; a pre-paint script in `index.html` sets the scheme attribute and a non-persisting colour scheme manager keeps `auto` from being overridden by a previously stored choice.
+
+---
+
 ## 2026-09-18-22-25-37 — Professional portfolio tracker UI redesign
 
 - Established the semantic light/dark design foundation and local system typography. (2026-09-18-22-38-36 · 3324d8f)

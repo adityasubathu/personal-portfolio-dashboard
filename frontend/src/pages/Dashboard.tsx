@@ -173,8 +173,8 @@ function HoldingsTable() {
   const { groups, pnl_pct_min, pnl_pct_max, day_chg_pct_min, day_chg_pct_max } = data
 
   function row(r: HoldingRow) {
-    const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rg')
-    const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg')
+    const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb')
+    const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb')
     return (
       <Table.Tr key={r.instrument_id}>
         <Table.Td fw={500} style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-panel)', maxWidth: 230 }}><Tooltip label={r.symbol}><Text truncate="end">{r.symbol}</Text></Tooltip></Table.Td>
@@ -182,7 +182,7 @@ function HoldingsTable() {
         <Table.Td style={{ textAlign: 'right' }}><NumQty value={r.qty} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumPrice value={r.avg_price} /></Table.Td>
         <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.cost} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rg') }}>
+        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
           <NumPct value={r.day_chg_pct} />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', color: (r.day_chg_abs ?? 0) >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
@@ -200,7 +200,7 @@ function HoldingsTable() {
         <Table.Td style={{ textAlign: 'right', color: r.pnl >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
           <NumMoney value={r.pnl} showSign />
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rg') }}>
+        <Table.Td style={{ textAlign: 'right', background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb') }}>
           <NumPct value={r.pnl_pct} />
         </Table.Td>
         <Table.Td style={{ textAlign: 'right', color: (r.xirr ?? 0) >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
@@ -481,7 +481,7 @@ function ManualAssets() {
                 const chg = fe.invested_usd > 0 ? fe.value_usd - fe.invested_usd : null
                 const chgPct = fe.invested_usd > 0 ? ((fe.value_usd - fe.invested_usd) / fe.invested_usd) * 100 : null
                 const fmt = (n: number) => privacyMode ? '$•••' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                const chgColor = chg == null ? undefined : chg >= 0 ? 'green' : 'red'
+                const chgColor = chg == null ? undefined : chg >= 0 ? 'var(--positive)' : 'var(--negative)'
                 if (editing) {
                   return (
                     <Table.Tr key={fe.id}>

@@ -16,7 +16,7 @@
 
 A self-hosted portfolio tracker for Indian investors. Imports trades from Zerodha Kite CSVs, syncs live prices from Kite and AMFI, tracks manual assets (FDs, PPF, NPS, cash), computes FIFO cost basis, XIRR, and portfolio NAV over time, and visualizes allocation by market-cap category.
 
-The frontend is a responsive, semantic light/dark workspace with local system typography, grouped drawer navigation below 768px, lazy-loaded routes, contained analytical tables, and privacy masking preserved across desktop and mobile views.
+The frontend is a responsive workspace that follows the operating system's light/dark preference with local system typography, grouped drawer navigation below 768px, lazy-loaded routes, contained analytical tables, and privacy masking preserved across desktop and mobile views.
 
 **Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Alembic · React 18 (Vite + TypeScript) · Mantine · TanStack Query · lightweight-charts · react-chartjs-2
 
