@@ -1,0 +1,8 @@
+/* Layer order is load-bearing: Mantine must outrank Tailwind's preflight
+   (so its components keep their own resets) but lose to Tailwind utilities. */
+@layer theme, base, mantine, components, utilities;
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
