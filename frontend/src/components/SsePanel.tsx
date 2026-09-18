@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react'
-import { ActionIcon, Alert, Box, Group, Loader, Paper, Text } from '@mantine/core'
-import { IconX } from '@tabler/icons-react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { Loader2, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Section } from './Section'
+import { cn } from '@/lib/utils'
 import type { SseState } from '../hooks/useSse'
 
 interface SsePanelProps<T> {
@@ -8,12 +10,12 @@ interface SsePanelProps<T> {
   heading?: string
   doneHeading?: string
   errorHeading?: string
-  maw?: number | string
+  className?: string
   onClose?: () => void
-  resultRenderer?: (result: T) => React.ReactNode
+  resultRenderer?: (result: T) => ReactNode
 }
 
-export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onClose, resultRenderer }: SsePanelProps<T>) {
+export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, className, onClose, resultRenderer }: SsePanelProps<T>) {
   const logRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -33,58 +35,49 @@ export function SsePanel<T>({ sse, heading, doneHeading, errorHeading, maw, onCl
       : (heading ?? 'Running…')
 
   return (
-    <Paper p="sm" mt="sm" maw={maw} style={{ background: 'var(--surface-panel)', border: '1px solid var(--border-subtle)' }}>
-      <Group justify="space-between" mb="xs">
-        <Group gap="xs">
-          {!isDone && <Loader size="xs" />}
-          <Text fw={600} size="sm">
-            {resolvedHeading}
-          </Text>
-        </Group>
-        {isDone && (
-          <ActionIcon
-            variant="subtle"
-            size="sm"
-            onClick={() => { sse.reset(); onClose?.() }}
+    <Section
+      className={cn('mt-2', className)}
+      title={
+        <span className="flex items-center gap-2">
+          {!isDone && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          {resolvedHeading}
+        </span>
+      }
+      action={
+        isDone && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => {
+              sse.reset()
+              onClose?.()
+            }}
             aria-label="Close operation panel"
           >
-            <IconX size={14} />
-          </ActionIcon>
-        )}
-      </Group>
-
+            <X className="size-3.5" />
+          </Button>
+        )
+      }
+    >
       {sse.logs.length > 0 && (
-        <Box
-          component="pre"
+        <pre
           ref={logRef}
-          style={{
-            maxHeight: 260,
-            overflowY: 'auto',
-            fontSize: '0.78rem',
-            lineHeight: 1.5,
-            background: 'var(--surface-sunken)',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--mantine-font-family-monospace)',
-            padding: '0.5rem',
-            borderRadius: 4,
-            margin: 0,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
+          className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap break-words text-muted-foreground"
         >
           {sse.logs.join('\n')}
-        </Box>
+        </pre>
       )}
 
       {sse.status === 'error' && (
-        <Alert color="red" mt="xs" title="Error">
-          {sse.error}
-        </Alert>
+        <div className={cn('rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive', sse.logs.length > 0 && 'mt-2')}>
+          <p className="font-semibold">Error</p>
+          <p>{sse.error}</p>
+        </div>
       )}
 
       {sse.status === 'done' && sse.result != null && resultRenderer && (
-        <Box mt="xs">{resultRenderer(sse.result)}</Box>
+        <div className={sse.logs.length > 0 ? 'mt-2' : undefined}>{resultRenderer(sse.result)}</div>
       )}
-    </Paper>
+    </Section>
   )
 }

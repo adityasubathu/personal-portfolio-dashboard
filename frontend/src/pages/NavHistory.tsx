@@ -233,7 +233,7 @@ export function NavHistory() {
             <HaltSyncButton />
           )}
         </Group>
-        <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" maw={560} />
+        <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" className="max-w-xl" />
       </Box>
 
       {/* OHLC fetch SSE */}
