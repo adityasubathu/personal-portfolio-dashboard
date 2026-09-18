@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Anchor, Badge, Group, Pagination, Stack, Table, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
+import { Anchor, Badge, Box, Pagination, Stack, Table, Text, TextInput, UnstyledButton } from '@mantine/core'
 import { useDebouncedValue } from '@mantine/hooks'
 import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-react'
 import { useTrades } from '../api/trades'
@@ -8,6 +8,8 @@ import { usePrivacy } from '../hooks/usePrivacy'
 import { inr } from '../lib/format'
 import { apiUrl } from '../api/client'
 import type { TradeOrderRow, TradeRow } from '../types/trades'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 function QtyText({ value }: { value: number }) {
   const { privacyMode } = usePrivacy()
@@ -98,13 +100,13 @@ export function Trades() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={3}>Trades</Title>
+      <PageHeader title="Trades" actions={
         <Anchor href={apiUrl('/api/v1/trades/template')} size="xs" download>
           Download CSV template
         </Anchor>
-      </Group>
+      } />
 
+      <Panel>
       <TextInput
         placeholder="Search symbol or ISIN…"
         leftSection={<IconSearch size={14} />}
@@ -118,7 +120,7 @@ export function Trades() {
       {data && (
         <>
           <Text size="xs" c="dimmed">{data.total} orders</Text>
-          <Table fz="xs" withColumnBorders={false} highlightOnHover>
+          <Box style={{ overflowX: 'auto' }}><Table fz="xs" withColumnBorders={false} highlightOnHover style={{ minWidth: 1050 }}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th />
@@ -144,7 +146,7 @@ export function Trades() {
                 />
               ))}
             </Table.Tbody>
-          </Table>
+          </Table></Box>
           {data.total_pages > 1 && (
             <Pagination
               total={data.total_pages}
@@ -154,7 +156,7 @@ export function Trades() {
             />
           )}
         </>
-      )}
+      )}</Panel>
     </Stack>
   )
 }

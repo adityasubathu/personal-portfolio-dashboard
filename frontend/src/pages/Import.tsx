@@ -1,13 +1,16 @@
 import { useRef, useState } from 'react'
 import {
   Alert, Badge, Box, Button, Group, NumberInput,
-  Stack, Table, Text, TextInput, Title,
+  Stack, Table, Text, TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconUpload, IconTrash } from '@tabler/icons-react'
 import { useImports, useImportMutation, useRollbackMutation, useSplitCreditMutation } from '../api/trades'
 import { useTradedInstruments } from '../api/portfolio'
 import type { ImportResponse } from '../types/trades'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
+import { ConfirmActionButton } from '../components/ConfirmActionButton'
 
 function ImportResult({ result }: { result: ImportResponse }) {
   return (
@@ -95,10 +98,10 @@ export function Import() {
 
   return (
     <Stack gap="lg" maw={800}>
-      <Title order={3}>Import Trades</Title>
+      <PageHeader title="Import Trades" />
 
       {/* Upload */}
-      <Box>
+      <Panel title="Upload CSV">
         <Text fw={600} mb="xs">Upload CSV</Text>
         <Group>
           <input ref={fileRef} type="file" accept=".csv" multiple style={{ fontSize: '0.85rem' }} />
@@ -112,12 +115,11 @@ export function Import() {
           </Button>
         </Group>
         {importResult && <ImportResult result={importResult} />}
-      </Box>
+      </Panel>
 
       {/* Import history */}
       {imports && imports.length > 0 && (
-        <Box>
-          <Text fw={600} mb="xs">Import History</Text>
+        <Panel title="Import History">
           <Table fz="xs" withColumnBorders={false}>
             <Table.Thead>
               <Table.Tr>
@@ -142,27 +144,27 @@ export function Import() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    <Button
+                    <ConfirmActionButton
                       size="xs"
                       variant="subtle"
                       color="red"
                       leftSection={<IconTrash size={12} />}
-                      loading={rollbackMut.isPending}
-                      onClick={() => handleRollback(log.batch_id)}
+                      confirmTitle="Rollback import?"
+                      confirmDescription={`Rollback ${log.filename ?? 'this import'} and its imported trades?`}
+                      onConfirm={() => handleRollback(log.batch_id)}
                     >
                       Rollback
-                    </Button>
+                    </ConfirmActionButton>
                   </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
-        </Box>
+        </Panel>
       )}
 
       {/* Split credit */}
-      <Box>
-        <Text fw={600} mb="xs">Record Split / Bonus Credit</Text>
+      <Panel title="Record Split / Bonus Credit">
         <Group align="flex-end" wrap="nowrap">
           <Box style={{ minWidth: 180 }}>
             <Text size="xs" mb={4}>Instrument</Text>
@@ -204,7 +206,7 @@ export function Import() {
         {splitResult && (
           <Text size="xs" mt="xs" c="dimmed">{splitResult}</Text>
         )}
-      </Box>
+      </Panel>
     </Stack>
   )
 }
