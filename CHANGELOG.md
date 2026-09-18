@@ -2,6 +2,11 @@
 
 ---
 
+## 2026-09-18-18-25-17 — Exclude derivative/futures legs from equity-only sector views
+- `get_sector_composition` and `get_sector_stock_breakdown` now exclude `Derivatives - Leveraged` rows alongside `Equity - Arbitrage`, fixing a leak where a fund's futures/derivative leg (e.g. an unclassified-sector position with no real equity exposure) showed up as a stock holding in the Sector tab's `Unknown` bucket. (2026-09-18-18-25-17 · TBD)
+
+---
+
 ## 2026-09-18-17-39-25 — Multi-level classification overrides and the Others bucket
 - `equity_sector_override` now holds a manual fix at any of the four NSE levels instead of sector alone, and a new taxonomy parent map cascades a chosen value up its NSE hierarchy. (2026-09-18-17-39-25 · 0e345cc)
 - `PATCH /sector-classify-batch` accepts `{name, level, value}` and cascades the save up the hierarchy; `GET /sector-list?level=` now offers NSE's full taxonomy at any of the four levels. (2026-09-18-17-41-01 · 005012f)

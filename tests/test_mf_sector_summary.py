@@ -1,7 +1,7 @@
 """Tests for the per-fund sector donut grouping — pure function, no DB required."""
 import pytest
 
-from app.services.composition import NON_EQUITY_LABEL, _summarize_sectors
+from app.services.composition import NON_EQUITY_LABEL, _NON_EQUITY_CATEGORIES, _summarize_sectors
 
 
 def row(category, sector, pct, value=None):
@@ -73,6 +73,21 @@ class TestNonEquityBucket:
     def test_gold_etf_is_entirely_non_equity(self):
         out = _summarize_sectors([row("Gold", "Gold", 100.0)])
         assert out == [{"sector": NON_EQUITY_LABEL, "pct": 100.0, "value": 10000.0}]
+
+
+class TestNonEquityCategoriesExcludedFromEquitySectorRollups:
+    """get_sector_composition and get_sector_stock_breakdown filter breakdown rows
+    on this set before aggregating into the equity-only Sector tab. Regression
+    guard for a bug where a Derivatives - Leveraged row (a futures/derivative
+    position, not a stock) leaked into the equity-only "Unknown" sector bucket
+    because only Equity - Arbitrage was excluded."""
+
+    def test_contains_both_non_equity_categories(self):
+        assert _NON_EQUITY_CATEGORIES == {"Equity - Arbitrage", "Derivatives - Leveraged"}
+
+    def test_no_overlap_with_equity_categories(self):
+        from app.services.composition import _EQUITY_CATEGORIES
+        assert not (_NON_EQUITY_CATEGORIES & _EQUITY_CATEGORIES)
 
 
 class TestDropRules:
