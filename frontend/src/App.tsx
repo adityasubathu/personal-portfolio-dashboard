@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
-import { Skeleton, Stack } from '@mantine/core'
 import { Routes, Route } from 'react-router-dom'
 import { AppLayout } from './components/AppLayout'
+import { Skeleton } from '@/components/ui/skeleton'
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const NavHistory = lazy(() => import('./pages/NavHistory').then((m) => ({ default: m.NavHistory })));
 const Breakdown = lazy(() => import('./pages/Breakdown').then((m) => ({ default: m.Breakdown })));
@@ -16,7 +16,16 @@ const PolicyTracker = lazy(() => import('./pages/PolicyTracker').then((m) => ({ 
 const MarketSentiment = lazy(() => import('./pages/MarketSentiment').then((m) => ({ default: m.MarketSentiment })));
 const CapitalGains = lazy(() => import('./pages/CapitalGains').then((m) => ({ default: m.CapitalGains })));
 
-function PageSkeleton() { return <Stack gap="lg"><Skeleton height={32} width={220} /><Skeleton height={180} /><Skeleton height={180} /><Skeleton height={180} /></Stack> }
+function PageSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <Skeleton className="h-8 w-56" />
+      <Skeleton className="h-44 w-full" />
+      <Skeleton className="h-44 w-full" />
+      <Skeleton className="h-44 w-full" />
+    </div>
+  )
+}
 
 function App() {
   return (
