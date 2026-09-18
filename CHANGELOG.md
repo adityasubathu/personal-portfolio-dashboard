@@ -2,6 +2,11 @@
 
 ---
 
+## 2026-09-18-17-39-25 — Multi-level classification overrides and the Others bucket
+- `equity_sector_override` now holds a manual fix at any of the four NSE levels instead of sector alone, and a new taxonomy parent map cascades a chosen value up its NSE hierarchy. (2026-09-18-17-39-25 · 0e345cc)
+
+---
+
 ## 2026-09-18-15-49-24 — NSE industry classification
 - Added `nse_industry_classification`, keyed by ISIN, and widened the sector columns on `amfi_market_cap` and `mf_scheme_breakdown` to hold all four NSE taxonomy levels; `mf_scheme_breakdown` now also carries each holding's own ISIN. (2026-09-18-15-49-24 · 79ea2ef)
 - Added `app/services/nse_industry.py`, isolating every NSE HTTP detail: the equity-master ISIN→symbol index and the per-symbol four-level classification fetch. (2026-09-18-15-50-35 · e2392b7)

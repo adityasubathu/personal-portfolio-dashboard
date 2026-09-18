@@ -1,17 +1,23 @@
 import json
 from collections import defaultdict
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app_config import AppConfig
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown, NseIndustryClassification
 from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, normalize_company_name
-from app.services.nse_industry import CLASSIFICATION_LEVELS, load_classification_lookup
+from app.services.nse_industry import (
+    CLASSIFICATION_LEVELS,
+    STATUS_CLASSIFIED,
+    cascade_levels,
+    load_classification_lookup,
+    load_taxonomy_parents,
+)
 from app.time_util import now_ist
 
 
@@ -454,52 +460,88 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
     return out
 
 
-async def save_sector_overrides(db: AsyncSession, rows: list[dict]) -> int:
-    """Upsert manual sector overrides and apply them to matching MfSchemeBreakdown rows."""
-    override_rows = [
-        {
-            "name_normalized": normalize_company_name(r["name"]),
-            "raw_name": r["name"],
-            "sector": r["sector"],
-            "updated_at": now_ist(),
-        }
-        for r in rows
-    ]
-    if override_rows:
-        stmt = pg_insert(EquitySectorOverride).values(override_rows)
-        await db.execute(stmt.on_conflict_do_update(
-            index_elements=["name_normalized"],
-            set_={
-                "raw_name": stmt.excluded.raw_name,
-                "sector": stmt.excluded.sector,
-                "updated_at": stmt.excluded.updated_at,
+async def save_sector_overrides(db: AsyncSession, rows: list[dict]) -> dict:
+    """Store manual taxonomy fixes and apply them to matching breakdown rows.
+
+    Each row is {"name", "level", "value"}. The chosen value cascades up NSE's
+    hierarchy, so classifying at Industry also fills Sector and Macro. Levels
+    already set on the override row survive a partial re-save.
+    """
+    parents = await load_taxonomy_parents(db)
+
+    merged_by_name: dict[str, dict] = {}
+    for r in rows:
+        value = (r.get("value") or "").strip()
+        if not value:
+            continue
+        level = _resolve_level(r.get("level") or "sector")
+        norm = normalize_company_name(r["name"])
+        entry = merged_by_name.setdefault(
+            norm,
+            {
+                "name_normalized": norm,
+                "raw_name": r["name"],
+                **{lvl: None for lvl in CLASSIFICATION_LEVELS},
             },
-        ))
-
-    norm_to_sector = {normalize_company_name(r["name"]): r["sector"] for r in rows}
-    unknown_rows = (await db.execute(
-        select(MfSchemeBreakdown).where(
-            or_(MfSchemeBreakdown.sector.is_(None), MfSchemeBreakdown.sector == "Unknown")
         )
-    )).scalars().all()
+        for lvl, val in cascade_levels(parents, level, value).items():
+            if val:
+                entry[lvl] = val
 
-    updated = 0
-    for row in unknown_rows:
-        norm = normalize_company_name(row.name)
-        if norm in norm_to_sector:
-            row.sector = norm_to_sector[norm]
-            updated += 1
+    if not merged_by_name:
+        return {"updated": 0, "rows_updated": 0}
+
+    override_rows = [{**entry, "updated_at": now_ist()} for entry in merged_by_name.values()]
+    stmt = pg_insert(EquitySectorOverride).values(override_rows)
+    await db.execute(stmt.on_conflict_do_update(
+        index_elements=["name_normalized"],
+        set_={
+            "raw_name": stmt.excluded.raw_name,
+            "updated_at": stmt.excluded.updated_at,
+            # COALESCE keeps a level set by an earlier save when this one leaves it blank.
+            **{
+                lvl: func.coalesce(getattr(stmt.excluded, lvl), getattr(EquitySectorOverride, lvl))
+                for lvl in CLASSIFICATION_LEVELS
+            },
+        },
+    ))
+
+    breakdown = (await db.execute(select(MfSchemeBreakdown))).scalars().all()
+    rows_updated = 0
+    for row in breakdown:
+        entry = merged_by_name.get(normalize_company_name(row.name))
+        if not entry:
+            continue
+        touched = False
+        for lvl in CLASSIFICATION_LEVELS:
+            value = entry.get(lvl)
+            if value and getattr(row, lvl) in (None, "Unknown"):
+                setattr(row, lvl, value)
+                touched = True
+        if touched:
+            rows_updated += 1
 
     await db.commit()
-    return updated
+    return {"updated": len(merged_by_name), "rows_updated": rows_updated}
 
 
-async def get_sector_list(db: AsyncSession) -> list[str]:
-    """Return sorted distinct sector names currently in mf_scheme_breakdown, excluding Unknown."""
-    rows = await db.execute(
-        select(MfSchemeBreakdown.sector)
-        .where(MfSchemeBreakdown.sector.is_not(None), MfSchemeBreakdown.sector != "Unknown")
-        .distinct()
-        .order_by(MfSchemeBreakdown.sector)
+async def get_sector_list(db: AsyncSession, level: str = "sector") -> list[str]:
+    """Values selectable at a taxonomy level: everything NSE has classified, plus
+    anything already sitting on a holding row. Feeds the manual-classify dropdown."""
+    level = _resolve_level(level)
+    breakdown_col = getattr(MfSchemeBreakdown, level)
+    nse_col = getattr(NseIndustryClassification, level)
+
+    values: set[str] = set()
+    statements = (
+        select(breakdown_col).where(breakdown_col.is_not(None)).distinct(),
+        select(nse_col).where(
+            nse_col.is_not(None),
+            NseIndustryClassification.status == STATUS_CLASSIFIED,
+        ).distinct(),
     )
-    return [r for (r,) in rows.all() if r]
+    for stmt in statements:
+        for (value,) in (await db.execute(stmt)).all():
+            if value and value != "Unknown":
+                values.add(value)
+    return sorted(values)

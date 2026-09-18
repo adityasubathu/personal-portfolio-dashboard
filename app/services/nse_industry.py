@@ -404,7 +404,10 @@ async def apply_classifications(db: AsyncSession) -> tuple[int, int]:
         if not levels:
             continue
         for level in CLASSIFICATION_LEVELS:
-            setattr(row, level, levels[level])
+            # A CLASSIFIED row can still be blank at some levels; writing that blank
+            # would erase a manual override. Stale overrides are pruned at ingest.
+            if levels[level]:
+                setattr(row, level, levels[level])
         enriched += 1
 
     backfilled = 0
@@ -419,7 +422,10 @@ async def apply_classifications(db: AsyncSession) -> tuple[int, int]:
         if not levels:
             continue
         for level in CLASSIFICATION_LEVELS:
-            setattr(row, level, levels[level])
+            # A CLASSIFIED row can still be blank at some levels; writing that blank
+            # would erase a manual override. Stale overrides are pruned at ingest.
+            if levels[level]:
+                setattr(row, level, levels[level])
         backfilled += 1
 
     await db.flush()

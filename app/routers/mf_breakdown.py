@@ -97,13 +97,12 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
 @router.patch("/sector-classify-batch")
 async def sector_classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     body = await request.json()
-    updated = await save_sector_overrides(db, body)
-    return {"updated": updated}
+    return await save_sector_overrides(db, body)
 
 
 @router.get("/sector-list")
-async def sector_list(db: AsyncSession = Depends(get_db)):
-    sectors = await get_sector_list(db)
+async def sector_list(level: str = "sector", db: AsyncSession = Depends(get_db)):
+    sectors = await get_sector_list(db, level=level)
     return JSONResponse(sectors)
 
 

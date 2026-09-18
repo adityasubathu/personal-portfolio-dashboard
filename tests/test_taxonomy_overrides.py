@@ -43,3 +43,30 @@ class TestCascadeLevels:
         out = cascade_levels(PARENTS, "sector", "Something NSE Never Told Us")
         assert out["sector"] == "Something NSE Never Told Us"
         assert out["macro_sector"] is None
+
+
+class TestMergeSemantics:
+    """save_sector_overrides folds cascade_levels results for the same company into
+    one entry, later non-blank values winning per level. No DB — this mirrors the
+    merge loop over pure cascade_levels output."""
+
+    def _merge(self, *cascades):
+        entry = {lvl: None for lvl in CLASSIFICATION_LEVELS}
+        for cascade in cascades:
+            for lvl, val in cascade.items():
+                if val:
+                    entry[lvl] = val
+        return entry
+
+    def test_two_saves_at_different_levels_both_survive(self):
+        first = cascade_levels(PARENTS, "sector", "Metals & Mining")
+        second = cascade_levels(PARENTS, "basic_industry", "Copper")
+        merged = self._merge(first, second)
+        assert merged["sector"] == "Metals & Mining"
+        assert merged["basic_industry"] == "Copper"
+        assert merged["industry"] == "Diversified Metals"
+
+    def test_blank_value_is_skipped(self):
+        merged = self._merge({"sector": "Metals & Mining", "macro_sector": None, "industry": None, "basic_industry": None})
+        assert merged["sector"] == "Metals & Mining"
+        assert merged["macro_sector"] is None
