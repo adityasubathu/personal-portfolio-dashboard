@@ -1,5 +1,22 @@
 import type { ReactNode } from 'react'
-import { Box, Center, Stack, Text } from '@mantine/core'
-import { Panel } from './Panel'
-interface EmptyStateProps { icon: ReactNode; title: string; description: string; action?: ReactNode }
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) { return <Panel><Center py="xl"><Stack align="center" maw={440} ta="center"><Box p="sm" style={{ display: 'grid', placeItems: 'center', width: 44, height: 44, borderRadius: 12, background: 'var(--surface-sunken)', color: 'var(--text-muted)' }}>{icon}</Box><Text fw={600}>{title}</Text><Text c="dimmed" size="sm">{description}</Text>{action}</Stack></Center></Panel> }
+import { Section } from './Section'
+
+interface EmptyStateProps {
+  icon: ReactNode
+  title: string
+  description: string
+  action?: ReactNode
+}
+
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+  return (
+    <Section>
+      <div className="flex flex-col items-center gap-2 py-10 text-center">
+        <div className="grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">{icon}</div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
+        {action}
+      </div>
+    </Section>
+  )
+}

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Group, Stack, Text, Title } from '@mantine/core'
 
 interface PageHeaderProps {
   title: string
@@ -9,5 +8,14 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, description, meta, actions }: PageHeaderProps) {
-  return <Group justify="space-between" align="flex-start" wrap="wrap" gap="md"><Stack gap={4}><Title order={2} style={{ fontSize: 'clamp(1.5rem, 2vw, 1.75rem)' }}>{title}</Title>{description && <Text c="dimmed" size="sm">{description}</Text>}{meta && <Text c="dimmed" size="xs">{meta}</Text>}</Stack>{actions && <Group wrap="wrap">{actions}</Group>}</Group>
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        {meta && <p className="text-xs text-muted-foreground">{meta}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  )
 }

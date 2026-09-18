@@ -1,9 +1,39 @@
 import type { ReactNode } from 'react'
-import { Skeleton, Stack, Text } from '@mantine/core'
-import { Panel } from './Panel'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Section } from './Section'
+import { cn } from '@/lib/utils'
 
-interface MetricCardProps { label: ReactNode; value: ReactNode; detail?: ReactNode; tone?: 'neutral' | 'positive' | 'negative' | 'warning'; loading?: boolean }
-const tones = { neutral: undefined, positive: 'var(--positive)', negative: 'var(--negative)', warning: 'var(--warning)' }
+interface MetricCardProps {
+  label: ReactNode
+  value: ReactNode
+  detail?: ReactNode
+  tone?: 'neutral' | 'positive' | 'negative' | 'warning'
+  loading?: boolean
+}
+
+const toneClass = {
+  neutral: '',
+  positive: 'text-positive',
+  negative: 'text-negative',
+  warning: 'text-warning',
+}
+
 export function MetricCard({ label, value, detail, tone = 'neutral', loading }: MetricCardProps) {
-  return <Panel>{loading ? <Stack gap="xs"><Skeleton height={12} width="45%" /><Skeleton height={28} width="70%" /><Skeleton height={12} width="55%" /></Stack> : <Stack gap={3}><Text c="dimmed" size="xs">{label}</Text><Text data-numeric fw={650} c={tones[tone]} style={{ fontSize: 'clamp(1.375rem, 2vw, 1.625rem)', lineHeight: 1.2 }}>{value}</Text>{detail && <Text c="dimmed" size="xs">{detail}</Text>}</Stack>}</Panel>
+  return (
+    <Section bodyClassName="p-4">
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-2/5" />
+          <Skeleton className="h-7 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p data-numeric className={cn('text-2xl font-semibold leading-tight', toneClass[tone])}>{value}</p>
+          {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+        </div>
+      )}
+    </Section>
+  )
 }

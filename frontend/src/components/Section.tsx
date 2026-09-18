@@ -1,25 +1,19 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-/**
- * Compatibility shim for pages not yet migrated off Panel (deleted in Stage 24).
- * Mirrors Section's markup but also accepts the legacy Mantine `style`/`p` props
- * some unmigrated call sites still pass.
- */
-interface PanelProps {
+interface SectionProps {
   title?: ReactNode
   description?: ReactNode
   action?: ReactNode
   children: ReactNode
-  style?: CSSProperties
   className?: string
-  p?: string
+  bodyClassName?: string
 }
 
-export function Panel({ title, description, action, children, style, className }: PanelProps) {
+export function Section({ title, description, action, children, className, bodyClassName }: SectionProps) {
   const hasHeader = title || description || action
   return (
-    <section className={cn('rounded-xl border bg-card text-card-foreground', className)} style={style}>
+    <section className={cn('rounded-xl border bg-card text-card-foreground', className)}>
       {hasHeader && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
           <div className="min-w-0">
@@ -29,7 +23,7 @@ export function Panel({ title, description, action, children, style, className }
           {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
         </header>
       )}
-      <div className="p-4">{children}</div>
+      <div className={cn('p-4', bodyClassName)}>{children}</div>
     </section>
   )
 }
