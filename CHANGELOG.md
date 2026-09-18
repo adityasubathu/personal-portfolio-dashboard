@@ -12,7 +12,7 @@
 - **Other backend duplication** — `_refresh_ltp_and_xirr` (the shared tail of both price-sync streams), `_store_payload` in `usdinr.py`, `_comparison_row` for the three target-vs-actual row builders that each spelled out the same 13 keys, and `_adopt` for the ISIN backfill repeated three times in `instrument_registry.py`.
 - **Frontend duplication** — `ClassifySelectPanel` behind the two ~75-line classify panels in `Breakdown.tsx`, `TargetsTableHead` for its two identical 11-line table heads, `InfoPopover` behind `ChartInfo`/`FlagChip`, `OscillatorChart` for the five oscillator panels that each repeated the same six chart props, `toJson` in `api/client.ts`, and one `invalidateTradesAndPortfolio` in place of three copies.
 - Deleted the untracked build/cache junk — all `__pycache__` trees (several held `.pyc` files for modules removed long ago, e.g. `templating`, `get_current_portfolio_reports`), `.pytest_cache`, and six `.DS_Store` files. No tracked file was unused: every module has an importer, every `data/demo` JSON is referenced by `demo_seed.py`, and the Alembic chain is a single unbroken line.
-- `README.md` — dropped `GET /` from the USDINR endpoint table and corrected the two `usdinr.py` tree comments.
+- `README.md` — dropped `GET /` from the USDINR endpoint table and corrected the two `usdinr.py` tree comments. (2026-09-18-18-37-35 · f8f06ea)
 
 ---
 
