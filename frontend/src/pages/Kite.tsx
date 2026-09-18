@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   ActionIcon, Alert, Badge, Box, Button, Group, Paper, PasswordInput,
-  Stack, Table, Text, TextInput, Title,
+  Stack, Table, Text, TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconRefresh, IconLogin, IconTrash, IconX, IconFlask } from '@tabler/icons-react'
@@ -13,6 +13,9 @@ import {
   useKiteSyncMutation,
 } from '../api/kite'
 import { useAppStatus } from '../api/status'
+import { ConfirmActionButton } from '../components/ConfirmActionButton'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 export function Kite() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -40,15 +43,11 @@ export function Kite() {
     }
   }, [searchParams, setSearchParams, refetch])
 
-  // Pre-fill API key if configured
-  useEffect(() => {
-    if (status?.api_key) setApiKey(status.api_key)
-  }, [status?.api_key])
-
   async function handleSave() {
-    if (!apiKey || !apiSecret) return
+    const key = apiKey || status?.api_key
+    if (!key || !apiSecret) return
     try {
-      await saveMut.mutateAsync({ api_key: apiKey, api_secret: apiSecret })
+      await saveMut.mutateAsync({ api_key: key, api_secret: apiSecret })
       setApiSecret('')
       notifications.show({ color: 'green', message: 'Config saved.' })
     } catch (e) {
@@ -73,7 +72,7 @@ export function Kite() {
   if (demoMode) {
     return (
       <Stack gap="lg" maw={560}>
-        <Title order={3}>Kite Integration</Title>
+        <PageHeader title="Kite Integration" />
         <Alert icon={<IconFlask size={14} />} color="violet" variant="light" title="Demo mode">
           Kite integration is disabled in demo mode. The app is running with sample data — no live prices or sync available.
         </Alert>
@@ -83,12 +82,11 @@ export function Kite() {
 
   return (
     <Stack gap="lg" maw={560}>
-      <Title order={3}>Kite Integration</Title>
+      <PageHeader title="Kite Integration" />
 
       {/* Status */}
       {status && (
-        <Box>
-          <Text fw={600} mb="xs">Status</Text>
+        <Panel title="Status">
           <Group gap="xs">
             <Badge color={status.configured ? 'blue' : 'gray'} variant="light">
               {status.configured ? 'Configured' : 'Not configured'}
@@ -106,16 +104,15 @@ export function Kite() {
               {status.last_sync.error_message && ` — ${status.last_sync.error_message}`}
             </Text>
           )}
-        </Box>
+        </Panel>
       )}
 
       {/* Config form */}
-      <Box>
-        <Text fw={600} mb="xs">API Credentials</Text>
+      <Panel title="API Credentials">
         <Stack gap="xs">
           <TextInput
             label="API Key"
-            value={apiKey}
+            value={apiKey || status?.api_key || ''}
             onChange={(e) => setApiKey(e.currentTarget.value)}
             size="xs"
           />
@@ -131,20 +128,21 @@ export function Kite() {
               Save
             </Button>
             {status?.configured && (
-              <Button
+              <ConfirmActionButton
                 size="xs"
                 variant="light"
                 color="red"
                 leftSection={<IconTrash size={12} />}
-                loading={deleteMut.isPending}
-                onClick={handleDelete}
+                confirmTitle="Delete Kite configuration?"
+                confirmDescription="Saved Kite configuration will be removed."
+                onConfirm={handleDelete}
               >
                 Delete config
-              </Button>
+              </ConfirmActionButton>
             )}
           </Group>
         </Stack>
-      </Box>
+      </Panel>
 
       {/* Auth */}
       {status?.configured && (
@@ -174,8 +172,7 @@ export function Kite() {
 
       {/* Sync */}
       {status?.configured && status.token_valid && (
-        <Box>
-          <Text fw={600} mb="xs">Sync Holdings</Text>
+        <Panel title="Sync Holdings">
           <Button
             size="sm"
             leftSection={<IconRefresh size={14} />}
@@ -247,7 +244,7 @@ export function Kite() {
               )}
             </Paper>
           )}
-        </Box>
+        </Panel>
       )}
     </Stack>
   )

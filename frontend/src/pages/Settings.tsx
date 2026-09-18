@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Box, Button, Group, Modal, Stack, Text, Title } from '@mantine/core'
+import { Box, Button, Group, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconFlask } from '@tabler/icons-react'
 import {
@@ -12,6 +12,9 @@ import {
 } from '../api/settings'
 import { useAppStatus, useResetDemoMutation } from '../api/status'
 import type { DeleteResult } from '../types/charts'
+import { ConfirmActionButton } from '../components/ConfirmActionButton'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 interface DangerButtonProps {
   label: string
@@ -20,19 +23,12 @@ interface DangerButtonProps {
 }
 
 function DangerButton({ label, description, mutate }: DangerButtonProps) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-
   async function confirm() {
-    setLoading(true)
     try {
       const r = await mutate()
       notifications.show({ color: 'green', message: r.message })
-      setOpen(false)
     } catch (e) {
       notifications.show({ color: 'red', message: String(e) })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -43,16 +39,8 @@ function DangerButton({ label, description, mutate }: DangerButtonProps) {
           <Text size="sm" fw={500}>{label}</Text>
           <Text size="xs" c="dimmed">{description}</Text>
         </div>
-        <Button color="red" variant="light" size="xs" onClick={() => setOpen(true)}>Delete</Button>
+        <ConfirmActionButton color="red" variant="light" size="xs" confirmTitle={`Confirm: ${label}`} confirmDescription={`${description} This cannot be undone.`} onConfirm={confirm}>Delete</ConfirmActionButton>
       </Group>
-
-      <Modal opened={open} onClose={() => setOpen(false)} title={`Confirm: ${label}`} size="sm">
-        <Text size="sm" mb="md">{description} This cannot be undone.</Text>
-        <Group justify="flex-end">
-          <Button variant="default" size="xs" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button color="red" size="xs" loading={loading} onClick={confirm}>Delete</Button>
-        </Group>
-      </Modal>
     </>
   )
 }
@@ -83,12 +71,12 @@ export function Settings() {
 
   return (
     <Stack gap="lg" maw={600}>
-      <Title order={3}>Settings</Title>
+      <PageHeader title="Settings" />
 
       {db && (
-        <Alert title="Database" color="blue" variant="light">
+        <Panel title="Database">
           <Text size="xs">Host: {db.host}:{db.port} / Database: {db.name}</Text>
-        </Alert>
+        </Panel>
       )}
 
       {demoMode && (
@@ -104,8 +92,7 @@ export function Settings() {
         </Box>
       )}
 
-      <Box>
-        <Text fw={600} mb="xs">Danger Zone</Text>
+      <Panel title="Danger Zone" style={{ borderLeft: '3px solid var(--negative)' }}>
         <DangerButton
           label="Delete all trades"
           description="Removes all trades, holdings, import logs, and orphan instruments."
@@ -131,7 +118,7 @@ export function Settings() {
           description="Removes all FD, PPF, NPS, and cash entries."
           mutate={() => deleteManualAssetsMut.mutateAsync()}
         />
-      </Box>
+      </Panel>
     </Stack>
   )
 }

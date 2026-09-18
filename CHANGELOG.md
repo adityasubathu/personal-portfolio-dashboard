@@ -13,6 +13,7 @@
 - Redesigned portfolio exploration routes with shared panels and selection empty states. (2026-09-18-23-08-24 · pending)
 - Redesigned tax and policy views with shared decision surfaces. (2026-09-18-23-11-03 · pending)
 - Redesigned trade and import workflows with safer operational actions. (2026-09-18-23-13-19 · pending)
+- Redesigned Kite and Settings administration surfaces with shared confirmations. (2026-09-18-23-17-11 · pending)
 
 ---
 
