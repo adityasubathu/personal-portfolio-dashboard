@@ -2,6 +2,11 @@
 
 ---
 
+## 2026-09-18-15-49-24 — NSE industry classification
+- Added `nse_industry_classification`, keyed by ISIN, and widened the sector columns on `amfi_market_cap` and `mf_scheme_breakdown` to hold all four NSE taxonomy levels; `mf_scheme_breakdown` now also carries each holding's own ISIN. (2026-09-18-15-49-24 · 79ea2ef)
+
+---
+
 ## 2026-09-16 — Dead-code audit: unused files, orphaned endpoints, stale duplicates
 
 - **Deleted files** — `app/schemas/capital_gains.py` (six models, never imported: the capital-gains router returns raw `JSONResponse`), `app/services/mf_breakdown.py` (a pure re-export shim over `mf_ingest`/`allocation`/`composition`; its two importers now import from those directly), `scripts/migrate_sqlite_to_pg.py` (one-time SQLite→PG migration, and its docstring still describes a `create_all` startup path that Alembic replaced), `run_local.sh` (an Ollama/qwen `claude --resume` helper unrelated to the app), and the Vite scaffold leftovers `frontend/src/index.css`, `frontend/src/App.css`, `frontend/src/assets/{react.svg,vite.svg,hero.png}`, `frontend/public/icons.svg`, `frontend/README.md` — none of which were imported or referenced anywhere.
