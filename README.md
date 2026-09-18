@@ -156,7 +156,7 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector, Composition
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector), Composition
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
@@ -318,8 +318,8 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /rebalance-plan` | Cash injection needed to zero out allocation drift (`?mode=anchored\|free_float&cash=`) |
 | `POST /asset-class-targets` | Save asset class targets (also saves `Equity - Foreign` to `allocation_targets`) |
 | `GET /category-composition` | Per-category breakdown by contributing scheme |
-| `GET /sector-composition` | Per-sector breakdown |
-| `GET /sector-stock-breakdown` | Per-sector individual stock holdings |
+| `GET /sector-composition` | Per-sector breakdown (`?level=macro_sector\|sector\|industry\|basic_industry`, defaults to `sector`) |
+| `GET /sector-stock-breakdown` | Per-sector individual stock holdings (`?level=` as above) |
 | `GET /schemes` | Schemes with breakdown data |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list + market-cap/asset-class and sector summaries |
 
@@ -390,7 +390,13 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Click "Sync price history (Kite)" → opens EventSource → server acquires async lock (rejects duplicate syncs) → for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → stream progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. A Halt button POSTs to `/sync-price-history/cancel` to stop mid-run. After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding.
 
 ### MF Breakdown
-Sync AMFI xlsx → enrich with sector → write `company_master.csv`. Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`.
+"Refresh disclosures" runs three steps in order, all inside one SSE stream (`GET /ingest/stream`):
+
+1. **AMFI sync.** Load the local xlsx → enrich each company's `sector`/`macro_sector`/`industry`/`basic_industry` by ISIN from `nse_industry_classification` → write `company_master.csv`.
+2. **OpenFin disclosures.** Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`. Each row also records the holding's own `isin`, straight from OpenFin.
+3. **NSE classification.** Collect every ISIN held directly or inside a fund → skip any already `CLASSIFIED` → resolve the rest to an NSE symbol via the equity master and fetch the four-level taxonomy → verify the response's ISIN matches the one queried (mismatches are recorded, never applied) → write results to `nse_industry_classification` → backfill the four levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. A `CLASSIFIED` row is permanent and never re-fetched; `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH` rows are retried on every subsequent refresh, since a company that NSE currently has no data for could get classified later — a handful of names can stay in this retry state indefinitely if NSE genuinely never returns taxonomy data for them.
+
+Steps 1 and 2 must complete before step 3, since step 3's backfill needs both a populated `amfi_market_cap` and `isin` values on `mf_scheme_breakdown`. First run classifies roughly 750 ISINs (~6 minutes); later runs only query ISINs new to the portfolio, typically seconds.
 
 Classification is per-holding, driven by the API's `holding_type`/`section`, not per-fund: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; a non-`IN` ISIN prefix is also treated as foreign; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
 
