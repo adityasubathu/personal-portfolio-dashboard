@@ -1,12 +1,10 @@
 import { useMemo, useState, useRef, useCallback } from 'react'
 import {
-  Badge as MantineBadge,
   Divider,
   Group,
   Loader,
   ScrollArea,
   SegmentedControl,
-  Stack,
   Table,
   Text,
   Title,
@@ -140,8 +138,9 @@ function InfoPopover({ text, children }: { text: string; children: React.ReactNo
   )
 }
 
-/** One oscillator panel: centred caption + explainer, then a short chart that
- *  shares the price-scale width of every other chart on the page. */
+/** One oscillator panel: a Section titled with the indicator name, its
+ *  explainer in the header, and a short chart sharing the price-scale
+ *  width of every other chart on the page. */
 function OscillatorChart({
   caption,
   info,
@@ -159,11 +158,7 @@ function OscillatorChart({
   formatter: (v: number) => string
 } & React.ComponentProps<typeof LwChart>) {
   return (
-    <Panel p="md">
-      <Group justify="center" align="center" gap={6} mb={4}>
-        <Text fz="1.75rem" fw={500} c="dimmed">{caption}</Text>
-        <ChartInfo text={info} />
-      </Group>
+    <Section title={caption} action={<ChartInfo text={info} />} bodyClassName="p-2">
       <LwChart
         {...chart}
         priceScaleWidth={scaleWidth}
@@ -173,7 +168,7 @@ function OscillatorChart({
         hideControls
         maskInPrivacy={false}
       />
-    </Panel>
+    </Section>
   )
 }
 
@@ -466,69 +461,71 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
   const toneColor = tone === 'risk_on' ? 'green' : 'yellow'
 
   return (
-    <Panel p="md">
-      <Table withTableBorder withColumnBorders fz="md">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th w={120}>Horizon</Table.Th>
-            <Table.Th w={200}>Signal</Table.Th>
-            <Table.Th>Reading</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          <Table.Tr>
-            <Table.Td fw={500}>Short-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Breadth Regime
-                <ChartInfo text={EXPLANATIONS.breadthRegime} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <MantineBadge color={regimeColor(data.regime.label)} variant="light" size="sm" fz="0.825rem">
-                {data.regime.label}
-              </MantineBadge>
-            </Table.Td>
-          </Table.Tr>
-          <Table.Tr>
-            <Table.Td fw={500}>Mid-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Relative Strength
-                <ChartInfo text={EXPLANATIONS.relativeStrength} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <Group gap={8} align="center" wrap="nowrap">
-                <Text fz="sm" c="dimmed">{data.relative_strength.order}</Text>
-                <MantineBadge color={toneColor} variant="light" size="xs" fz="0.825rem">
-                  {toneLabel}
-                </MantineBadge>
-              </Group>
-            </Table.Td>
-          </Table.Tr>
-          <Table.Tr>
-            <Table.Td fw={500}>Long-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Segment Drawdown
-                <ChartInfo text={EXPLANATIONS.segmentDrawdown} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <Group gap={8} align="center" wrap="nowrap">
-                <Text fz="sm" c="dimmed">{ddStr}</Text>
-                {dd.stress_flag && (
-                  <MantineBadge color="orange" variant="light" size="xs" fz="0.825rem">
-                    Smallcap drawdown disproportionate
-                  </MantineBadge>
-                )}
-              </Group>
-            </Table.Td>
-          </Table.Tr>
-        </Table.Tbody>
-      </Table>
-    </Panel>
+    <Section bodyClassName="p-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 w-28 px-2 text-left font-medium text-muted-foreground">Horizon</th>
+              <th className="h-8 w-48 px-2 text-left font-medium text-muted-foreground">Signal</th>
+              <th className="h-8 px-2 text-left font-medium text-muted-foreground">Reading</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Short-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Breadth Regime
+                  <ChartInfo text={EXPLANATIONS.breadthRegime} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <Badge variant="outline" className={COLOR_CLASS[regimeColor(data.regime.label)]}>
+                  {data.regime.label}
+                </Badge>
+              </td>
+            </tr>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Mid-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Relative Strength
+                  <ChartInfo text={EXPLANATIONS.relativeStrength} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-muted-foreground">{data.relative_strength.order}</span>
+                  <Badge variant="outline" className={COLOR_CLASS[toneColor]}>
+                    {toneLabel}
+                  </Badge>
+                </span>
+              </td>
+            </tr>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Long-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Segment Drawdown
+                  <ChartInfo text={EXPLANATIONS.segmentDrawdown} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-muted-foreground">{ddStr}</span>
+                  {dd.stress_flag && (
+                    <Badge variant="outline" className={COLOR_CLASS.orange}>
+                      Smallcap drawdown disproportionate
+                    </Badge>
+                  )}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -875,11 +872,11 @@ export function MarketSentiment() {
       {breadthData && !breadthData.no_data && (
         <>
           <MarketBreadthCard data={breadthData} />
-          <Panel>
-            <Group justify="center" align="center" gap={6} mb={4}>
-              <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap ({breadthData.ratios!.benchmark}, rebased, 1Y) ↓</Text>
-              <ChartInfo text={EXPLANATIONS.breadthRatioChart} />
-            </Group>
+          <Section
+            title={`Mid-Cap & Small-Cap vs Large-Cap (${breadthData.ratios!.benchmark}, rebased, 1Y)`}
+            action={<ChartInfo text={EXPLANATIONS.breadthRatioChart} />}
+            bodyClassName="p-2"
+          >
             <LwChart
               seriesType="line"
               line={toNavPoints(breadthData.ratios!.mid150)}
@@ -893,7 +890,7 @@ export function MarketSentiment() {
               hideControls
             maskInPrivacy={false}
             />
-          </Panel>
+          </Section>
         </>
       )}
 
@@ -944,9 +941,9 @@ export function MarketSentiment() {
       {/* Oscillator panels */}
       {oscData && (
         <>
-          <Divider mt="lg" mb="xs" label={<Title order={2} c="black">Oscillators</Title>} labelPosition="center" />
+          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Oscillators</h2>
 
-          <Stack gap="lg">
+          <div className="grid gap-4 xl:grid-cols-2">
             <OscillatorChart
               caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
               info={EXPLANATIONS.rsi}
@@ -988,11 +985,11 @@ export function MarketSentiment() {
               line={oscData.adx}
               persistKey="market-sentiment-adx"
             />
-          </Stack>
+          </div>
 
-          <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Volatility</Title>} labelPosition="center" />
+          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Volatility</h2>
 
-          <Stack gap="lg">
+          <div className="grid gap-4 xl:grid-cols-2">
             <OscillatorChart
               caption={<>ATR % ↓</>}
               info={EXPLANATIONS.atr}
@@ -1018,7 +1015,7 @@ export function MarketSentiment() {
               compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
               persistKey="market-sentiment-vol"
             />
-          </Stack>
+          </div>
         </>
       )}
 
