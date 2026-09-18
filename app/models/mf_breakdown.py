@@ -39,12 +39,21 @@ class EquityCategoryOverride(Base):
 
 
 class EquitySectorOverride(Base):
+    """Manual taxonomy fixes, one row per company, keyed by normalised name.
+
+    Holds whichever of the four NSE levels have been set by hand — a level the
+    automatic pipeline can resolve on its own is pruned from here on the next
+    ingest, and a row with nothing left is deleted.
+    """
     __tablename__ = "equity_sector_override"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name_normalized: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     raw_name: Mapped[str] = mapped_column(String(255))
-    sector: Mapped[str] = mapped_column(String(60))
+    macro_sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    basic_industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
 
 

@@ -339,6 +339,55 @@ async def load_classification_lookup(db: AsyncSession) -> dict[str, dict]:
     }
 
 
+async def load_taxonomy_parents(db: AsyncSession) -> dict[str, dict[str, dict[str, str]]]:
+    """Returns {level: {value: {ancestor_level: ancestor_value}}}.
+
+    NSE's taxonomy is a strict tree — every industry sits under exactly one sector,
+    every basic industry under exactly one industry — so a value determines all of
+    its ancestors. Built from the classified rows rather than hardcoded, so it grows
+    as the portfolio does.
+    """
+    rows = (await db.execute(
+        select(
+            NseIndustryClassification.macro_sector,
+            NseIndustryClassification.sector,
+            NseIndustryClassification.industry,
+            NseIndustryClassification.basic_industry,
+        )
+        .where(NseIndustryClassification.status == STATUS_CLASSIFIED)
+        .distinct()
+    )).all()
+
+    parents: dict[str, dict[str, dict[str, str]]] = {level: {} for level in CLASSIFICATION_LEVELS}
+    for row in rows:
+        values = dict(zip(CLASSIFICATION_LEVELS, row))
+        for depth, level in enumerate(CLASSIFICATION_LEVELS):
+            value = values[level]
+            if not value:
+                continue
+            ancestors = {anc: values[anc] for anc in CLASSIFICATION_LEVELS[:depth] if values[anc]}
+            if ancestors:
+                parents[level].setdefault(value, ancestors)
+    return parents
+
+
+def cascade_levels(
+    parents: dict[str, dict[str, dict[str, str]]],
+    level: str,
+    value: str,
+) -> dict[str, str | None]:
+    """Expands one manually chosen taxonomy value into a full {level: value} dict.
+
+    Ancestors are filled from NSE's hierarchy; levels below the chosen one stay None,
+    because a parent never implies a specific child.
+    """
+    out: dict[str, str | None] = {lvl: None for lvl in CLASSIFICATION_LEVELS}
+    out[level] = value
+    for ancestor, ancestor_value in parents.get(level, {}).get(value, {}).items():
+        out[ancestor] = ancestor_value
+    return out
+
+
 async def apply_classifications(db: AsyncSession) -> tuple[int, int]:
     """Push learned levels onto amfi_market_cap and mf_scheme_breakdown, by ISIN.
 
