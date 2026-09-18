@@ -1,44 +1,47 @@
 import { useRef, useState } from 'react'
-import {
-  Alert, Badge, Box, Button, Group, NumberInput,
-  Stack, Table, Text, TextInput,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { IconUpload, IconTrash } from '@tabler/icons-react'
+import { Trash2, Upload } from 'lucide-react'
 import { useImports, useImportMutation, useRollbackMutation, useSplitCreditMutation } from '../api/trades'
 import { useTradedInstruments } from '../api/portfolio'
 import type { ImportResponse } from '../types/trades'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { notify } from '@/lib/notify'
 
 function ImportResult({ result }: { result: ImportResponse }) {
   return (
-    <Box mt="sm">
+    <div className="mt-3 space-y-2">
       {result.results.map((r) => (
-        <Alert
-          key={r.batch_id}
-          color={r.errors.length ? 'yellow' : 'green'}
-          title={r.filename}
-          mb="xs"
-        >
-          <Text size="xs">
-            {r.success_count}/{r.row_count} rows imported
-            {r.errors.length > 0 && ` · ${r.errors.length} error(s)`}
-          </Text>
-          {r.errors.map((e, i) => (
-            <Text key={i} size="xs" c="red">Row {e.row}: {e.message}</Text>
-          ))}
+        <Alert key={r.batch_id} className={r.errors.length ? 'border-warning/40 bg-warning/10' : 'border-positive/40 bg-positive/10'}>
+          <AlertTitle>{r.filename}</AlertTitle>
+          <AlertDescription>
+            <p>
+              {r.success_count}/{r.row_count} rows imported
+              {r.errors.length > 0 && ` · ${r.errors.length} error(s)`}
+            </p>
+            {r.errors.map((e, i) => (
+              <p key={i} className="text-negative">Row {e.row}: {e.message}</p>
+            ))}
+          </AlertDescription>
         </Alert>
       ))}
       {result.violations.length > 0 && (
-        <Alert color="orange" title="Holding violations" mt="xs">
-          {result.violations.map((v, i) => (
-            <Text key={i} size="xs">{v.tradingsymbol}: sold {v.total_sell} vs bought {v.total_buy} (net {v.net})</Text>
-          ))}
+        <Alert className="border-warning/40 bg-warning/10">
+          <AlertTitle>Holding violations</AlertTitle>
+          <AlertDescription>
+            {result.violations.map((v, i) => (
+              <p key={i}>{v.tradingsymbol}: sold {v.total_sell} vs bought {v.total_buy} (net {v.net})</p>
+            ))}
+          </AlertDescription>
         </Alert>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -51,10 +54,9 @@ export function Import() {
   const { data: imports } = useImports()
   const { data: instruments } = useTradedInstruments()
 
-  // Split credit form state
-  const [splitInstrId, setSplitInstrId] = useState<number | string>('')
+  const [splitInstrId, setSplitInstrId] = useState<string>('')
   const [splitDate, setSplitDate] = useState('')
-  const [splitQty, setSplitQty] = useState<number | string>('')
+  const [splitQty, setSplitQty] = useState('')
   const [splitResult, setSplitResult] = useState<string | null>(null)
 
   async function handleUpload() {
@@ -65,16 +67,16 @@ export function Import() {
       setImportResult(r)
       if (fileRef.current) fileRef.current.value = ''
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
   async function handleRollback(batchId: string) {
     try {
       await rollbackMut.mutateAsync(batchId)
-      notifications.show({ color: 'green', message: 'Batch rolled back.' })
+      notify.success('Batch rolled back.')
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
@@ -97,116 +99,105 @@ export function Import() {
   }
 
   return (
-    <Stack gap="lg" maw={800}>
+    <div className="flex flex-col gap-4">
       <PageHeader title="Import Trades" />
 
-      {/* Upload */}
-      <Panel title="Upload CSV">
-        <Text fw={600} mb="xs">Upload CSV</Text>
-        <Group>
-          <input ref={fileRef} type="file" accept=".csv" multiple style={{ fontSize: '0.85rem' }} />
-          <Button
-            size="xs"
-            leftSection={<IconUpload size={14} />}
-            loading={importMut.isPending}
-            onClick={handleUpload}
-          >
-            Import
-          </Button>
-        </Group>
-        {importResult && <ImportResult result={importResult} />}
-      </Panel>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Upload CSV">
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              multiple
+              className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
+            />
+            <Button size="xs" disabled={importMut.isPending} onClick={handleUpload}>
+              <Upload className="size-3.5" />
+              Import
+            </Button>
+          </div>
+          {importResult && <ImportResult result={importResult} />}
+        </Section>
 
-      {/* Import history */}
-      {imports && imports.length > 0 && (
-        <Panel title="Import History">
-          <Table fz="xs" withColumnBorders={false}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>File</Table.Th>
-                <Table.Th>Imported at</Table.Th>
-                <Table.Th>Rows</Table.Th>
-                <Table.Th>Errors</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {imports.map((log) => (
-                <Table.Tr key={log.batch_id}>
-                  <Table.Td>{log.filename ?? '—'}</Table.Td>
-                  <Table.Td>{new Date(log.imported_at).toLocaleString('en-IN')}</Table.Td>
-                  <Table.Td>{log.row_count ?? '—'}</Table.Td>
-                  <Table.Td>
-                    {log.error_count ? (
-                      <Badge color="red" size="xs">{log.error_count}</Badge>
-                    ) : (
-                      <Badge color="green" size="xs">0</Badge>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <ConfirmActionButton
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      leftSection={<IconTrash size={12} />}
-                      confirmTitle="Rollback import?"
-                      confirmDescription={`Rollback ${log.filename ?? 'this import'} and its imported trades?`}
-                      onConfirm={() => handleRollback(log.batch_id)}
-                    >
-                      Rollback
-                    </ConfirmActionButton>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Panel>
-      )}
+        <Section title="Record Split / Bonus Credit">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-44 space-y-1">
+              <Label>Instrument</Label>
+              <Select value={splitInstrId} onValueChange={setSplitInstrId}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue placeholder="— select —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instruments?.map((i) => (
+                    <SelectItem key={i.id} value={String(i.id)}>
+                      {i.symbol} {i.isin ? `(${i.isin})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-36 space-y-1">
+              <Label htmlFor="split-date">Date</Label>
+              <Input id="split-date" type="date" value={splitDate} onChange={(e) => setSplitDate(e.target.value)} />
+            </div>
+            <div className="w-28 space-y-1">
+              <Label htmlFor="split-qty">Quantity</Label>
+              <Input id="split-qty" type="number" min={0} value={splitQty} onChange={(e) => setSplitQty(e.target.value)} />
+            </div>
+            <Button size="xs" disabled={splitMut.isPending} onClick={handleSplitCredit}>
+              Record
+            </Button>
+          </div>
+          {splitResult && <p className="mt-2 text-xs text-muted-foreground">{splitResult}</p>}
+        </Section>
 
-      {/* Split credit */}
-      <Panel title="Record Split / Bonus Credit">
-        <Group align="flex-end" wrap="nowrap">
-          <Box style={{ minWidth: 180 }}>
-            <Text size="xs" mb={4}>Instrument</Text>
-            <select
-              value={splitInstrId}
-              onChange={(e) => setSplitInstrId(e.target.value)}
-              style={{ width: '100%', padding: '6px', fontSize: '0.85rem', background: 'var(--mantine-color-gray-1)', color: 'inherit', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 4 }}
-            >
-              <option value="">— select —</option>
-              {instruments?.map((i) => (
-                <option key={i.id} value={i.id}>{i.symbol} {i.isin ? `(${i.isin})` : ''}</option>
-              ))}
-            </select>
-          </Box>
-          <TextInput
-            label="Date"
-            type="date"
-            value={splitDate}
-            onChange={(e) => setSplitDate(e.currentTarget.value)}
-            size="xs"
-            w={140}
-          />
-          <NumberInput
-            label="Quantity"
-            value={splitQty}
-            onChange={setSplitQty}
-            min={0}
-            size="xs"
-            w={120}
-          />
-          <Button
-            size="xs"
-            loading={splitMut.isPending}
-            onClick={handleSplitCredit}
-          >
-            Record
-          </Button>
-        </Group>
-        {splitResult && (
-          <Text size="xs" mt="xs" c="dimmed">{splitResult}</Text>
+        {imports && imports.length > 0 && (
+          <Section title="Import History" className="lg:col-span-2" bodyClassName="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-card">
+                    <th className="h-8 px-2 text-left font-medium text-muted-foreground">File</th>
+                    <th className="h-8 px-2 text-left font-medium text-muted-foreground">Imported at</th>
+                    <th className="h-8 px-2 text-left font-medium text-muted-foreground">Rows</th>
+                    <th className="h-8 px-2 text-left font-medium text-muted-foreground">Errors</th>
+                    <th className="h-8 px-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {imports.map((log) => (
+                    <tr key={log.batch_id} className="hover:bg-muted/50">
+                      <td className="px-2 py-1.5">{log.filename ?? '—'}</td>
+                      <td className="px-2 py-1.5">{new Date(log.imported_at).toLocaleString('en-IN')}</td>
+                      <td data-numeric className="px-2 py-1.5">{log.row_count ?? '—'}</td>
+                      <td className="px-2 py-1.5">
+                        {log.error_count ? (
+                          <Badge variant="destructive">{log.error_count}</Badge>
+                        ) : (
+                          <Badge variant="secondary">0</Badge>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <ConfirmActionButton
+                          size="xs"
+                          variant="destructive"
+                          confirmTitle="Rollback import?"
+                          confirmDescription={`Rollback ${log.filename ?? 'this import'} and its imported trades?`}
+                          onConfirm={() => handleRollback(log.batch_id)}
+                        >
+                          <Trash2 className="size-3" />
+                          Rollback
+                        </ConfirmActionButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
         )}
-      </Panel>
-    </Stack>
+      </div>
+    </div>
   )
 }
