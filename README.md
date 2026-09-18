@@ -16,6 +16,8 @@
 
 A self-hosted portfolio tracker for Indian investors. Imports trades from Zerodha Kite CSVs, syncs live prices from Kite and AMFI, tracks manual assets (FDs, PPF, NPS, cash), computes FIFO cost basis, XIRR, and portfolio NAV over time, and visualizes allocation by market-cap category.
 
+The frontend is a responsive, semantic light/dark workspace with local system typography, grouped drawer navigation below 768px, lazy-loaded routes, contained analytical tables, and privacy masking preserved across desktop and mobile views.
+
 **Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Alembic · React 18 (Vite + TypeScript) · Mantine · TanStack Query · lightweight-charts · react-chartjs-2
 
 ---
@@ -148,6 +150,11 @@ portfolio-mac-arm/
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1
 │       ├── components/
 │       │   ├── AppLayout.tsx    # Mantine AppShell + nav (13 routes); orange dot on Policy when actions pending
+│       │   ├── PageHeader.tsx   # Shared route title, metadata, and action layout
+│       │   ├── Panel.tsx        # Semantic content surface
+│       │   ├── MetricCard.tsx   # Dashboard and summary metric surface
+│       │   ├── EmptyState.tsx   # Selector-driven route empty state
+│       │   ├── ConfirmActionButton.tsx # Confirmed destructive action control
 │       │   ├── DonutChart.tsx   # react-chartjs-2 Doughnut, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
@@ -170,7 +177,8 @@ portfolio-mac-arm/
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
-│       │   └── usePrivacy.tsx   # Privacy-mode context — masks ₹ amounts across the app
+│       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
+│       │   └── PrivacyProvider.tsx # Privacy-mode provider
 │       └── lib/
 │           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor
 │           └── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor()
