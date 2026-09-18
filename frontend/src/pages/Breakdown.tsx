@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Box, Button, Group, Paper, Select, SegmentedControl, Stack,
+  Box, Stack,
   Table, Text,
 } from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
 import { Button as ShadButton } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent as ShadSelectContent, SelectItem as ShadSelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -535,58 +538,115 @@ function ClassifySelectPanel({
   onDone: () => void
 }) {
   const [selections, setSelections] = useState<Record<string, string>>({})
+  const [open, setOpen] = useState(true)
 
   async function handleSave() {
     const picked = Object.fromEntries(names.filter((n) => selections[n]).map((n) => [n, selections[n]]))
     if (!Object.keys(picked).length) return
     try {
       const updated = await onSave(picked)
-      notifications.show({ color: 'green', message: `Classified ${updated} holding${updated === 1 ? '' : 's'}.` })
+      notify.success(`Classified ${updated} holding${updated === 1 ? '' : 's'}.`)
       onDone()
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
   const doneCount = names.filter((n) => selections[n]).length
 
   return (
-    <Paper withBorder p="sm">
-      <Text fw={600} size="sm" mb="xs">{title(names.length)}</Text>
-      <Table fz="sm" withColumnBorders={false}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Stock name</Table.Th>
-            <Table.Th style={{ width: columnWidth }}>{columnLabel}</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {names.map((n) => (
-            <Table.Tr key={n}>
-              <Table.Td>{n}</Table.Td>
-              <Table.Td>
-                <Select
-                  size="xs"
-                  placeholder={placeholder}
-                  data={options}
-                  searchable={searchable}
-                  value={selections[n] ?? null}
-                  onChange={(v) => setSelections((prev) => ({ ...prev, [n]: v ?? '' }))}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      <Group mt="xs" gap="xs">
-        <Button size="xs" loading={saving} disabled={!doneCount} onClick={handleSave}>
-          Save{doneCount < names.length ? ` (${doneCount} of ${names.length})` : ' all'}
-        </Button>
-        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
-          Dismiss
-        </Button>
-      </Group>
-    </Paper>
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left">
+        <span className="text-sm font-medium">{title(names.length)}</span>
+        <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-4 pb-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="h-8 px-2 text-left font-medium text-muted-foreground">Stock name</th>
+                <th className="h-8 px-2 text-left font-medium text-muted-foreground" style={{ width: columnWidth }}>{columnLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {names.map((n) => (
+                <tr key={n}>
+                  <td className="px-2 py-1.5">{n}</td>
+                  <td className="px-2 py-1.5">
+                    {searchable ? (
+                      <ClassifyCombobox
+                        placeholder={placeholder}
+                        options={options}
+                        value={selections[n] ?? ''}
+                        onChange={(v) => setSelections((prev) => ({ ...prev, [n]: v }))}
+                      />
+                    ) : (
+                      <Select value={selections[n] ?? ''} onValueChange={(v) => setSelections((prev) => ({ ...prev, [n]: v }))}>
+                        <SelectTrigger size="sm" className="w-full">
+                          <SelectValue placeholder={placeholder} />
+                        </SelectTrigger>
+                        <ShadSelectContent>
+                          {options.map((o) => <ShadSelectItem key={o} value={o}>{o}</ShadSelectItem>)}
+                        </ShadSelectContent>
+                      </Select>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <ShadButton size="xs" disabled={saving || !doneCount} onClick={handleSave}>
+            Save{doneCount < names.length ? ` (${doneCount} of ${names.length})` : ' all'}
+          </ShadButton>
+          <ShadButton size="xs" variant="ghost" onClick={onDone}>
+            Dismiss
+          </ShadButton>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function ClassifyCombobox({
+  placeholder,
+  options,
+  value,
+  onChange,
+}: {
+  placeholder: string
+  options: string[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <ShadButton variant="outline" size="sm" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+          {value || placeholder}
+          <ChevronsUpDown className="size-3.5 opacity-50" />
+        </ShadButton>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={placeholder} />
+          <CommandList>
+            <CommandEmpty>No match.</CommandEmpty>
+            <CommandGroup>
+              {options.map((o) => (
+                <CommandItem key={o} value={o} onSelect={() => { onChange(o); setOpen(false) }}>
+                  <Check className={cn('size-3.5', value === o ? 'opacity-100' : 'opacity-0')} />
+                  {o}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -640,7 +700,7 @@ function SectorTab({
     setExpanded(new Set())
   }
 
-  if (!sectors) return <Text size="sm" c="dimmed">Loading…</Text>
+  if (!sectors) return <p className="text-sm text-muted-foreground">Loading…</p>
 
   const unknownHoldings = stockBreakdown?.find((s) => s.sector === 'Unknown')?.holdings ?? []
 
@@ -674,89 +734,90 @@ function SectorTab({
   }
 
   return (
-    <Stack gap="lg">
-      <SegmentedControl
-        value={level}
-        onChange={changeLevel}
-        data={LEVEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-        style={{ alignSelf: 'flex-start' }}
-      />
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,380px)_1fr]">
+        <Section
+          title="Sector Allocation"
+          action={
+            <ToggleGroup type="single" variant="outline" size="sm" value={level} onValueChange={(v) => v && changeLevel(v)}>
+              {LEVEL_OPTIONS.map((o) => <ToggleGroupItem key={o.value} value={o.value}>{o.label}</ToggleGroupItem>)}
+            </ToggleGroup>
+          }
+        >
+          {labels.length > 0 && <DonutChart labels={labels} values={values} colorMode="sector" />}
+        </Section>
 
-      {labels.length > 0 && (
-        <DonutChart labels={labels} values={values} colorMode="sector" />
-      )}
+        <Section title="Sector" bodyClassName="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="sticky top-0 z-10 bg-card">
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Sector</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">% of equity</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartRows.map((s, i) => (
+                  <React.Fragment key={s.sector}>
+                    <tr className="cursor-pointer bg-muted/40 hover:bg-muted/60" onClick={() => toggle(s.sector)}>
+                      <td className="px-2 py-1.5 font-semibold">
+                        {expanded.has(s.sector) ? '▾' : '▸'}{' '}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="inline-block size-2 rounded-sm" style={{ background: sectorColor(i, chartRows.length, s.sector) }} />
+                          {s.sector}
+                          {s.sector === OTHERS_LABEL && <span className="text-xs text-muted-foreground">({othersRows.length})</span>}
+                        </span>
+                      </td>
+                      <td data-numeric className="px-2 py-1.5 text-right">{pctOfEquity(s.total)}%</td>
+                      <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={s.total} compact /></td>
+                    </tr>
 
-      <Box>
-        <Table fz="sm" withColumnBorders={false}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Sector</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>% of equity</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {chartRows.map((s, i) => (
-              <React.Fragment key={s.sector}>
-                <Table.Tr
-                  style={{ cursor: 'pointer', background: 'var(--mantine-color-gray-1)' }}
-                  onClick={() => toggle(s.sector)}
-                >
-                  <Table.Td fw={600}>
-                    {expanded.has(s.sector) ? '▾' : '▸'}{' '}
-                    <Box component="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <Box component="span" style={{ width: 8, height: 8, borderRadius: 2, background: sectorColor(i, chartRows.length, s.sector), display: 'inline-block' }} />
-                      {s.sector}
-                      {s.sector === OTHERS_LABEL && <Text component="span" c="dimmed" size="xs">({othersRows.length})</Text>}
-                    </Box>
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{pctOfEquity(s.total)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.total} compact /></Table.Td>
-                </Table.Tr>
+                    {expanded.has(s.sector) && s.sector === OTHERS_LABEL && othersRows.map((o) => {
+                      const key = `others:${o.sector}`
+                      return (
+                        <React.Fragment key={key}>
+                          <tr className="cursor-pointer hover:bg-muted/50" onClick={() => toggle(key)}>
+                            <td className="py-1.5 pr-2 pl-6 font-medium">
+                              {expanded.has(key) ? '▾' : '▸'} {o.sector}
+                            </td>
+                            <td data-numeric className="px-2 py-1.5 text-right">{pctOfEquity(o.total)}%</td>
+                            <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={o.total} compact /></td>
+                          </tr>
+                          {expanded.has(key) && (stocksBySector[o.sector] ?? []).map((h, j) => (
+                            <tr key={`${key}-${j}`} className="hover:bg-muted/50">
+                              <td className="py-1.5 pr-2 pl-12">{h.name}</td>
+                              <td data-numeric className="px-2 py-1.5 text-right text-muted-foreground">
+                                {h.pct.toFixed(2)}% in {o.sector} · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity
+                              </td>
+                              <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      )
+                    })}
 
-                {expanded.has(s.sector) && s.sector === OTHERS_LABEL && othersRows.map((o) => {
-                  const key = `others:${o.sector}`
-                  return (
-                    <React.Fragment key={key}>
-                      <Table.Tr style={{ cursor: 'pointer' }} onClick={() => toggle(key)}>
-                        <Table.Td pl="lg" fw={500}>
-                          {expanded.has(key) ? '▾' : '▸'} {o.sector}
-                        </Table.Td>
-                        <Table.Td style={{ textAlign: 'right' }}>{pctOfEquity(o.total)}%</Table.Td>
-                        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={o.total} compact /></Table.Td>
-                      </Table.Tr>
-                      {expanded.has(key) && (stocksBySector[o.sector] ?? []).map((h, j) => (
-                        <Table.Tr key={`${key}-${j}`}>
-                          <Table.Td pl={48}>{h.name}</Table.Td>
-                          <Table.Td style={{ textAlign: 'right' }}>
-                            <Text c="dimmed">{h.pct.toFixed(2)}% in {o.sector} · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity</Text>
-                          </Table.Td>
-                          <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </React.Fragment>
-                  )
-                })}
-
-                {expanded.has(s.sector) && s.sector !== OTHERS_LABEL && (stocksBySector[s.sector] ?? []).map((h, j) => (
-                  <Table.Tr key={`${s.sector}-${j}`}>
-                    <Table.Td pl="xl">{h.name}</Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>
-                      <Text c="dimmed">{h.pct.toFixed(2)}% in sector · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity</Text>
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
-                  </Table.Tr>
+                    {expanded.has(s.sector) && s.sector !== OTHERS_LABEL && (stocksBySector[s.sector] ?? []).map((h, j) => (
+                      <tr key={`${s.sector}-${j}`} className="hover:bg-muted/50">
+                        <td className="py-1.5 pr-2 pl-8">{h.name}</td>
+                        <td data-numeric className="px-2 py-1.5 text-right text-muted-foreground">
+                          {h.pct.toFixed(2)}% in sector · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity
+                        </td>
+                        <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
-              </React.Fragment>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Box>
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      </div>
 
       {!dismissedLevels.includes(level) && unknownHoldings.length > 0 && (
         <SectorClassifyPanel level={level} unknownHoldings={unknownHoldings} onDone={() => onDismiss(level)} />
       )}
-    </Stack>
+    </div>
   )
 }
 
