@@ -24,6 +24,13 @@ def _is_bond_symbol(symbol: str) -> bool:
     return bool(_BOND_SYMBOL_RE.search(symbol.upper()))
 
 
+def _adopt(inst: Instrument, isin: str | None) -> Instrument:
+    """Backfill an ISIN learned from the incoming row onto a matched instrument."""
+    if isin and not inst.isin:
+        inst.isin = isin
+    return inst
+
+
 def _bond_like_pattern(symbol: str) -> str | None:
     """SQL LIKE pattern for bond-dedup lookup. Returns None for unique-per-security symbols (T-bills)."""
     sym = symbol.upper()
@@ -71,10 +78,7 @@ async def find_or_create(
             )
             candidates = result.scalars().all()
             if len(candidates) == 1:
-                inst = candidates[0]
-                if isin and not inst.isin:
-                    inst.isin = isin
-                return inst
+                return _adopt(candidates[0], isin)
 
     if tradingsymbol and exchange:
         result = await db.execute(
@@ -85,9 +89,7 @@ async def find_or_create(
         )
         inst = result.scalar_one_or_none()
         if inst:
-            if isin and not inst.isin:
-                inst.isin = isin
-            return inst
+            return _adopt(inst, isin)
 
     # No exchange hint (e.g. Kite EQX IPO/bond-issue rows): dedupe by symbol alone.
     if tradingsymbol and not exchange:
@@ -96,10 +98,7 @@ async def find_or_create(
         )
         candidates = result.scalars().all()
         if len(candidates) == 1:
-            inst = candidates[0]
-            if isin and not inst.isin:
-                inst.isin = isin
-            return inst
+            return _adopt(candidates[0], isin)
 
     inst = Instrument(
         isin=isin,

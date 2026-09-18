@@ -4,11 +4,7 @@ export function apiUrl(path: string): string {
   return `${BASE}${path}`
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(apiUrl(path), {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  })
+async function toJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`${res.status} ${text}`)
@@ -16,11 +12,15 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(apiUrl(path), {
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  })
+  return toJson<T>(res)
+}
+
 export async function requestForm<T>(path: string, body: FormData | URLSearchParams, method = 'POST'): Promise<T> {
   const res = await fetch(apiUrl(path), { method, body })
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`${res.status} ${text}`)
-  }
-  return res.json() as Promise<T>
+  return toJson<T>(res)
 }

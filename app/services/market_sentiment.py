@@ -12,33 +12,6 @@ from app.models.price_history import PriceHistory
 from app.services import market_indicators as mi
 
 
-async def _load_index_df(db: AsyncSession, tradingsymbol: str) -> pd.DataFrame | None:
-    result = await db.execute(
-        select(Instrument).where(
-            Instrument.tradingsymbol == tradingsymbol,
-            Instrument.instrument_type == "INDEX",
-        )
-    )
-    instrument = result.scalar_one_or_none()
-    if instrument is None:
-        return None
-
-    rows = (await db.execute(
-        select(PriceHistory)
-        .where(PriceHistory.instrument_id == instrument.id)
-        .order_by(PriceHistory.price_date)
-    )).scalars().all()
-
-    if not rows:
-        return None
-
-    df = pd.DataFrame(
-        [{'close': float(r.close)} for r in rows],
-        index=pd.to_datetime([r.price_date for r in rows]),
-    )
-    return df.sort_index()
-
-
 async def _load_ohlc_df(db: AsyncSession, tradingsymbol: str) -> pd.DataFrame | None:
     result = await db.execute(
         select(Instrument).where(
@@ -352,7 +325,7 @@ async def get_sentiment_summary(db: AsyncSession, symbol: str = "NIFTY 50") -> d
     bb_bw = bb['bb_bw'].dropna()
     bb_squeeze = bool(len(bb_bw) >= 60 and bb_bw.iloc[-1] <= bb_bw.iloc[-60:].min())
 
-    vix_df = await _load_index_df(db, "INDIA VIX")
+    vix_df = await _load_ohlc_df(db, "INDIA VIX")
     vix_short = _vix_short(vix_df) if vix_df is not None and len(vix_df) >= 5 else {}
     vix_mid = _vix_mid(vix_df) if vix_df is not None and len(vix_df) >= 20 else {}
     vix_long = _vix_long(vix_df) if vix_df is not None and len(vix_df) >= 2 else {}
@@ -402,11 +375,11 @@ async def get_sentiment_summary(db: AsyncSession, symbol: str = "NIFTY 50") -> d
 
 
 async def get_market_breadth(db: AsyncSession) -> dict:
-    n50 = await _load_index_df(db, "NIFTY 50")
-    nn50 = await _load_index_df(db, "NIFTY NEXT 50")
-    mid150 = await _load_index_df(db, "NIFTY MIDCAP 150")
-    sml250 = await _load_index_df(db, "NIFTY SMLCAP 250")
-    n100 = await _load_index_df(db, "NIFTY 100")
+    n50 = await _load_ohlc_df(db, "NIFTY 50")
+    nn50 = await _load_ohlc_df(db, "NIFTY NEXT 50")
+    mid150 = await _load_ohlc_df(db, "NIFTY MIDCAP 150")
+    sml250 = await _load_ohlc_df(db, "NIFTY SMLCAP 250")
+    n100 = await _load_ohlc_df(db, "NIFTY 100")
 
     dfs = {'nifty50': n50, 'next50': nn50, 'mid150': mid150, 'small250': sml250}
     if any(df is None or len(df) < 22 for df in dfs.values()):

@@ -54,6 +54,15 @@ async def _resolve_near_month_symbol() -> str | None:
     return candidates[0][1]
 
 
+async def _store_payload(db: AsyncSession, payload: dict) -> None:
+    stmt = pg_insert(AppConfig).values(key=_APP_CONFIG_KEY, value_json=json.dumps(payload))
+    await db.execute(stmt.on_conflict_do_update(
+        index_elements=["key"],
+        set_={"value_json": stmt.excluded.value_json},
+    ))
+    await db.commit()
+
+
 async def refresh_usdinr_rate(db: AsyncSession) -> dict:
     """Fetch live USDINR rate from Kite CDS and persist it. Returns the rate dict.
     Raises on auth or resolution failure; callers treat this as best-effort."""
@@ -74,12 +83,7 @@ async def refresh_usdinr_rate(db: AsyncSession) -> dict:
     fetched_at = now_ist().isoformat()
     payload = {"rate": rate, "source": instrument_key, "fetched_at": fetched_at}
 
-    stmt = pg_insert(AppConfig).values(key=_APP_CONFIG_KEY, value_json=json.dumps(payload))
-    await db.execute(stmt.on_conflict_do_update(
-        index_elements=["key"],
-        set_={"value_json": stmt.excluded.value_json},
-    ))
-    await db.commit()
+    await _store_payload(db, payload)
 
     return payload
 
@@ -98,27 +102,8 @@ async def get_usdinr_rate(db: AsyncSession) -> float:
     return _DEFAULT_RATE
 
 
-async def get_usdinr_info(db: AsyncSession) -> dict:
-    """Return the full stored rate payload (rate, source, fetched_at). Defaults if missing."""
-    row = (await db.execute(
-        select(AppConfig).where(AppConfig.key == _APP_CONFIG_KEY)
-    )).scalar_one_or_none()
-
-    if row and row.value_json:
-        try:
-            return json.loads(row.value_json)
-        except (ValueError, TypeError):
-            pass
-    return {"rate": _DEFAULT_RATE, "source": None, "fetched_at": None}
-
-
 async def set_usdinr_rate_manual(db: AsyncSession, rate: float) -> dict:
     """Persist a manually entered USDINR rate."""
     payload = {"rate": rate, "source": "manual", "fetched_at": now_ist().isoformat()}
-    stmt = pg_insert(AppConfig).values(key=_APP_CONFIG_KEY, value_json=json.dumps(payload))
-    await db.execute(stmt.on_conflict_do_update(
-        index_elements=["key"],
-        set_={"value_json": stmt.excluded.value_json},
-    ))
-    await db.commit()
+    await _store_payload(db, payload)
     return payload

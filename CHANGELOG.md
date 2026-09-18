@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-09-18-18-37-35 — Dead-code audit: unreachable endpoints, dead metadata, duplicated logic
+
+- **Unreachable endpoints removed**, each confirmed against every `fetch` call in `frontend/src`: `GET /api/v1/portfolio/summary` (48 lines that recomputed `/summary-cards`' LTP-resolution and totals verbatim), `POST /api/v1/portfolio/fetch-ohlc` (superseded by `/fetch-ohlc/stream`), and `GET /api/v1/usdinr` — the rate reaches the UI through the manual-assets summary, so the route and the `get_usdinr_info` it was the sole caller of are both gone. Every remaining route is now reachable from the frontend except the Kite OAuth browser redirect.
+- **`market_sentiment._load_index_df` deleted** — a strict subset of `_load_ohlc_df` (close-only vs full OHLC), and all six call sites read nothing but `df['close']`. They call `_load_ohlc_df` directly now.
+- **Dead metadata** — `BUCKET_META`'s `term`, `is_112a` and `indexed` keys were never read: `_STCG_KEYS`/`_LTCG_KEYS`/`_112A_KEYS` decide all of that, so the dict was a second source of truth free to drift. `THRESHOLDS["ltcg_exemption"]` was likewise unread (the ₹1.25L figure is written into the message string). Seven `_eval_*` policy triggers took a `states` argument they never touched.
+- **`Holding.market_value`** — the `qty × last_price ?? total_cost` rule was inlined 11 times across `composition.py` and `allocation.py`; it is now one property on the model.
+- **Duplicated queries collapsed** — `load_portfolio_holdings` (the same Holding×Instrument join written out 5 times), `_traded_equity_instruments` (twice in `kite_historical.py`), `_price_rows` and `_instrument_options` (twice each in `charts.py`), `_upsert_candles` (the `pg_insert(PriceHistory)` block written twice), and `_fetch_range` now carries an optional progress hook so `fetch_ohlc_for_ticker` no longer keeps its own copy of the windowed fetch loop. Error strings and progress messages are unchanged.
+- **Other backend duplication** — `_refresh_ltp_and_xirr` (the shared tail of both price-sync streams), `_store_payload` in `usdinr.py`, `_comparison_row` for the three target-vs-actual row builders that each spelled out the same 13 keys, and `_adopt` for the ISIN backfill repeated three times in `instrument_registry.py`.
+- **Frontend duplication** — `ClassifySelectPanel` behind the two ~75-line classify panels in `Breakdown.tsx`, `TargetsTableHead` for its two identical 11-line table heads, `InfoPopover` behind `ChartInfo`/`FlagChip`, `OscillatorChart` for the five oscillator panels that each repeated the same six chart props, `toJson` in `api/client.ts`, and one `invalidateTradesAndPortfolio` in place of three copies.
+- Deleted the untracked build/cache junk — all `__pycache__` trees (several held `.pyc` files for modules removed long ago, e.g. `templating`, `get_current_portfolio_reports`), `.pytest_cache`, and six `.DS_Store` files. No tracked file was unused: every module has an importer, every `data/demo` JSON is referenced by `demo_seed.py`, and the Alembic chain is a single unbroken line.
+- `README.md` — dropped `GET /` from the USDINR endpoint table and corrected the two `usdinr.py` tree comments.
+
+---
+
 ## 2026-09-18-18-25-17 — Exclude derivative/futures legs from equity-only sector views
 - `get_sector_composition` and `get_sector_stock_breakdown` now exclude `Derivatives - Leveraged` rows alongside `Equity - Arbitrage`, fixing a leak where a fund's futures/derivative leg (e.g. an unclassified-sector position with no real equity exposure) showed up as a stock holding in the Sector tab's `Unknown` bucket. (2026-09-18-18-25-17 · b5628c6)
 

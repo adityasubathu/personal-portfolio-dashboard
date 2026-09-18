@@ -132,6 +132,22 @@ function RebalanceRows({ buckets }: { buckets: RebalanceBucket[] }) {
   )
 }
 
+function TargetsTableHead({ firstColumn }: { firstColumn: string }) {
+  return (
+    <Table.Thead>
+      <Table.Tr>
+        <Table.Th>{firstColumn}</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
+        <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
+      </Table.Tr>
+    </Table.Thead>
+  )
+}
+
 function RebalanceTableHead() {
   return (
     <Table.Thead>
@@ -208,17 +224,7 @@ function AssetClassTargetsSection({
       )}
       <Table fz="sm" withColumnBorders={false}>
         {rebalanceView ? <RebalanceTableHead /> : (
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Asset class</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
+        <TargetsTableHead firstColumn="Asset class" />
         )}
         <Table.Tbody>
           {rebalanceView && plan ? (
@@ -443,17 +449,7 @@ function OverviewTab() {
 
           <Table fz="sm" withColumnBorders={false}>
             {rebalanceView ? <RebalanceTableHead /> : (
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Category</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
+            <TargetsTableHead firstColumn="Category" />
             )}
             <Table.Tbody>
               {rebalanceView && plan ? (
@@ -518,6 +514,91 @@ function OverviewTab() {
   )
 }
 
+/** Shared shell for the two "pick a value for each unclassified name" panels.
+ *  onSave returns how many holdings the server updated. */
+function ClassifySelectPanel({
+  title,
+  columnLabel,
+  columnWidth,
+  placeholder,
+  options,
+  searchable = false,
+  names,
+  resetKey,
+  saving,
+  onSave,
+  onDone,
+}: {
+  title: (count: number) => string
+  columnLabel: string
+  columnWidth: number
+  placeholder: string
+  options: string[]
+  searchable?: boolean
+  names: string[]
+  resetKey?: unknown
+  saving: boolean
+  onSave: (selections: Record<string, string>) => Promise<number>
+  onDone: () => void
+}) {
+  const [selections, setSelections] = useState<Record<string, string>>({})
+
+  useEffect(() => { setSelections({}) }, [resetKey])
+
+  async function handleSave() {
+    const picked = Object.fromEntries(names.filter((n) => selections[n]).map((n) => [n, selections[n]]))
+    if (!Object.keys(picked).length) return
+    try {
+      const updated = await onSave(picked)
+      notifications.show({ color: 'green', message: `Classified ${updated} holding${updated === 1 ? '' : 's'}.` })
+      onDone()
+    } catch (e) {
+      notifications.show({ color: 'red', message: String(e) })
+    }
+  }
+
+  const doneCount = names.filter((n) => selections[n]).length
+
+  return (
+    <Paper withBorder p="sm">
+      <Text fw={600} size="sm" mb="xs">{title(names.length)}</Text>
+      <Table fz="sm" withColumnBorders={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Stock name</Table.Th>
+            <Table.Th style={{ width: columnWidth }}>{columnLabel}</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {names.map((n) => (
+            <Table.Tr key={n}>
+              <Table.Td>{n}</Table.Td>
+              <Table.Td>
+                <Select
+                  size="xs"
+                  placeholder={placeholder}
+                  data={options}
+                  searchable={searchable}
+                  value={selections[n] ?? null}
+                  onChange={(v) => setSelections((prev) => ({ ...prev, [n]: v ?? '' }))}
+                />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Group mt="xs" gap="xs">
+        <Button size="xs" loading={saving} disabled={!doneCount} onClick={handleSave}>
+          Save{doneCount < names.length ? ` (${doneCount} of ${names.length})` : ' all'}
+        </Button>
+        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
+          Dismiss
+        </Button>
+      </Group>
+    </Paper>
+  )
+}
+
 function SectorClassifyPanel({
   level,
   unknownHoldings,
@@ -527,73 +608,27 @@ function SectorClassifyPanel({
   unknownHoldings: Array<{ name: string; value: number; pct: number }>
   onDone: () => void
 }) {
-  const [selections, setSelections] = useState<Record<string, string>>({})
   const { data: valueList } = useSectorList(level)
   const classifyMut = useSectorClassifyBatchMutation()
   const levelLabel = LEVEL_OPTIONS.find((o) => o.value === level)?.label ?? 'Sector'
 
-  useEffect(() => { setSelections({}) }, [level])
-
-  async function handleSave() {
-    const rows = unknownHoldings
-      .filter((h) => selections[h.name])
-      .map((h) => ({ name: h.name, level, value: selections[h.name] }))
-    if (!rows.length) return
-    try {
-      const res = await classifyMut.mutateAsync(rows)
-      notifications.show({ color: 'green', message: `Classified ${res.updated} holding${res.updated === 1 ? '' : 's'}.` })
-      onDone()
-    } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
-    }
-  }
-
-  const pendingCount = unknownHoldings.filter((h) => !selections[h.name]).length
-
   return (
-    <Paper withBorder p="sm">
-      <Text fw={600} size="sm" mb="xs">
-        Classify unknown-{levelLabel.toLowerCase()} stocks ({unknownHoldings.length})
-      </Text>
-      <Table fz="sm" withColumnBorders={false}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Stock name</Table.Th>
-            <Table.Th style={{ width: 260 }}>{levelLabel}</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {unknownHoldings.map((h) => (
-            <Table.Tr key={h.name}>
-              <Table.Td>{h.name}</Table.Td>
-              <Table.Td>
-                <Select
-                  size="xs"
-                  placeholder={`Select ${levelLabel.toLowerCase()}…`}
-                  data={valueList ?? []}
-                  searchable
-                  value={selections[h.name] ?? null}
-                  onChange={(v) => setSelections((prev) => ({ ...prev, [h.name]: v ?? '' }))}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      <Group mt="xs" gap="xs">
-        <Button
-          size="xs"
-          loading={classifyMut.isPending}
-          disabled={!Object.values(selections).filter(Boolean).length}
-          onClick={handleSave}
-        >
-          Save{pendingCount > 0 ? ` (${unknownHoldings.length - pendingCount} of ${unknownHoldings.length})` : ' all'}
-        </Button>
-        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
-          Dismiss
-        </Button>
-      </Group>
-    </Paper>
+    <ClassifySelectPanel
+      title={(n) => `Classify unknown-${levelLabel.toLowerCase()} stocks (${n})`}
+      columnLabel={levelLabel}
+      columnWidth={260}
+      placeholder={`Select ${levelLabel.toLowerCase()}…`}
+      options={valueList ?? []}
+      searchable
+      names={unknownHoldings.map((h) => h.name)}
+      resetKey={level}
+      saving={classifyMut.isPending}
+      onSave={async (selections) => {
+        const rows = Object.entries(selections).map(([name, value]) => ({ name, level, value }))
+        return (await classifyMut.mutateAsync(rows)).updated
+      }}
+      onDone={onDone}
+    />
   )
 }
 
@@ -952,71 +987,28 @@ function ClassifyPanel({
   equities: UnmatchedEquity[]
   onDone: () => void
 }) {
-  const [selections, setSelections] = useState<Record<string, string>>({})
   const classifyMut = useClassifyBatchMutation()
 
   // Deduplicate by name for display; one override covers all schemes
   const unique = equities.filter((e, i, arr) => arr.findIndex((x) => x.name === e.name) === i)
 
-  async function handleSave() {
-    const rows = unique
-      .filter((e) => selections[e.name])
-      .map((e) => ({ scheme_isin: e.scheme_isin, name: e.name, category: selections[e.name] }))
-    if (!rows.length) return
-    try {
-      const res = await classifyMut.mutateAsync(rows)
-      notifications.show({ color: 'green', message: `Classified ${res.updated} holding${res.updated === 1 ? '' : 's'}.` })
-      onDone()
-    } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
-    }
-  }
-
-  const pendingCount = unique.filter((e) => !selections[e.name]).length
-
   return (
-    <Paper withBorder p="sm">
-      <Text fw={600} size="sm" mb="xs">
-        Classify unmatched equities ({unique.length})
-      </Text>
-      <Table fz="sm" withColumnBorders={false}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Stock name</Table.Th>
-            <Table.Th style={{ width: 160 }}>Market cap</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {unique.map((e) => (
-            <Table.Tr key={e.name}>
-              <Table.Td>{e.name}</Table.Td>
-              <Table.Td>
-                <Select
-                  size="xs"
-                  placeholder="Select…"
-                  data={CAP_CATEGORIES}
-                  value={selections[e.name] ?? null}
-                  onChange={(v) => setSelections((prev) => ({ ...prev, [e.name]: v ?? '' }))}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      <Group mt="xs" gap="xs">
-        <Button
-          size="xs"
-          loading={classifyMut.isPending}
-          disabled={!Object.values(selections).filter(Boolean).length}
-          onClick={handleSave}
-        >
-          Save{pendingCount > 0 ? ` (${unique.length - pendingCount} of ${unique.length})` : ' all'}
-        </Button>
-        <Button size="xs" variant="subtle" color="gray" onClick={onDone}>
-          Dismiss
-        </Button>
-      </Group>
-    </Paper>
+    <ClassifySelectPanel
+      title={(n) => `Classify unmatched equities (${n})`}
+      columnLabel="Market cap"
+      columnWidth={160}
+      placeholder="Select…"
+      options={CAP_CATEGORIES}
+      names={unique.map((e) => e.name)}
+      saving={classifyMut.isPending}
+      onSave={async (selections) => {
+        const rows = unique
+          .filter((e) => selections[e.name])
+          .map((e) => ({ scheme_isin: e.scheme_isin, name: e.name, category: selections[e.name] }))
+        return (await classifyMut.mutateAsync(rows)).updated
+      }}
+      onDone={onDone}
+    />
   )
 }
 

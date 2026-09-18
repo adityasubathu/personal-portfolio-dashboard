@@ -9,7 +9,7 @@ from app.models.app_config import AppConfig
 from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown, NseIndustryClassification
-from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
+from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups, load_portfolio_holdings
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, load_level_overrides, normalize_company_name
 from app.services.nse_industry import (
     CLASSIFICATION_LEVELS,
@@ -183,12 +183,7 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     """Returns per-category breakdown showing each contributing source and its value."""
     from app.services.manual_assets import get_manual_assets_summary
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
 
     isin_to_cat, name_to_cat = await _load_amfi_lookups(db)
 
@@ -283,12 +278,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
 
     level = _resolve_level(level)
 
-    result = await db.execute(
-        select(Holding, Instrument)
-        .join(Instrument, Holding.instrument_id == Instrument.id)
-        .where(Instrument.instrument_type.in_(("MF", "ETF", "BOND", "STOCK")))
-    )
-    all_holdings = result.all()
+    all_holdings = await load_portfolio_holdings(db)
 
     # Classification lookup for direct stocks, keyed by ISIN only.
     classification_lookup = await load_classification_lookup(db)

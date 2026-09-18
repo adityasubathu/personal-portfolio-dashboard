@@ -71,18 +71,23 @@ def cancel_sync() -> None:
 
 
 
-async def resolve_instrument_tokens(db: AsyncSession) -> dict:
-    """Populate Instrument.kite_instrument_token for every STOCK/BOND instrument
-    the user has ever traded (including sold-out positions) whose
-    (tradingsymbol, exchange) appears in Kite's instruments dump.
-    Returns {resolved, already_had, unresolved: [names]}."""
+async def _traded_equity_instruments(db: AsyncSession) -> list[Instrument]:
+    """Every STOCK/BOND instrument the user has ever traded, including sold-out ones."""
     traded_ids = select(Trade.instrument_id).distinct()
     result = await db.execute(
         select(Instrument)
         .where(Instrument.id.in_(traded_ids))
         .where(Instrument.instrument_type.in_(EQUITY_TYPES))
     )
-    instruments = list(result.scalars().all())
+    return list(result.scalars().all())
+
+
+async def resolve_instrument_tokens(db: AsyncSession) -> dict:
+    """Populate Instrument.kite_instrument_token for every STOCK/BOND instrument
+    the user has ever traded (including sold-out positions) whose
+    (tradingsymbol, exchange) appears in Kite's instruments dump.
+    Returns {resolved, already_had, unresolved: [names]}."""
+    instruments = await _traded_equity_instruments(db)
     if not instruments:
         return {"resolved": 0, "already_had": 0, "unresolved": []}
 
@@ -215,18 +220,52 @@ async def _earliest_stored_price_date(db: AsyncSession, instrument_id: int) -> d
     ).scalar_one_or_none()
 
 
+async def _upsert_candles(db: AsyncSession, instrument_id: int, candles: list[dict]) -> int:
+    """Write day candles to price_history, overwriting any existing row for the date."""
+    stmt = pg_insert(PriceHistory).values(
+        [
+            {
+                "instrument_id": instrument_id,
+                "price_date": c["date"],
+                "open": c.get("open"),
+                "high": c.get("high"),
+                "low": c.get("low"),
+                "close": c["close"],
+            }
+            for c in candles
+        ]
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["instrument_id", "price_date"],
+        set_={
+            "open": stmt.excluded.open,
+            "high": stmt.excluded.high,
+            "low": stmt.excluded.low,
+            "close": stmt.excluded.close,
+        },
+    )
+    result = await db.execute(stmt)
+    return result.rowcount or 0
+
+
 async def _fetch_range(
     config: KiteConfig,
     token: int,
     start: date,
     end: date,
+    on_progress=None,
 ) -> tuple[list[dict], str | None]:
     """Fetch candles for [start, end] in KITE_DAY_CANDLE_CAP-day windows.
-    Returns (candles, error_str | None)."""
+    Returns (candles, error_str | None) where the error is the raw Kite message."""
     candles: list[dict] = []
     cursor = start
+    n_windows = max(1, (end - start).days // KITE_DAY_CANDLE_CAP + 1)
+    win_idx = 0
     while cursor <= end:
+        win_idx += 1
         window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), end)
+        if on_progress:
+            await on_progress(f"Fetching window {win_idx}/{n_windows}: {cursor} → {window_end}…")
         try:
             chunk = await kite_client.get_historical_candles(
                 config.api_key,
@@ -236,7 +275,9 @@ async def _fetch_range(
                 window_end,
             )
         except (httpx.HTTPError, ValueError) as e:
-            return [], f"kite: {e}"
+            return [], str(e)
+        if on_progress:
+            await on_progress(f"  → {len(chunk)} candle(s) received")
         candles.extend(chunk)
         cursor = window_end + timedelta(days=1)
     return candles, None
@@ -276,7 +317,7 @@ async def _sync_one(
     # ── Fetch forward (recent data) ───────────────────────────────────────────
     all_candles, err = await _fetch_range(config, instrument.kite_instrument_token, forward_start, today)
     if err:
-        return {"rows_added": 0, "latest_price_date": None, "error": err}
+        return {"rows_added": 0, "latest_price_date": None, "error": f"kite: {err}"}
 
     # ── Fetch backward gap if existing data doesn't reach the floor ───────────
     if earliest_stored is not None and earliest_stored > floor:
@@ -286,7 +327,7 @@ async def _sync_one(
                 config, instrument.kite_instrument_token, floor, backward_end
             )
             if err:
-                return {"rows_added": 0, "latest_price_date": None, "error": err}
+                return {"rows_added": 0, "latest_price_date": None, "error": f"kite: {err}"}
             all_candles.extend(back_candles)
 
     if not all_candles:
@@ -310,30 +351,7 @@ async def _sync_one(
             seen[c["date"]] = c
     all_candles = list(seen.values())
 
-    stmt = pg_insert(PriceHistory).values(
-        [
-            {
-                "instrument_id": instrument.id,
-                "price_date": c["date"],
-                "open": c.get("open"),
-                "high": c.get("high"),
-                "low": c.get("low"),
-                "close": c["close"],
-            }
-            for c in all_candles
-        ]
-    )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["instrument_id", "price_date"],
-        set_={
-            "open": stmt.excluded.open,
-            "high": stmt.excluded.high,
-            "low": stmt.excluded.low,
-            "close": stmt.excluded.close,
-        },
-    )
-    result = await db.execute(stmt)
-    rows_added = result.rowcount or 0
+    rows_added = await _upsert_candles(db, instrument.id, all_candles)
 
     newest = max(all_candles, key=lambda c: c["date"])
     return {"rows_added": rows_added, "latest_price_date": newest["date"].isoformat()}
@@ -358,13 +376,7 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
     if on_progress and resolved["resolved"]:
         await on_progress(f"Resolved {resolved['resolved']} new token(s)")
 
-    traded_ids = select(Trade.instrument_id).distinct()
-    result = await db.execute(
-        select(Instrument)
-        .where(Instrument.id.in_(traded_ids))
-        .where(Instrument.instrument_type.in_(EQUITY_TYPES))
-    )
-    instruments = list(result.scalars().all())
+    instruments = await _traded_equity_instruments(db)
 
     if on_progress:
         await on_progress(f"Syncing {len(instruments)} instrument(s)…")
@@ -595,34 +607,14 @@ async def fetch_ohlc_for_ticker(
         await _progress(f"Token resolved: {token}")
 
     # Windowed fetch.
-    all_candles: list[dict] = []
-    cursor = start_date
-    n_windows = max(1, (end - start_date).days // KITE_DAY_CANDLE_CAP + 1)
-    win_idx = 0
-    while cursor <= end:
-        win_idx += 1
-        window_end = min(cursor + timedelta(days=KITE_DAY_CANDLE_CAP - 1), end)
-        await _progress(
-            f"Fetching window {win_idx}/{n_windows}: {cursor} → {window_end}…"
-        )
-        try:
-            chunk = await kite_client.get_historical_candles(
-                config.api_key,
-                config.access_token,
-                token,
-                cursor,
-                window_end,
-            )
-        except (httpx.HTTPError, ValueError) as e:
-            return {
-                "error": f"Kite fetch failed: {e}",
-                "symbol": instrument.tradingsymbol,
-                "requested_start": start_date.isoformat(),
-                "requested_end": end.isoformat(),
-            }
-        await _progress(f"  → {len(chunk)} candle(s) received")
-        all_candles.extend(chunk)
-        cursor = window_end + timedelta(days=1)
+    all_candles, err = await _fetch_range(config, token, start_date, end, on_progress=_progress)
+    if err:
+        return {
+            "error": f"Kite fetch failed: {err}",
+            "symbol": instrument.tradingsymbol,
+            "requested_start": start_date.isoformat(),
+            "requested_end": end.isoformat(),
+        }
 
     if not all_candles:
         return {
@@ -637,30 +629,7 @@ async def fetch_ohlc_for_ticker(
             "no_data": True,
         }
 
-    stmt = pg_insert(PriceHistory).values(
-        [
-            {
-                "instrument_id": instrument.id,
-                "price_date": c["date"],
-                "open": c.get("open"),
-                "high": c.get("high"),
-                "low": c.get("low"),
-                "close": c["close"],
-            }
-            for c in all_candles
-        ]
-    )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["instrument_id", "price_date"],
-        set_={
-            "open": stmt.excluded.open,
-            "high": stmt.excluded.high,
-            "low": stmt.excluded.low,
-            "close": stmt.excluded.close,
-        },
-    )
-    result = await db.execute(stmt)
-    rows_added = result.rowcount or 0
+    rows_added = await _upsert_candles(db, instrument.id, all_candles)
     await db.commit()
 
     dates = [c["date"] for c in all_candles]
