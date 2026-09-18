@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import {
   Box, Button, Group, NumberInput, Paper, Select, SegmentedControl, Stack,
-  Table, Tabs, Text, Title,
+  Table, Tabs, Text,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useDebouncedValue } from '@mantine/hooks'
@@ -25,6 +25,8 @@ import { DataTable } from '../components/DataTable'
 import type { Column } from '../components/DataTable'
 import { DonutChart } from '../components/DonutChart'
 import { SsePanel } from '../components/SsePanel'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
 import { usePersistentState } from '../hooks/usePersistentState'
@@ -222,7 +224,9 @@ function AssetClassTargetsSection({
           onCashChange={setCashInput}
         />
       )}
-      <Table fz="sm" withColumnBorders={false}>
+      <Text size="xs" c="dimmed" hiddenFrom="sm">Scroll horizontally to view all columns</Text>
+      <Box style={{ overflowX: 'auto' }}>
+      <Table fz="sm" withColumnBorders={false} style={{ minWidth: 760 }}>
         {rebalanceView ? <RebalanceTableHead /> : (
         <TargetsTableHead firstColumn="Asset class" />
         )}
@@ -284,6 +288,7 @@ function AssetClassTargetsSection({
           )}
         </Table.Tbody>
       </Table>
+      </Box>
       {!rebalanceView && (
       <Group gap="lg" mt="xs" align="center">
         <Button size="xs" loading={saveMut.isPending} onClick={handleSave}>
@@ -395,24 +400,22 @@ function OverviewTab() {
   return (
     <Stack gap="lg">
       {chart.labels.length > 0 && (
-        <Group align="flex-start" wrap="wrap" gap="xl" justify="center">
-          <Stack gap={4}>
-            <Text fw={600} size="sm">Asset Allocation</Text>
+        <Group align="stretch" wrap="wrap" gap="md" grow>
+          <Panel title="Asset Allocation" style={{ flex: 1, minWidth: 280 }}>
             <DonutChart labels={hlLabels} values={hlValues} total={chart.total} />
-          </Stack>
-          <Stack gap={4}>
-            <Text fw={600} size="sm">Category Breakdown</Text>
+          </Panel>
+          <Panel title="Category Breakdown" style={{ flex: 1, minWidth: 280 }}>
             <DonutChart labels={catLabels} values={catValues} total={chart.total} />
-          </Stack>
+          </Panel>
         </Group>
       )}
 
       {isAnchored && (
-        <AssetClassTargetsSection rebalanceView={rebalanceView} onToggleRebalanceView={setRebalanceView} />
+        <Panel><AssetClassTargetsSection rebalanceView={rebalanceView} onToggleRebalanceView={setRebalanceView} /></Panel>
       )}
 
       {comparison && (
-        <Box>
+        <Panel>
           <Group justify="space-between" align="center" mb="xs">
             <Text fw={600}>
               {isAnchored ? (
@@ -447,7 +450,9 @@ function OverviewTab() {
             <Text size="xs" c="dimmed" mb="xs">{plan.conflict_note}</Text>
           )}
 
-          <Table fz="sm" withColumnBorders={false}>
+          <Text size="xs" c="dimmed" hiddenFrom="sm">Scroll horizontally to view all columns</Text>
+          <Box style={{ overflowX: 'auto' }}>
+          <Table fz="sm" withColumnBorders={false} style={{ minWidth: 760 }}>
             {rebalanceView ? <RebalanceTableHead /> : (
             <TargetsTableHead firstColumn="Category" />
             )}
@@ -503,12 +508,13 @@ function OverviewTab() {
               })}
             </Table.Tbody>
           </Table>
+          </Box>
           {!rebalanceView && (
             <Button size="xs" mt="xs" loading={saveMut.isPending} onClick={handleSaveTargets}>
               Save targets
             </Button>
           )}
-        </Box>
+        </Panel>
       )}
     </Stack>
   )
@@ -524,7 +530,6 @@ function ClassifySelectPanel({
   options,
   searchable = false,
   names,
-  resetKey,
   saving,
   onSave,
   onDone,
@@ -536,14 +541,11 @@ function ClassifySelectPanel({
   options: string[]
   searchable?: boolean
   names: string[]
-  resetKey?: unknown
   saving: boolean
   onSave: (selections: Record<string, string>) => Promise<number>
   onDone: () => void
 }) {
   const [selections, setSelections] = useState<Record<string, string>>({})
-
-  useEffect(() => { setSelections({}) }, [resetKey])
 
   async function handleSave() {
     const picked = Object.fromEntries(names.filter((n) => selections[n]).map((n) => [n, selections[n]]))
@@ -614,6 +616,7 @@ function SectorClassifyPanel({
 
   return (
     <ClassifySelectPanel
+      key={level}
       title={(n) => `Classify unknown-${levelLabel.toLowerCase()} stocks (${n})`}
       columnLabel={levelLabel}
       columnWidth={260}
@@ -621,7 +624,6 @@ function SectorClassifyPanel({
       options={valueList ?? []}
       searchable
       names={unknownHoldings.map((h) => h.name)}
-      resetKey={level}
       saving={classifyMut.isPending}
       onSave={async (selections) => {
         const rows = Object.entries(selections).map(([name, value]) => ({ name, level, value }))
@@ -676,7 +678,8 @@ function SectorTab({
   function toggle(sector: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
-      next.has(sector) ? next.delete(sector) : next.add(sector)
+      if (next.has(sector)) next.delete(sector)
+      else next.add(sector)
       return next
     })
   }
@@ -797,19 +800,16 @@ function FundStockRows({ schemeIsin, filterCategory }: { schemeIsin: string; fil
 
 function CompositionTab() {
   const { data: cats } = useCategoryComposition()
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [expandedFunds, setExpandedFunds] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    if (cats) setExpanded(new Set(cats.map((c) => c.category)))
-  }, [cats])
 
   if (!cats) return <Text size="sm" c="dimmed">Loading…</Text>
 
   function toggle(cat: string) {
-    setExpanded((prev) => {
+    setCollapsed((prev) => {
       const next = new Set(prev)
-      next.has(cat) ? next.delete(cat) : next.add(cat)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
       return next
     })
   }
@@ -817,7 +817,8 @@ function CompositionTab() {
   function toggleFund(key: string) {
     setExpandedFunds((prev) => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -835,17 +836,17 @@ function CompositionTab() {
         {cats.map((cat) => (
           <React.Fragment key={cat.category}>
             <Table.Tr
-              style={{ cursor: 'pointer', background: 'var(--mantine-color-gray-1)' }}
+              style={{ cursor: 'pointer', background: 'var(--surface-muted)' }}
               onClick={() => toggle(cat.category)}
             >
               <Table.Td fw={600}>
-                {expanded.has(cat.category) ? '▾' : '▸'}{' '}
+                {!collapsed.has(cat.category) ? '▾' : '▸'}{' '}
                 <Box component="span" style={{ color: categoryColor(cat.category) }}>{cat.category}</Box>
               </Table.Td>
               <Table.Td style={{ textAlign: 'right' }}><MoneyText value={cat.total} compact /></Table.Td>
               <Table.Td />
             </Table.Tr>
-            {expanded.has(cat.category) && cat.sources.map((s, i) => {
+            {!collapsed.has(cat.category) && cat.sources.map((s, i) => {
               const fundKey = `${cat.category}||${s.isin ?? i}`
               const canExpand = !!s.isin
               const isFundExpanded = expandedFunds.has(fundKey)
@@ -854,7 +855,7 @@ function CompositionTab() {
                   <Table.Tr
                     style={{
                       cursor: canExpand ? 'pointer' : undefined,
-                      background: isFundExpanded ? 'var(--mantine-color-gray-2)' : undefined,
+                      background: isFundExpanded ? 'var(--surface-sunken)' : undefined,
                       fontWeight: isFundExpanded ? 600 : undefined,
                     }}
                     onClick={canExpand ? () => toggleFund(fundKey) : undefined}
@@ -1014,24 +1015,13 @@ function ClassifyPanel({
 
 export function Breakdown() {
   const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
-  const [unmatchedEquities, setUnmatchedEquities] = useState<UnmatchedEquity[]>([])
+  const [dismissedResult, setDismissedResult] = useState<IngestDonePayload | null>(null)
   const [dismissedLevels, setDismissedLevels] = usePersistentState<ClassificationLevel[]>('sectorClassifyDismissedLevels', [])
-
-  useEffect(() => {
-    const equities = ingestSse.result?.ingest?.unmatched_equities
-    if (equities?.length) {
-      setUnmatchedEquities(equities)
-    }
-    // A fresh ingest re-offers classification at every level
-    if (ingestSse.result) {
-      setDismissedLevels([])
-    }
-  }, [ingestSse.result])
+  const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Portfolio Breakdown</Title>
+      <PageHeader title="Portfolio Breakdown" actions={
         <Button
           size="xs"
           leftSection={<IconRefresh size={12} />}
@@ -1041,7 +1031,7 @@ export function Breakdown() {
         >
           Refresh disclosures
         </Button>
-      </Group>
+      } />
 
       <SsePanel
         sse={ingestSse}
@@ -1052,11 +1042,11 @@ export function Breakdown() {
       {unmatchedEquities.length > 0 && (
         <ClassifyPanel
           equities={unmatchedEquities}
-          onDone={() => setUnmatchedEquities([])}
+          onDone={() => setDismissedResult(ingestSse.result)}
         />
       )}
 
-      <Tabs defaultValue="overview">
+      <Panel p="md"><Tabs defaultValue="overview">
         <Tabs.List>
           <Tabs.Tab value="overview">Overview</Tabs.Tab>
           <Tabs.Tab value="sector">Sector</Tabs.Tab>
@@ -1071,7 +1061,7 @@ export function Breakdown() {
           />
         </Tabs.Panel>
         <Tabs.Panel value="composition" pt="md"><CompositionTab /></Tabs.Panel>
-      </Tabs>
+      </Tabs></Panel>
     </Stack>
   )
 }
