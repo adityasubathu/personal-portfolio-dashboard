@@ -1,4 +1,5 @@
 """Tests for manual taxonomy overrides — pure functions, no DB, no network."""
+from app.services.mf_ingest import level_override_map
 from app.services.nse_industry import CLASSIFICATION_LEVELS, cascade_levels
 
 PARENTS = {
@@ -70,3 +71,26 @@ class TestMergeSemantics:
         merged = self._merge({"sector": "Metals & Mining", "macro_sector": None, "industry": None, "basic_industry": None})
         assert merged["sector"] == "Metals & Mining"
         assert merged["macro_sector"] is None
+
+
+class _StubOverride:
+    def __init__(self, name_normalized, **levels):
+        self.name_normalized = name_normalized
+        for level in CLASSIFICATION_LEVELS:
+            setattr(self, level, levels.get(level))
+
+
+class TestLevelOverrideMap:
+    def test_partial_row_yields_three_nones(self):
+        rows = [_StubOverride("acme ltd", sector="Metals & Mining")]
+        assert level_override_map(rows) == {
+            "acme ltd": {
+                "macro_sector": None,
+                "sector": "Metals & Mining",
+                "industry": None,
+                "basic_industry": None,
+            }
+        }
+
+    def test_empty_rows_yield_empty_map(self):
+        assert level_override_map([]) == {}

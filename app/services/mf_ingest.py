@@ -110,6 +110,18 @@ def normalize_company_name(name: str) -> str:
     return s
 
 
+def level_override_map(rows) -> dict[str, dict[str, str | None]]:
+    """EquitySectorOverride rows as {name_normalized: {level: value}}."""
+    return {
+        o.name_normalized: {level: getattr(o, level) for level in CLASSIFICATION_LEVELS}
+        for o in rows
+    }
+
+
+async def load_level_overrides(db: AsyncSession) -> dict[str, dict[str, str | None]]:
+    return level_override_map((await db.execute(select(EquitySectorOverride))).scalars().all())
+
+
 def _find_amfi_xlsx() -> Path | None:
     if not BREAKDOWN_DIR.exists():
         return None
@@ -417,7 +429,7 @@ class _AmfiLookups:
     """Bundles the AMFI-derived lookup tables used for equity classification, so
     they're built once per ingest run and threaded through as a single object."""
 
-    def __init__(self, amfi_all, overrides: dict[str, str], sector_overrides: dict[str, str]):
+    def __init__(self, amfi_all, overrides: dict[str, str], level_overrides: dict[str, dict[str, str | None]]):
         self.alias_to_isin: dict[str, str] = {}
         self.name_to_isin: dict[str, str] = {}
         self.isin_to_mcap: dict[str, str] = {}
@@ -445,7 +457,7 @@ class _AmfiLookups:
                         if alias_norm:
                             self.alias_to_isin[alias_norm] = a.isin
         self.overrides = overrides
-        self.sector_overrides = sector_overrides
+        self.level_overrides = level_overrides
 
     def classify_equity(self, name: str, holding_isin: str | None, fund_isin: str) -> str:
         if holding_isin and not holding_isin.startswith("IN"):
@@ -477,20 +489,35 @@ class _AmfiLookups:
             return self.isin_to_sector[holding_isin]
         sector = _resolve_equity_sector(name, self.alias_to_isin, self.name_to_isin, self.isin_to_sector, self.amfi_name_sector)
         if sector is None:
-            sector = self.sector_overrides.get(normalize_company_name(name))
+            sector = self.level_overrides.get(normalize_company_name(name), {}).get("sector")
         return sector
 
+    def auto_level(self, name: str, level: str) -> str | None:
+        """What the automatic pipeline resolves for a level from the name alone.
+
+        Used as a fallback when the holding's own ISIN is unknown, and to decide
+        when a manual override for that level has become redundant.
+        """
+        if level == "sector":
+            return _resolve_equity_sector(name, self.alias_to_isin, self.name_to_isin, self.isin_to_sector, self.amfi_name_sector)
+        norm = normalize_company_name(name)
+        isin = self.alias_to_isin.get(norm) or self.name_to_isin.get(norm)
+        entry = self.isin_to_levels.get(isin or "")
+        return entry.get(level) if entry else None
+
     def resolve_levels(self, name: str, holding_isin: str | None) -> dict:
-        """Returns {level: value} across CLASSIFICATION_LEVELS. Only "sector" can
-        come from a manual override — the other three are ISIN-only, with no
-        name-based fallback."""
+        """Returns {level: value} across CLASSIFICATION_LEVELS. Automatic resolution
+        wins at every level; the manual override table fills whatever is left."""
         entry = self.isin_to_levels.get(holding_isin or "")
-        return {
-            "macro_sector": entry.get("macro_sector") if entry else None,
-            "sector": self.resolve_sector(name, holding_isin),
-            "industry": entry.get("industry") if entry else None,
-            "basic_industry": entry.get("basic_industry") if entry else None,
-        }
+        manual = self.level_overrides.get(normalize_company_name(name), {})
+        out: dict[str, str | None] = {}
+        for level in CLASSIFICATION_LEVELS:
+            if level == "sector":
+                value = self.resolve_sector(name, holding_isin)
+            else:
+                value = (entry.get(level) if entry else None) or self.auto_level(name, level)
+            out[level] = value or manual.get(level)
+        return out
 
 
 def _classify_non_equity(
@@ -657,19 +684,27 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
         o.name_normalized: o.category
         for o in (await db.execute(select(EquityCategoryOverride))).scalars().all()
     }
-    sector_override_rows = (await db.execute(select(EquitySectorOverride))).scalars().all()
-    sector_overrides: dict[str, str] = {o.name_normalized: o.sector for o in sector_override_rows}
-    lookups = _AmfiLookups(amfi_all, overrides, sector_overrides)
+    override_rows_db = (await db.execute(select(EquitySectorOverride))).scalars().all()
+    level_overrides = level_override_map(override_rows_db)
+    lookups = _AmfiLookups(amfi_all, overrides, level_overrides)
 
-    # Auto-prune: if AMFI now has a sector for an override, the override is stale
+    # Auto-prune: a level the pipeline can now resolve on its own no longer needs a
+    # manual override. A row left with nothing is deleted.
     pruned = 0
-    for o in sector_override_rows:
-        if _resolve_equity_sector(o.raw_name, lookups.alias_to_isin, lookups.name_to_isin, lookups.isin_to_sector, lookups.amfi_name_sector) is not None:
-            await db.execute(delete(EquitySectorOverride).where(EquitySectorOverride.id == o.id))
-            sector_overrides.pop(o.name_normalized, None)
+    for o in override_rows_db:
+        cleared = False
+        for level in CLASSIFICATION_LEVELS:
+            if getattr(o, level) and lookups.auto_level(o.raw_name, level) is not None:
+                setattr(o, level, None)
+                level_overrides[o.name_normalized][level] = None
+                cleared = True
+        if cleared:
             pruned += 1
+        if not any(getattr(o, level) for level in CLASSIFICATION_LEVELS):
+            await db.execute(delete(EquitySectorOverride).where(EquitySectorOverride.id == o.id))
+            level_overrides.pop(o.name_normalized, None)
     if on_progress and pruned:
-        await on_progress(f"Auto-removed {pruned} stale sector override(s)")
+        await on_progress(f"Auto-removed stale override levels on {pruned} name(s)")
 
     held_funds = (await db.execute(
         select(Instrument)

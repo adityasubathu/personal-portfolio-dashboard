@@ -10,7 +10,7 @@ from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown, NseIndustryClassification
 from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
-from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, normalize_company_name
+from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, load_level_overrides, normalize_company_name
 from app.services.nse_industry import (
     CLASSIFICATION_LEVELS,
     STATUS_CLASSIFIED,
@@ -330,15 +330,21 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False, le
             _add(sec, {"name": fund_name, "isin": isin, "source_type": "fund", "fund_pct": round(pct, 2), "contribution": round(contribution, 2), "fund_value": round(fund_val, 2)})
 
     # Direct stocks
+    level_overrides = await load_level_overrides(db)
     for h, i in all_holdings:
         if i.instrument_type == "STOCK":
             ltp = float(h.last_price) if h.last_price else None
             val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
             if val <= 0:
                 continue
+            name = i.name or i.tradingsymbol or "Unknown"
             levels = classification_lookup.get(i.isin or "")
             sec = levels[level] if levels else None
-            _add(sec or "Unknown", {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
+            if not sec:
+                # Direct stocks have no breakdown row to write an override onto, so
+                # the manual fix is applied here, by normalised name.
+                sec = level_overrides.get(normalize_company_name(name), {}).get(level)
+            _add(sec or "Unknown", {"name": name, "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
 
     if not equity_only:
         # Bonds: SGB → Gold sector, everything else → Fixed Income
@@ -427,6 +433,7 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
             bucket[key] = bucket.get(key, 0) + contrib
 
     classification_lookup = await load_classification_lookup(db)
+    level_overrides = await load_level_overrides(db)
 
     stock_result = await db.execute(
         select(Holding, Instrument)
@@ -438,13 +445,15 @@ async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") ->
         val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
         if val <= 0:
             continue
+        name = i.name or i.tradingsymbol or "Unknown"
+        key = normalize_company_name(name)
         levels = classification_lookup.get(i.isin or "")
         sec = levels[level] if levels else None
+        if not sec:
+            sec = level_overrides.get(key, {}).get(level)
         if sec in _NON_EQUITY_SECTORS:
             continue
         sec = sec or "Unknown"
-        name = i.name or i.tradingsymbol or "Unknown"
-        key = normalize_company_name(name)
         display_name.setdefault(key, name)
         bucket = sector_stocks.setdefault(sec, {})
         bucket[key] = bucket.get(key, 0) + val
