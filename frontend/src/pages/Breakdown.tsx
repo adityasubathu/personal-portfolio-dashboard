@@ -1,8 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import {
-  Box, Stack,
-  Table, Text,
-} from '@mantine/core'
 import { Check, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
@@ -824,11 +820,9 @@ function SectorTab({
 function FundStockRows({ schemeIsin, filterCategory }: { schemeIsin: string; filterCategory: string }) {
   const { data, isLoading } = useSchemeBreakdown(schemeIsin)
   if (isLoading) return (
-    <Table.Tr>
-      <Table.Td colSpan={3} style={{ paddingLeft: '4rem' }}>
-        <Text c="dimmed">Loading stocks…</Text>
-      </Table.Td>
-    </Table.Tr>
+    <tr>
+      <td colSpan={3} className="py-1.5 pr-2 pl-16 text-muted-foreground">Loading stocks…</td>
+    </tr>
   )
   if (!data?.holdings.length) return null
   const sorted = [...data.holdings]
@@ -838,11 +832,11 @@ function FundStockRows({ schemeIsin, filterCategory }: { schemeIsin: string; fil
   return (
     <>
       {sorted.map((h, i) => (
-        <Table.Tr key={i} style={{ background: 'var(--mantine-color-blue-0)' }}>
-          <Table.Td style={{ paddingLeft: '4rem' }}>{h.name}</Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}>{h.pct.toFixed(2)}%</Table.Td>
-        </Table.Tr>
+        <tr key={i} className="bg-info/5">
+          <td className="py-1.5 pr-2 pl-16">{h.name}</td>
+          <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
+          <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
+        </tr>
       ))}
     </>
   )
@@ -853,7 +847,7 @@ function CompositionTab() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [expandedFunds, setExpandedFunds] = useState<Set<string>>(new Set())
 
-  if (!cats) return <Text size="sm" c="dimmed">Loading…</Text>
+  if (!cats) return <p className="text-sm text-muted-foreground">Loading…</p>
 
   function toggle(cat: string) {
     setCollapsed((prev) => {
@@ -874,75 +868,71 @@ function CompositionTab() {
   }
 
   return (
-    <Table fz="sm" withColumnBorders={false}>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Category / Scheme / Stock</Table.Th>
-          <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-          <Table.Th style={{ textAlign: 'right' }}>% of category</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {cats.map((cat) => (
-          <React.Fragment key={cat.category}>
-            <Table.Tr
-              style={{ cursor: 'pointer', background: 'var(--surface-muted)' }}
-              onClick={() => toggle(cat.category)}
-            >
-              <Table.Td fw={600}>
-                {!collapsed.has(cat.category) ? '▾' : '▸'}{' '}
-                <Box component="span" style={{ color: categoryColor(cat.category) }}>{cat.category}</Box>
-              </Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={cat.total} compact /></Table.Td>
-              <Table.Td />
-            </Table.Tr>
-            {!collapsed.has(cat.category) && cat.sources.map((s, i) => {
-              const fundKey = `${cat.category}||${s.isin ?? i}`
-              const canExpand = !!s.isin
-              const isFundExpanded = expandedFunds.has(fundKey)
-              return (
-                <React.Fragment key={fundKey}>
-                  <Table.Tr
-                    style={{
-                      cursor: canExpand ? 'pointer' : undefined,
-                      background: isFundExpanded ? 'var(--surface-sunken)' : undefined,
-                      fontWeight: isFundExpanded ? 600 : undefined,
-                    }}
-                    onClick={canExpand ? () => toggleFund(fundKey) : undefined}
-                  >
-                    <Table.Td pl="xl">
-                      {canExpand ? (isFundExpanded ? '▾ ' : '▸ ') : ''}
-                      {s.name}
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.contribution} compact /></Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>{s.share_pct.toFixed(1)}%</Table.Td>
-                  </Table.Tr>
-                  {canExpand && isFundExpanded && <FundStockRows schemeIsin={s.isin!} filterCategory={cat.category} />}
-                </React.Fragment>
-              )
-            })}
-          </React.Fragment>
-        ))}
-      </Table.Tbody>
-    </Table>
+    <Section bodyClassName="p-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 px-2 text-left font-medium text-muted-foreground">Category / Scheme / Stock</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">% of category</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cats.map((cat) => (
+              <React.Fragment key={cat.category}>
+                <tr className="cursor-pointer bg-muted/40 hover:bg-muted/60" onClick={() => toggle(cat.category)}>
+                  <td className="px-2 py-1.5 font-semibold">
+                    {!collapsed.has(cat.category) ? '▾' : '▸'}{' '}
+                    <span style={{ color: categoryColor(cat.category) }}>{cat.category}</span>
+                  </td>
+                  <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={cat.total} compact /></td>
+                  <td />
+                </tr>
+                {!collapsed.has(cat.category) && cat.sources.map((s, i) => {
+                  const fundKey = `${cat.category}||${s.isin ?? i}`
+                  const canExpand = !!s.isin
+                  const isFundExpanded = expandedFunds.has(fundKey)
+                  return (
+                    <React.Fragment key={fundKey}>
+                      <tr
+                        className={cn('hover:bg-muted/50', canExpand && 'cursor-pointer', isFundExpanded && 'bg-muted/30 font-semibold')}
+                        onClick={canExpand ? () => toggleFund(fundKey) : undefined}
+                      >
+                        <td className="py-1.5 pr-2 pl-8">
+                          {canExpand ? (isFundExpanded ? '▾ ' : '▸ ') : ''}
+                          {s.name}
+                        </td>
+                        <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={s.contribution} compact /></td>
+                        <td data-numeric className="px-2 py-1.5 text-right">{s.share_pct.toFixed(1)}%</td>
+                      </tr>
+                      {canExpand && isFundExpanded && <FundStockRows schemeIsin={s.isin!} filterCategory={cat.category} />}
+                    </React.Fragment>
+                  )
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
-
 const SYNCED_FUND_COLUMNS: Column<SyncedFund>[] = [
-  { key: 'name', label: 'Fund', sortable: true, render: (f) => <Text size="xs">{f.name}</Text> },
+  { key: 'name', label: 'Fund', sortable: true, render: (f) => <span className="text-xs">{f.name}</span> },
   {
     key: 'as_of',
     label: 'Portfolio as of',
     sortable: true,
-    render: (f) => <Text size="xs">{f.as_of ? shortDate(f.as_of) : '—'}</Text>,
+    render: (f) => <span className="text-xs">{f.as_of ? shortDate(f.as_of) : '—'}</span>,
   },
   {
     key: 'rows',
     label: 'Holdings',
     sortable: true,
     align: 'right',
-    render: (f) => <Text size="xs">{f.rows}</Text>,
+    render: (f) => <span className="text-xs">{f.rows}</span>,
   },
 ]
 
@@ -954,25 +944,25 @@ function staleFunds(funds: SyncedFund[], serverLatest: string): SyncedFund[] {
 function IngestResultRenderer(result: IngestDonePayload) {
   const { amfi, ingest, nse } = result
   return (
-    <Stack gap={4}>
+    <div className="space-y-1">
       {amfi?.error ? (
-        <Text size="xs" c="red">AMFI: {amfi.error}</Text>
+        <p className="text-xs text-negative">AMFI: {amfi.error}</p>
       ) : amfi ? (
-        <Text size="xs">AMFI: {amfi.rows_loaded} stocks loaded ({amfi.large}L / {amfi.mid}M / {amfi.small}S) from {amfi.file}</Text>
+        <p className="text-xs">AMFI: {amfi.rows_loaded} stocks loaded ({amfi.large}L / {amfi.mid}M / {amfi.small}S) from {amfi.file}</p>
       ) : null}
       {ingest?.error ? (
-        <Text size="xs" c="red">Ingest: {ingest.error}</Text>
+        <p className="text-xs text-negative">Ingest: {ingest.error}</p>
       ) : ingest?.already_current ? (
-        <Text size="xs">All schemes are up to date{ingest.as_of ? ` (as of ${ingest.as_of})` : ''}</Text>
+        <p className="text-xs">All schemes are up to date{ingest.as_of ? ` (as of ${ingest.as_of})` : ''}</p>
       ) : ingest ? (
-        <Text size="xs">
+        <p className="text-xs">
           Ingest: {ingest.schemes_processed} scheme(s) updated, {ingest.rows_upserted} row(s)
           {typeof ingest.schemes_skipped === 'number' && ingest.schemes_skipped > 0 ? ` · ${ingest.schemes_skipped} already current` : ''}
-        </Text>
+        </p>
       ) : null}
       {ingest?.funds?.length ? (
-        <Stack gap={2} mt={6}>
-          <Text size="xs" fw={600}>Portfolio date per fund</Text>
+        <div className="mt-1.5 space-y-1">
+          <p className="text-xs font-semibold">Portfolio date per fund</p>
           <DataTable
             columns={SYNCED_FUND_COLUMNS}
             rows={ingest.funds}
@@ -981,49 +971,49 @@ function IngestResultRenderer(result: IngestDonePayload) {
             rowKey={(f) => f.isin}
           />
           {ingest.server_latest_filing && staleFunds(ingest.funds, ingest.server_latest_filing).length ? (
-            <Text size="xs" c="orange">
+            <p className="text-xs text-warning">
               {staleFunds(ingest.funds, ingest.server_latest_filing).length} fund(s) behind the
               server's newest filing ({shortDate(ingest.server_latest_filing)}) — they haven't disclosed for it yet
-            </Text>
+            </p>
           ) : null}
-        </Stack>
+        </div>
       ) : null}
       {ingest?.unmatched_equities?.length ? (
-        <Text size="xs" c="orange">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</Text>
+        <p className="text-xs text-warning">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</p>
       ) : null}
       {ingest?.missing_funds?.length ? (
-        <Stack gap={2} mt={4}>
-          <Text size="xs" c="red" fw={600}>Not found in OpenFin for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</Text>
+        <div className="mt-1 space-y-1">
+          <p className="text-xs font-semibold text-negative">Not found in OpenFin for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</p>
           {ingest.missing_funds.map((f) => (
-            <Text key={f.isin} size="xs" c="red">• {f.isin} — {f.name}</Text>
+            <p key={f.isin} className="text-xs text-negative">• {f.isin} — {f.name}</p>
           ))}
-        </Stack>
+        </div>
       ) : null}
       {nse?.error ? (
-        <Text size="xs" c="red">NSE: {nse.error}</Text>
+        <p className="text-xs text-negative">NSE: {nse.error}</p>
       ) : nse ? (
-        <Stack gap={2} mt={6}>
-          <Text size="xs">
+        <div className="mt-1.5 space-y-1">
+          <p className="text-xs">
             NSE: {nse.classified} classified, {nse.skipped_cached} already known
             {typeof nse.unclassified === 'number' && nse.unclassified > 0 ? `, ${nse.unclassified} unclassified` : ''}
             {typeof nse.errors === 'number' && nse.errors > 0 ? `, ${nse.errors} errors` : ''}
             {typeof nse.mismatched === 'number' && nse.mismatched > 0 ? `, ${nse.mismatched} ISIN mismatches` : ''}
-          </Text>
+          </p>
           {nse.unresolved_isins?.length ? (
             <details>
-              <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--mantine-color-dimmed)' }}>
+              <summary className="cursor-pointer text-xs text-muted-foreground">
                 {nse.unresolved_isins.length} held ISIN{nse.unresolved_isins.length === 1 ? '' : 's'} not on the NSE main board
               </summary>
-              <Stack gap={2} mt={4}>
+              <div className="mt-1 space-y-1">
                 {nse.unresolved_isins.map((u) => (
-                  <Text key={u.isin} size="xs" c="dimmed">• {u.name} ({u.isin})</Text>
+                  <p key={u.isin} className="text-xs text-muted-foreground">• {u.name} ({u.isin})</p>
                 ))}
-              </Stack>
+              </div>
             </details>
           ) : null}
-        </Stack>
+        </div>
       ) : null}
-    </Stack>
+    </div>
   )
 }
 
