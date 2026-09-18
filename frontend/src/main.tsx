@@ -8,7 +8,7 @@ import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import './overrides.css'
 import App from './App'
-import { PrivacyProvider } from './hooks/usePrivacy'
+import { PrivacyProvider } from './hooks/PrivacyProvider'
 import { theme } from './theme'
 
 const queryClient = new QueryClient()
