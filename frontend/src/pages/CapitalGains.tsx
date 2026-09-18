@@ -1,28 +1,21 @@
-import { useState } from 'react'
-import {
-  Alert,
-  Badge,
-  Card,
-  Divider,
-  Group,
-  Loader,
-  NumberInput,
-  Popover,
-  ScrollArea,
-  SegmentedControl,
-  SimpleGrid,
-  Stack,
-  Table,
-  Text,
-  UnstyledButton,
-} from '@mantine/core'
-import { IconAlertCircle, IconChevronDown, IconChevronRight, IconInfoCircle } from '@tabler/icons-react'
+import { Fragment, useState, type ReactNode } from 'react'
+import { AlertCircle, ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useCapitalGains, useCapitalGainsYears } from '../api/capitalGains'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { MoneyText } from '../components/MoneyText'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
 import { gainColor, inr } from '../lib/format'
 
 const MASK = '₹•••'
@@ -35,22 +28,22 @@ const LT_BUCKETS = new Set([
 
 function isLongTerm(taxBucket: string) { return LT_BUCKETS.has(taxBucket) }
 
-const ASSET_CATEGORY_BADGE: Record<string, { label: string; color: string }> = {
-  equity: { label: 'Equity', color: 'green' },
-  debt_mf: { label: 'Debt/Non-Equity', color: 'grape' },
-  bond: { label: 'Debt/Non-Equity', color: 'grape' },
-  unknown_mf: { label: 'Debt/Non-Equity', color: 'grape' },
-  intl_fund: { label: 'Hybrid', color: 'yellow' },
-  gold_mf: { label: 'Hybrid', color: 'yellow' },
-  intl_etf: { label: 'Hybrid', color: 'yellow' },
-  gold_etf: { label: 'Hybrid', color: 'yellow' },
-  hybrid_mf: { label: 'Hybrid', color: 'yellow' },
+const ASSET_CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
+  equity: { label: 'Equity', className: 'bg-positive/10 text-positive' },
+  debt_mf: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
+  bond: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
+  unknown_mf: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
+  intl_fund: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
+  gold_mf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
+  intl_etf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
+  gold_etf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
+  hybrid_mf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
 }
 
 function AssetCategoryBadge({ assetCategory }: { assetCategory: string }) {
-  const meta = ASSET_CATEGORY_BADGE[assetCategory] ?? { label: assetCategory, color: 'gray' }
+  const meta = ASSET_CATEGORY_BADGE[assetCategory] ?? { label: assetCategory, className: 'bg-muted text-muted-foreground' }
   return (
-    <Badge size="xs" color={meta.color} variant="light" fz="calc(var(--mantine-font-size-xs) * 1.1)">
+    <Badge variant="outline" className={meta.className}>
       {meta.label}
     </Badge>
   )
@@ -59,13 +52,11 @@ function AssetCategoryBadge({ assetCategory }: { assetCategory: string }) {
 function TermBadge({ taxBucket }: { taxBucket: string }) {
   const lt = isLongTerm(taxBucket)
   return (
-    <Badge size="xs" color={lt ? 'blue' : 'orange'} variant="light" fz="calc(var(--mantine-font-size-xs) * 1.1)">
+    <Badge variant="outline" className={lt ? 'bg-info/10 text-info' : 'bg-warning/10 text-warning'}>
       {lt ? 'LT' : 'ST'}
     </Badge>
   )
 }
-
-// ── Help popover ──────────────────────────────────────────────────────────────
 
 const HELP_TEXT = `How these numbers are computed:
 
@@ -86,25 +77,19 @@ Estimated tax = taxable gain × flat rate. It excludes surcharge and 4% health &
 Not included: buyback proceeds (taxed as dividend Oct 2024 – Mar 2026 and indistinguishable from market sales in the tradebook), carry-forward of losses from prior years.`
 
 function InfoPopover({ text }: { text: string }) {
-  const [opened, setOpened] = useState(false)
   return (
-    <Popover opened={opened} onChange={setOpened} width={380} position="bottom-start"
-      withArrow shadow="md" clickOutsideEvents={['mousedown', 'touchstart']}>
-      <Popover.Target>
-        <IconInfoCircle
-          size={16}
-          style={{ cursor: 'pointer', color: 'var(--mantine-color-gray-5)', flexShrink: 0 }}
-          onClick={() => setOpened(o => !o)}
-        />
-      </Popover.Target>
-      <Popover.Dropdown>
-        <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>{text}</Text>
-      </Popover.Dropdown>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon-xs" aria-label="How these numbers are computed">
+          <Info className="size-4 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-96" align="start">
+        <p className="text-xs leading-relaxed whitespace-pre-line">{text}</p>
+      </PopoverContent>
     </Popover>
   )
 }
-
-// ── Bucket summary cards ──────────────────────────────────────────────────────
 
 function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number }) {
   const { privacyMode } = usePrivacy()
@@ -116,34 +101,31 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
     : (slabRate > 0 ? Math.round(bucket.taxable * slabRate) / 100 : null)
 
   return (
-    <Card withBorder padding="sm" radius="md">
-      <Text size="calc(var(--mantine-font-size-xs) * 1.1)" mb={4} lineClamp={2}>{bucket.label}</Text>
-      <MoneyText value={bucket.gross_gain} colorize size="md" fw={600} />
+    <div className="rounded-xl border bg-card p-3">
+      <p className="mb-1 line-clamp-2 text-xs">{bucket.label}</p>
+      <MoneyText value={bucket.gross_gain} colorize className="text-base font-semibold" />
       {(bucket.setoff_applied > 0 || bucket.exemption_applied > 0) && (
-        <Stack gap={2} mt={6}>
+        <div className="mt-1.5 space-y-0.5">
           {bucket.setoff_applied > 0 && (
-            <Text size="xs" c="dimmed">Set-off: −{fmt(bucket.setoff_applied)}</Text>
+            <p className="text-xs text-muted-foreground">Set-off: −{fmt(bucket.setoff_applied)}</p>
           )}
           {bucket.exemption_applied > 0 && (
-            <Text size="xs" c="dimmed">Exempt: −{fmt(bucket.exemption_applied)}</Text>
+            <p className="text-xs text-muted-foreground">Exempt: −{fmt(bucket.exemption_applied)}</p>
           )}
-          <Text size="xs" fw={500}>Taxable: {fmt(bucket.taxable)}</Text>
-        </Stack>
+          <p className="text-xs font-medium">Taxable: {fmt(bucket.taxable)}</p>
+        </div>
       )}
       {!isLoss && effectiveRate != null && effectiveTax != null && (
-        <Text size="xs" mt={4} c="dimmed">
-          Est. tax @ {effectiveRate}%:{' '}
-          <Text component="span" fw={600} c={gainColor(-1)}>{fmt(effectiveTax)}</Text>
-        </Text>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Est. tax @ {effectiveRate}%: <span className="font-semibold text-negative">{fmt(effectiveTax)}</span>
+        </p>
       )}
       {!isLoss && bucket.rate == null && effectiveRate == null && (
-        <Badge color="gray" variant="light" size="xs" mt={6}>Slab rate</Badge>
+        <Badge variant="secondary" className="mt-1.5">Slab rate</Badge>
       )}
-    </Card>
+    </div>
   )
 }
-
-// ── Symbol-grouped expandable table ──────────────────────────────────────────
 
 interface SymbolGroup {
   symbol: string
@@ -155,12 +137,9 @@ interface SymbolGroup {
   lots: RealizedLot[]
 }
 
-const EXPAND_COL = 6  // number of columns in the detail table
-
 function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: string }) {
   const { privacyMode } = usePrivacy()
   const fmt = (v: number) => privacyMode ? MASK : inr(v)
-  // Partition: lots whose buy happened before this FY (carried in) vs acquired this FY
   const carried = lots.filter(l => l.buy_date < fyStart)
   const acquired = lots.filter(l => l.buy_date >= fyStart)
 
@@ -168,67 +147,58 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
   const carriedCost = carried.reduce((s, l) => s + l.buy_value, 0)
   const avgCost = carriedQty > 0 ? carriedCost / carriedQty : 0
 
-  const cellStyle: React.CSSProperties = {
-    background: 'var(--mantine-color-gray-0)',
-    fontSize: 'var(--mantine-font-size-sm)',
-  }
+  const rows: ReactNode[] = []
 
-  const rows: React.ReactNode[] = []
-
-  // Opening position header
   if (carried.length > 0) {
     rows.push(
-      <Table.Tr key="opening-header">
-        <Table.Td colSpan={EXPAND_COL} style={{ ...cellStyle, paddingLeft: 32, paddingTop: 10, paddingBottom: 4 }}>
-          <Text size="sm" fw={600} c="dimmed">
+      <tr key="opening-header" className="bg-muted/40">
+        <td colSpan={6} className="px-8 pt-2.5 pb-1">
+          <p className="text-sm font-semibold text-muted-foreground">
             Opening position (bought before {fyStart}):
             {' '}{carriedQty.toLocaleString('en-IN')} units @ avg {inr(avgCost)} = {fmt(carriedCost)}
-          </Text>
-        </Table.Td>
-      </Table.Tr>
+          </p>
+        </td>
+      </tr>
     )
   }
 
   if (acquired.length > 0 && carried.length > 0) {
     rows.push(
-      <Table.Tr key="acquired-header">
-        <Table.Td colSpan={EXPAND_COL} style={{ ...cellStyle, paddingLeft: 32, paddingTop: 10, paddingBottom: 4 }}>
-          <Text size="sm" fw={600} c="dimmed">Acquired this FY:</Text>
-        </Table.Td>
-      </Table.Tr>
+      <tr key="acquired-header" className="bg-muted/40">
+        <td colSpan={6} className="px-8 pt-2.5 pb-1">
+          <p className="text-sm font-semibold text-muted-foreground">Acquired this FY:</p>
+        </td>
+      </tr>
     )
   }
 
-  // Individual lot rows
   const allLots = [...carried, ...acquired].sort((a, b) => a.sell_date.localeCompare(b.sell_date))
   for (const lot of allLots) {
     rows.push(
-      <Table.Tr key={`${lot.buy_date}-${lot.sell_date}-${lot.qty}`}>
-        <Table.Td style={{ ...cellStyle, paddingLeft: 40 }}>
-          <Group gap={4} wrap="nowrap">
+      <tr key={`${lot.buy_date}-${lot.sell_date}-${lot.qty}`} className="bg-muted/40">
+        <td className="px-10 py-1.5">
+          <div className="flex items-center gap-1">
             <TermBadge taxBucket={lot.tax_bucket} />
             {lot.flags.includes('grandfathered') && (
-              <Badge size="xs" color="blue" variant="dot">GF</Badge>
+              <Badge variant="outline" className="bg-info/10 text-info">GF</Badge>
             )}
             {lot.flags.includes('grandfathering_fmv_unavailable') && (
-              <Badge size="xs" color="orange" variant="dot">GF?</Badge>
+              <Badge variant="outline" className="bg-warning/10 text-warning">GF?</Badge>
             )}
-          </Group>
-        </Table.Td>
-        <Table.Td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
-          <Text size="sm" c="dimmed" component="span">{lot.buy_date} → </Text>
-          <Text size="sm" component="span">{lot.sell_date}</Text>
-          <Text size="sm" c="dimmed" component="span"> · {lot.holding_days}d</Text>
-        </Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>
-          {lot.qty.toLocaleString('en-IN')}
-        </Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(lot.buy_value)}</Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(lot.sell_value)}</Table.Td>
-        <Table.Td style={{ ...cellStyle, textAlign: 'right', color: gainColor(lot.gain), fontWeight: 500 }}>
+          </div>
+        </td>
+        <td className="px-2 py-1.5 whitespace-nowrap text-sm">
+          <span className="text-muted-foreground">{lot.buy_date} → </span>
+          <span>{lot.sell_date}</span>
+          <span className="text-muted-foreground"> · {lot.holding_days}d</span>
+        </td>
+        <td data-numeric className="px-2 py-1.5 text-right text-sm">{lot.qty.toLocaleString('en-IN')}</td>
+        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.buy_value)}</td>
+        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.sell_value)}</td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right text-sm font-medium', lot.gain > 0 ? 'text-positive' : lot.gain < 0 ? 'text-negative' : undefined)}>
           {fmt(lot.gain)}
-        </Table.Td>
-      </Table.Tr>
+        </td>
+      </tr>
     )
   }
 
@@ -240,11 +210,10 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
   const { privacyMode } = usePrivacy()
   const fmt = (v: number) => privacyMode ? MASK : inr(v)
 
-  if (lots.length === 0) return <Text c="dimmed" size="sm">No realized lots for this FY.</Text>
+  if (lots.length === 0) return <p className="p-4 text-sm text-muted-foreground">No realized lots for this FY.</p>
 
   const fyStart = `${fy.slice(0, 4)}-04-01`
 
-  // Group lots by symbol
   const bySymbol = new Map<string, SymbolGroup>()
   for (const lot of lots) {
     const existing = bySymbol.get(lot.symbol)
@@ -279,110 +248,102 @@ function SymbolTable({ lots, fy }: { lots: RealizedLot[], fy: string }) {
     })
   }
 
-  const headerStyle: React.CSSProperties = { textAlign: 'right', fontWeight: 600 }
-
   return (
-    <ScrollArea>
-      <Table withTableBorder withColumnBorders fz="sm" style={{ minWidth: 700 }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th style={{ width: 28 }} />
-            <Table.Th>Symbol</Table.Th>
-            <Table.Th style={headerStyle}>STCG</Table.Th>
-            <Table.Th style={headerStyle}>LTCG</Table.Th>
-            <Table.Th style={headerStyle}>Total P&amp;L</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs" style={{ minWidth: 700 }}>
+        <thead>
+          <tr className="sticky top-0 z-10 bg-card">
+            <th className="h-8 w-7 px-2" />
+            <th className="h-8 px-2 text-left font-medium text-muted-foreground">Symbol</th>
+            <th className="h-8 px-2 text-right font-medium text-muted-foreground">STCG</th>
+            <th className="h-8 px-2 text-right font-medium text-muted-foreground">LTCG</th>
+            <th className="h-8 px-2 text-right font-medium text-muted-foreground">Total P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody>
           {groups.map(sg => {
             const isOpen = expanded.has(sg.symbol)
-            return [
-              <Table.Tr
-                key={sg.symbol}
-                style={{ cursor: 'pointer' }}
-                onClick={() => toggle(sg.symbol)}
-              >
-                <Table.Td style={{ textAlign: 'center', paddingRight: 0 }}>
-                  <UnstyledButton style={{ display: 'flex', alignItems: 'center' }}>
-                    {isOpen
-                      ? <IconChevronDown size={14} color="var(--mantine-color-gray-5)" />
-                      : <IconChevronRight size={14} color="var(--mantine-color-gray-5)" />}
-                  </UnstyledButton>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <Text size="sm" fw={600}>{sg.symbol}</Text>
-                    <AssetCategoryBadge assetCategory={sg.assetCategory} />
-                  </Group>
-                  {sg.name && sg.name !== sg.symbol && (
-                    <Text size="xs" c="dimmed" lineClamp={1}>{sg.name}</Text>
-                  )}
-                </Table.Td>
-                <Table.Td style={{ textAlign: 'right', color: sg.stcg !== 0 ? gainColor(sg.stcg) : undefined, fontWeight: sg.stcg !== 0 ? 500 : undefined }}>
-                  {sg.stcg !== 0 ? fmt(sg.stcg) : <Text c="dimmed" size="xs">—</Text>}
-                </Table.Td>
-                <Table.Td style={{ textAlign: 'right', color: sg.ltcg !== 0 ? gainColor(sg.ltcg) : undefined, fontWeight: sg.ltcg !== 0 ? 500 : undefined }}>
-                  {sg.ltcg !== 0 ? fmt(sg.ltcg) : <Text c="dimmed" size="xs">—</Text>}
-                </Table.Td>
-                <Table.Td style={{ textAlign: 'right', color: gainColor(sg.total), fontWeight: 600 }}>
-                  {fmt(sg.total)}
-                </Table.Td>
-              </Table.Tr>,
-              isOpen && (
-                <Table.Tr key={`${sg.symbol}-detail`}>
-                  <Table.Td colSpan={1} style={{ background: 'var(--mantine-color-gray-0)', padding: 0 }} />
-                  <Table.Td colSpan={4} style={{ padding: 0 }}>
-                    <Table withColumnBorders fz="sm" style={{ width: '100%' }}>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th style={{ paddingLeft: 32 }}>Term</Table.Th>
-                          <Table.Th>Dates · Days held</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Qty</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Cost basis</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Proceeds</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Gain / Loss</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        <SymbolDetailRows lots={sg.lots} fyStart={fyStart} />
-                      </Table.Tbody>
-                    </Table>
-                  </Table.Td>
-                </Table.Tr>
-              ),
-            ]
+            return (
+              <Fragment key={sg.symbol}>
+                <tr className="cursor-pointer hover:bg-muted/50" onClick={() => toggle(sg.symbol)}>
+                  <td className="px-2 py-1.5 text-center">
+                    <button type="button" className="inline-flex items-center text-muted-foreground">
+                      {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                    </button>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-semibold">{sg.symbol}</span>
+                      <AssetCategoryBadge assetCategory={sg.assetCategory} />
+                    </div>
+                    {sg.name && sg.name !== sg.symbol && (
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{sg.name}</p>
+                    )}
+                  </td>
+                  <td data-numeric className={cn('px-2 py-1.5 text-right', sg.stcg !== 0 && (sg.stcg > 0 ? 'font-medium text-positive' : 'font-medium text-negative'))}>
+                    {sg.stcg !== 0 ? fmt(sg.stcg) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td data-numeric className={cn('px-2 py-1.5 text-right', sg.ltcg !== 0 && (sg.ltcg > 0 ? 'font-medium text-positive' : 'font-medium text-negative'))}>
+                    {sg.ltcg !== 0 ? fmt(sg.ltcg) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td data-numeric className={cn('px-2 py-1.5 text-right font-semibold', sg.total > 0 ? 'text-positive' : sg.total < 0 ? 'text-negative' : undefined)}>
+                    {fmt(sg.total)}
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr key={`${sg.symbol}-detail`}>
+                    <td className="bg-muted/40 p-0" />
+                    <td colSpan={4} className="p-0">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-muted/40">
+                            <th className="px-8 py-1 text-left text-xs font-medium text-muted-foreground">Term</th>
+                            <th className="px-2 py-1 text-left text-xs font-medium text-muted-foreground">Dates · Days held</th>
+                            <th className="px-2 py-1 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                            <th className="px-2 py-1 text-right text-xs font-medium text-muted-foreground">Cost basis</th>
+                            <th className="px-2 py-1 text-right text-xs font-medium text-muted-foreground">Proceeds</th>
+                            <th className="px-2 py-1 text-right text-xs font-medium text-muted-foreground">Gain / Loss</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <SymbolDetailRows lots={sg.lots} fyStart={fyStart} />
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
           })}
-        </Table.Tbody>
-      </Table>
-    </ScrollArea>
+        </tbody>
+      </table>
+    </div>
   )
 }
-
-// ── Attention section ─────────────────────────────────────────────────────────
 
 function AttentionSection({ items }: { items: AttentionItem[] }) {
   const { privacyMode } = usePrivacy()
   if (items.length === 0) return null
   return (
-    <Stack gap="xs">
-      <Group gap="xs">
-        <IconAlertCircle size={16} color="var(--mantine-color-orange-6)" />
-        <Text fw={600} size="sm">Needs attention ({items.length})</Text>
-      </Group>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="size-4 text-warning" />
+        <p className="text-sm font-semibold">Needs attention ({items.length})</p>
+      </div>
       {items.map((item, i) => (
-        <Alert key={i} color="orange" variant="light" py="xs">
-          <Group gap="xs" wrap="nowrap">
-            <Text size="sm" fw={500}>{item.symbol}</Text>
-            <Text size="sm" c="dimmed">sold {item.sell_date} · qty {item.qty} · proceeds {privacyMode ? MASK : inr(item.sell_value)}</Text>
-          </Group>
-          <Text size="xs" mt={4}>{item.reason}</Text>
+        <Alert key={i} className="border-warning/40 bg-warning/10 py-2">
+          <AlertDescription>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">{item.symbol}</span>
+              <span className="text-sm text-muted-foreground">sold {item.sell_date} · qty {item.qty} · proceeds {privacyMode ? MASK : inr(item.sell_value)}</span>
+            </div>
+            <p className="mt-1 text-xs">{item.reason}</p>
+          </AlertDescription>
         </Alert>
       ))}
-    </Stack>
+    </div>
   )
 }
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CapitalGains() {
   const { privacyMode } = usePrivacy()
@@ -398,25 +359,25 @@ export function CapitalGains() {
 
   if (yearsLoading) {
     return (
-      <Panel>
-        <Loader size="sm" />
-      </Panel>
+      <Section>
+        <Skeleton className="h-5 w-24" />
+      </Section>
     )
   }
 
   if (fys.length === 0) {
     return (
-      <Panel>
-        <Alert color="gray" variant="light">No sell trades found. Import your tradebook to see capital gains.</Alert>
-      </Panel>
+      <Section>
+        <Alert>
+          <AlertDescription>No sell trades found. Import your tradebook to see capital gains.</AlertDescription>
+        </Alert>
+      </Section>
     )
   }
 
-  // Compute STCG / LTCG totals from lots
   const totalStcg = (data?.lots ?? []).reduce((s, l) => s + (isLongTerm(l.tax_bucket) ? 0 : l.gain), 0)
   const totalLtcg = (data?.lots ?? []).reduce((s, l) => s + (isLongTerm(l.tax_bucket) ? l.gain : 0), 0)
 
-  // Slab-rate estimated tax (computed on frontend using user's slab rate)
   const slabTax = slabRate > 0
     ? (data?.buckets ?? [])
         .filter(b => b.rate == null && b.taxable > 0)
@@ -425,119 +386,126 @@ export function CapitalGains() {
   const totalEstTax = (data?.totals.est_tax ?? 0) + slabTax
 
   return (
-    <Stack gap="lg">
-      <PageHeader title="Capital Gains" actions={<InfoPopover text={HELP_TEXT} />} />
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Capital Gains"
+        actions={<InfoPopover text={HELP_TEXT} />}
+      />
 
-      <Group mb="lg" align="flex-end" justify="space-between" wrap="wrap">
-        <Group align="center" gap="sm">
-          <Text size="sm" fw={500}>Fiscal year</Text>
-          <SegmentedControl
-            value={activeFy}
-            onChange={v => setSelectedFy(v)}
-            data={fys.map(fy => ({ value: fy, label: `FY ${fy}` }))}
-            size="sm"
-          />
-        </Group>
-        <NumberInput
-          label="Your slab rate"
-          description="Applied to slab-rate gains"
-          value={slabRate}
-          onChange={v => setSlabRate(Number(v) || 0)}
-          min={0}
-          max={42}
-          step={5}
-          suffix="%"
-          w={160}
-          size="sm"
-        />
-      </Group>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm">Fiscal year</Label>
+          <ToggleGroup type="single" variant="outline" size="sm" value={activeFy} onValueChange={(v) => v && setSelectedFy(v)}>
+            {fys.map((fy) => (
+              <ToggleGroupItem key={fy} value={fy}>FY {fy}</ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="slab-rate" className="text-xs">Your slab rate (applied to slab-rate gains)</Label>
+          <div className="relative w-36">
+            <Input
+              id="slab-rate"
+              type="number"
+              min={0}
+              max={42}
+              step={5}
+              value={slabRate}
+              onChange={(e) => setSlabRate(Number(e.target.value) || 0)}
+              className="pr-6"
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-muted-foreground">%</span>
+          </div>
+        </div>
+      </div>
 
       {activeFy === '2024-25' && (
-        <Alert color="blue" variant="light" mb="md" icon={<IconAlertCircle size={14} />}>
-          Tax rates changed on 23 Jul 2024. Lots sold before that date use the old rates (STCG 15%, LTCG 10%);
-          lots sold on/after use the new rates (STCG 20%, LTCG 12.5%). Both appear as separate buckets below.
+        <Alert className="border-info/40 bg-info/10">
+          <AlertCircle className="size-4" />
+          <AlertDescription>
+            Tax rates changed on 23 Jul 2024. Lots sold before that date use the old rates (STCG 15%, LTCG 10%);
+            lots sold on/after use the new rates (STCG 20%, LTCG 12.5%). Both appear as separate buckets below.
+          </AlertDescription>
         </Alert>
       )}
 
-      {isLoading && <Loader size="sm" />}
+      {isLoading && <Skeleton className="h-24 w-full" />}
 
       {data && (
-        <Stack gap="xl">
-          {/* Per-rate-bucket cards */}
+        <div className="flex flex-col gap-4">
           {data.buckets.length > 0 ? (
-            <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="sm">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {data.buckets.map(bucket => (
                 <BucketCard key={bucket.key} bucket={bucket} slabRate={slabRate} />
               ))}
-            </SimpleGrid>
+            </div>
           ) : (
-            <Text c="dimmed" size="sm">No realized gains or losses for this FY.</Text>
+            <p className="text-sm text-muted-foreground">No realized gains or losses for this FY.</p>
           )}
 
-          {/* FY totals — STCG / LTCG / est. tax */}
           {data.buckets.length > 0 && (
-            <Panel style={{ maxWidth: 420 }}>
-              <Stack gap={4}>
-                <Group justify="space-between">
-                  <Group gap="xs">
-                    <Badge size="xs" color="orange" variant="light">ST</Badge>
-                    <Text size="sm" c="dimmed">Short-term gains</Text>
-                  </Group>
-                  <MoneyText value={totalStcg} colorize size="sm" fw={600} />
-                </Group>
-                <Group justify="space-between">
-                  <Group gap="xs">
-                    <Badge size="xs" color="blue" variant="light">LT</Badge>
-                    <Text size="sm" c="dimmed">Long-term gains</Text>
-                  </Group>
-                  <MoneyText value={totalLtcg} colorize size="sm" fw={600} />
-                </Group>
-                <Divider my={4} />
-                <Group justify="space-between">
-                  <Text size="sm" c="dimmed">Total gross gain</Text>
-                  <MoneyText value={data.totals.gross_gain} colorize size="sm" fw={600} />
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm" c="dimmed">
+            <Section className="max-w-md">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-warning/10 text-warning">ST</Badge>
+                    <span className="text-sm text-muted-foreground">Short-term gains</span>
+                  </div>
+                  <MoneyText value={totalStcg} colorize className="text-sm font-semibold" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-info/10 text-info">LT</Badge>
+                    <span className="text-sm text-muted-foreground">Long-term gains</span>
+                  </div>
+                  <MoneyText value={totalLtcg} colorize className="text-sm font-semibold" />
+                </div>
+                <Separator className="my-1" />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total gross gain</span>
+                  <MoneyText value={data.totals.gross_gain} colorize className="text-sm font-semibold" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
                     Est. tax{slabRate > 0 ? '' : ' (flat-rate buckets only)'}
-                  </Text>
-                  <MoneyText value={totalEstTax} size="sm" fw={600} c="red.8" />
-                </Group>
-                <Text size="xs" c="dimmed">
+                  </span>
+                  <MoneyText value={totalEstTax} className="text-sm font-semibold text-negative" />
+                </div>
+                <p className="text-xs text-muted-foreground">
                   Surcharge + 4% cess not included.
                   {slabRate === 0 && ' Set your slab rate above to include slab-rate gains.'}
-                </Text>
-              </Stack>
-            </Panel>
+                </p>
+              </div>
+            </Section>
           )}
 
-          <Divider />
+          <Separator />
 
-          {/* Symbol-grouped expandable table */}
-          <Stack gap="xs">
-            <Text fw={600} size="sm">Realized P&amp;L by symbol</Text>
-            <Text size="xs" c="dimmed">Click a row to see the opening position and individual lots.</Text>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">Realized P&amp;L by symbol</p>
+            <p className="text-xs text-muted-foreground">Click a row to see the opening position and individual lots.</p>
+          </div>
+          <Section bodyClassName="p-0">
             <SymbolTable lots={data.lots} fy={activeFy} />
-          </Stack>
+          </Section>
 
-          {/* Attention */}
           <AttentionSection items={data.attention} />
 
-          {/* Intraday footnote */}
           {data.intraday.trades > 0 && (
-            <Alert color="gray" variant="light" icon={<IconInfoCircle size={14} />}>
-              <Text size="sm">
+            <Alert>
+              <Info className="size-4" />
+              <AlertDescription>
                 {data.intraday.trades} intraday trade{data.intraday.trades !== 1 ? 's' : ''} detected
                 (same-day buy+sell) · approx. P&L{' '}
-                <Text component="span" fw={500} style={{ color: gainColor(data.intraday.pnl) }}>
+                <span className={cn('font-medium', gainColor(data.intraday.pnl) === 'var(--positive)' ? 'text-positive' : gainColor(data.intraday.pnl) === 'var(--negative)' ? 'text-negative' : undefined)}>
                   {privacyMode ? MASK : inr(data.intraday.pnl)}
-                </Text>{' '}
+                </span>{' '}
                 — treated as speculative business income, not capital gains.
-              </Text>
+              </AlertDescription>
             </Alert>
           )}
-        </Stack>
+        </div>
       )}
-    </Stack>
+    </div>
   )
 }
