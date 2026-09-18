@@ -109,6 +109,8 @@ export interface SchemeListItem {
   name: string
 }
 
+export type ClassificationLevel = 'macro_sector' | 'sector' | 'industry' | 'basic_industry'
+
 export interface SectorCompositionItem {
   sector: string
   total: number
@@ -162,6 +164,7 @@ export interface IngestDonePayload {
     large?: number
     mid?: number
     small?: number
+    sectors_from_nse?: number
     file?: string
     file_date?: string
     stale_warning?: string
@@ -181,6 +184,20 @@ export interface IngestDonePayload {
     checked_at?: string
     server_latest_filing?: string | null
     server_latest_portfolio_count?: number | null
+  }
+  nse?: {
+    held_isins?: number
+    resolved?: number
+    queried?: number
+    classified?: number
+    unclassified?: number
+    errors?: number
+    mismatched?: number
+    skipped_cached?: number
+    amfi_enriched?: number
+    breakdown_backfilled?: number
+    unresolved_isins?: Array<{ isin: string; name: string }>
+    error?: string
   }
   error?: string
 }

@@ -31,7 +31,14 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact, shortDate } from '../lib/format'
-import type { IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
+import type { ClassificationLevel, IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
+
+const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
+  { value: 'macro_sector', label: 'Macro' },
+  { value: 'sector', label: 'Sector' },
+  { value: 'industry', label: 'Industry' },
+  { value: 'basic_industry', label: 'Basic' },
+]
 
 function diffColor(diff: number): string | undefined {
   return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
@@ -569,9 +576,15 @@ function SectorClassifyPanel({
 }
 
 function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: () => void }) {
-  const { data: sectors } = useSectorComposition()
-  const { data: stockBreakdown } = useSectorStockBreakdown()
+  const [level, setLevel] = usePersistentState<ClassificationLevel>('sectorLevel', 'sector')
+  const { data: sectors } = useSectorComposition(level)
+  const { data: stockBreakdown } = useSectorStockBreakdown(level)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  function changeLevel(next: string) {
+    setLevel(next as ClassificationLevel)
+    setExpanded(new Set())
+  }
 
   if (!sectors) return <Text size="sm" c="dimmed">Loading…</Text>
 
@@ -596,6 +609,13 @@ function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: ()
 
   return (
     <Stack gap="lg">
+      <SegmentedControl
+        value={level}
+        onChange={changeLevel}
+        data={LEVEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        style={{ alignSelf: 'flex-start' }}
+      />
+
       {labels.length > 0 && (
         <DonutChart labels={labels} values={values} colorMode="sector" />
       )}
@@ -641,7 +661,7 @@ function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: ()
         </Table>
       </Box>
 
-      {!dismissed && unknownHoldings.length > 0 && (
+      {level === 'sector' && !dismissed && unknownHoldings.length > 0 && (
         <SectorClassifyPanel unknownHoldings={unknownHoldings} onDone={onDismiss} />
       )}
     </Stack>
@@ -781,7 +801,7 @@ function staleFunds(funds: SyncedFund[], serverLatest: string): SyncedFund[] {
 
 
 function IngestResultRenderer(result: IngestDonePayload) {
-  const { amfi, ingest } = result
+  const { amfi, ingest, nse } = result
   return (
     <Stack gap={4}>
       {amfi?.error ? (
@@ -826,6 +846,30 @@ function IngestResultRenderer(result: IngestDonePayload) {
           {ingest.missing_funds.map((f) => (
             <Text key={f.isin} size="xs" c="red">• {f.isin} — {f.name}</Text>
           ))}
+        </Stack>
+      ) : null}
+      {nse?.error ? (
+        <Text size="xs" c="red">NSE: {nse.error}</Text>
+      ) : nse ? (
+        <Stack gap={2} mt={6}>
+          <Text size="xs">
+            NSE: {nse.classified} classified, {nse.skipped_cached} already known
+            {typeof nse.unclassified === 'number' && nse.unclassified > 0 ? `, ${nse.unclassified} unclassified` : ''}
+            {typeof nse.errors === 'number' && nse.errors > 0 ? `, ${nse.errors} errors` : ''}
+            {typeof nse.mismatched === 'number' && nse.mismatched > 0 ? `, ${nse.mismatched} ISIN mismatches` : ''}
+          </Text>
+          {nse.unresolved_isins?.length ? (
+            <details>
+              <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--mantine-color-dimmed)' }}>
+                {nse.unresolved_isins.length} held ISIN{nse.unresolved_isins.length === 1 ? '' : 's'} not on the NSE main board
+              </summary>
+              <Stack gap={2} mt={4}>
+                {nse.unresolved_isins.map((u) => (
+                  <Text key={u.isin} size="xs" c="dimmed">• {u.name} ({u.isin})</Text>
+                ))}
+              </Stack>
+            </details>
+          ) : null}
         </Stack>
       ) : null}
     </Stack>

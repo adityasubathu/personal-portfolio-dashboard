@@ -5,6 +5,7 @@ import type {
   AssetClassComparison,
   BreakdownChartData,
   CategoryCompositionItem,
+  ClassificationLevel,
   ClassifyResult,
   RebalancePlan,
   SchemeBreakdown,
@@ -48,17 +49,17 @@ export function useCategoryComposition() {
   })
 }
 
-export function useSectorComposition() {
+export function useSectorComposition(level: ClassificationLevel = 'sector') {
   return useQuery({
-    queryKey: breakdownKeys.sectorComposition,
-    queryFn: () => request<SectorCompositionItem[]>('/api/v1/mf-breakdown/sector-composition'),
+    queryKey: [...breakdownKeys.sectorComposition, level],
+    queryFn: () => request<SectorCompositionItem[]>(`/api/v1/mf-breakdown/sector-composition?level=${level}`),
   })
 }
 
-export function useSectorStockBreakdown() {
+export function useSectorStockBreakdown(level: ClassificationLevel = 'sector') {
   return useQuery({
-    queryKey: breakdownKeys.sectorStockBreakdown,
-    queryFn: () => request<SectorStockBreakdownItem[]>('/api/v1/mf-breakdown/sector-stock-breakdown'),
+    queryKey: [...breakdownKeys.sectorStockBreakdown, level],
+    queryFn: () => request<SectorStockBreakdownItem[]>(`/api/v1/mf-breakdown/sector-stock-breakdown?level=${level}`),
   })
 }
 
