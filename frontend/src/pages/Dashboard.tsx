@@ -1,11 +1,5 @@
 import React, { useState } from 'react'
-import {
-  Badge, Box, Button, Collapse, Group,
-  NumberInput, Paper, SimpleGrid, Stack, Table, Text, TextInput,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { IconChevronDown as IconChevronDownTabler, IconChevronUp as IconChevronUpTabler, IconRefresh as IconRefreshTabler, IconTrash } from '@tabler/icons-react'
-import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useSummaryCards, useHoldings, useUpdateLtpMutation } from '../api/portfolio'
 import {
   useManualAssets,
@@ -26,7 +20,6 @@ import { usePrivacy } from '../hooks/usePrivacy'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { HoldingRow } from '../types/portfolio'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
 import { Section } from '@/components/Section'
 import { MetricCard } from '../components/MetricCard'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
@@ -37,6 +30,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Table as ShadTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 
@@ -436,8 +433,8 @@ function ManualAssets() {
     try {
       await addFdMut.mutateAsync({ label: fdLabel, principal: Number(fdPrincipal), interest_rate: Number(fdRate), start_date: fdStart, maturity_date: fdMaturity, is_emergency_fund: fdEmergency })
       setFdLabel(''); setFdPrincipal(''); setFdRate(''); setFdStart(''); setFdMaturity('')
-      notifications.show({ color: 'green', message: 'FD added.' })
-    } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+      notify.success('FD added.')
+    } catch (e) { notify.error(String(e)) }
   }
 
   async function handleAddForeignEquity() {
@@ -445,8 +442,8 @@ function ManualAssets() {
     try {
       await addForeignMut.mutateAsync({ label: fxLabel, current_value: Number(fxValue), invested_value: Number(fxInvested) || 0 })
       setFxLabel(''); setFxValue(''); setFxInvested('')
-      notifications.show({ color: 'green', message: 'Foreign equity added.' })
-    } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+      notify.success('Foreign equity added.')
+    } catch (e) { notify.error(String(e)) }
   }
 
   async function handleSaveForeignEquity(id: number) {
@@ -455,8 +452,8 @@ function ManualAssets() {
     try {
       await updateForeignMut.mutateAsync({ id, label: e.label, current_value: Number(e.current), invested_value: Number(e.invested) || 0 })
       setFxEdits((prev) => { const n = { ...prev }; delete n[id]; return n })
-      notifications.show({ color: 'green', message: 'Updated.' })
-    } catch (err) { notifications.show({ color: 'red', message: String(err) }) }
+      notify.success('Updated.')
+    } catch (err) { notify.error(String(err)) }
   }
 
   function initFxEdit(fe: { id: number; label: string; value_usd: number; invested_usd: number }) {
@@ -466,8 +463,8 @@ function ManualAssets() {
   async function handleRefreshUsdinr() {
     try {
       const r = await refreshUsdinrMut.mutateAsync()
-      notifications.show({ color: 'green', message: `USDINR rate updated: ₹${r.rate.toFixed(4)} (${r.source})` })
-    } catch (e) { notifications.show({ color: 'red', message: `USDINR refresh failed: ${String(e)}` }) }
+      notify.success(`USDINR rate updated: ₹${r.rate.toFixed(4)} (${r.source})`)
+    } catch (e) { notify.error(`USDINR refresh failed: ${String(e)}`) }
   }
 
   async function handleSetManualRate() {
@@ -475,8 +472,8 @@ function ManualAssets() {
     try {
       await setManualUsdinrMut.mutateAsync(Number(manualRate))
       setManualRate('')
-      notifications.show({ color: 'green', message: 'USDINR rate set manually.' })
-    } catch (e) { notifications.show({ color: 'red', message: String(e) }) }
+      notify.success('USDINR rate set manually.')
+    } catch (e) { notify.error(String(e)) }
   }
 
   if (!data) return null
@@ -492,231 +489,221 @@ function ManualAssets() {
     setOpen((value) => !value)
   }
 
-  const hasForeignEquity = data.foreign_equities.length > 0 || data.total_foreign_equity_usd > 0
-
   return (
-    <Panel title="Manual Assets" action={<Text size="xs" c="dimmed"><MoneyText value={data.total_manual} /> total</Text>}>
-      <Group justify="space-between" mb="xs">
-        <Button size="xs" variant="subtle" rightSection={open ? <IconChevronUpTabler size={12} /> : <IconChevronDownTabler size={12} />} onClick={toggleEditor}>
-          {open ? 'Hide' : 'Edit'}
-        </Button>
-      </Group>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium">Manual Assets</h2>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground"><MoneyText value={data.total_manual} /> total</span>
+          <ShadButton size="xs" variant="ghost" onClick={toggleEditor}>
+            {open ? 'Hide' : 'Edit'}
+            {open ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+          </ShadButton>
+        </div>
+      </div>
 
-      {/* Summary cards */}
-      <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="xs">
-        {data.total_fd > 0 && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">FDs</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.total_fd} /></Text>
-          </Paper>
-        )}
-        {data.ppf && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">PPF</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.total_ppf} /></Text>
-          </Paper>
-        )}
-        {data.nps && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">NPS</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.total_nps} /></Text>
-          </Paper>
-        )}
-        {data.cash && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">Cash</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.cash.current_value} /></Text>
-          </Paper>
-        )}
-        {data.usd_cash && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">INDMoney</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.usd_cash.current_value} /></Text>
-            <Text size="xs" c="dimmed">${data.usd_cash_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-          </Paper>
-        )}
-        {hasForeignEquity && (
-          <Paper withBorder p="xs" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" c="dimmed">Foreign Equity</Text>
-            <Text fw={600} size="sm"><MoneyText value={data.total_foreign_equity_inr} /></Text>
-            <Text size="xs" c="dimmed">{privacyMode ? '$•••' : `$${data.total_foreign_equity_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
-          </Paper>
-        )}
-      </SimpleGrid>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Section title="Fixed Deposits" action={data.total_fd > 0 ? <MoneyText value={data.total_fd} className="text-sm font-semibold" /> : undefined}>
+          <div className="space-y-3">
+            {data.fds.length > 0 && (
+              <ShadTable className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Principal</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead>Maturity</TableHead>
+                    <TableHead>Current</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.fds.map((fd) => (
+                    <TableRow key={fd.id}>
+                      <TableCell>
+                        {fd.label}
+                        {fd.is_emergency_fund && <Badge className="ml-1 bg-warning/10 text-warning">EF</Badge>}
+                      </TableCell>
+                      <TableCell><MoneyText value={fd.principal} /></TableCell>
+                      <TableCell>{fd.interest_rate}%</TableCell>
+                      <TableCell>{fd.maturity_date}</TableCell>
+                      <TableCell><MoneyText value={fd.current_value} /></TableCell>
+                      <TableCell>
+                        <ConfirmActionButton size="icon-xs" variant="ghost" confirmTitle="Delete fixed deposit?" confirmDescription={`Delete ${fd.label}?`} onConfirm={() => deleteMut.mutateAsync(fd.id)}>
+                          <Trash2 className="size-3" />
+                        </ConfirmActionButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </ShadTable>
+            )}
+            {open && (
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-sm font-medium">Add FD</p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-36 space-y-1"><Label className="text-xs">Label</Label><Input value={fdLabel} onChange={(e) => setFdLabel(e.target.value)} className="h-8" /></div>
+                  <div className="w-32 space-y-1"><Label className="text-xs">Principal</Label><Input type="number" value={fdPrincipal} onChange={(e) => setFdPrincipal(e.target.value)} className="h-8" /></div>
+                  <div className="w-24 space-y-1"><Label className="text-xs">Rate %</Label><Input type="number" step={0.1} value={fdRate} onChange={(e) => setFdRate(e.target.value)} className="h-8" /></div>
+                  <div className="w-36 space-y-1"><Label className="text-xs">Start</Label><Input type="date" value={fdStart} onChange={(e) => setFdStart(e.target.value)} className="h-8" /></div>
+                  <div className="w-36 space-y-1"><Label className="text-xs">Maturity</Label><Input type="date" value={fdMaturity} onChange={(e) => setFdMaturity(e.target.value)} className="h-8" /></div>
+                  <ShadButton size="sm" disabled={addFdMut.isPending} onClick={handleAddFd}>Add</ShadButton>
+                </div>
+              </div>
+            )}
+          </div>
+        </Section>
 
-      {/* FD list */}
-      {data.fds.length > 0 && (
-        <Box mt="md">
-          <Table fz="sm" withColumnBorders={false}>
-            <Table.Thead><Table.Tr><Table.Th>Label</Table.Th><Table.Th>Principal</Table.Th><Table.Th>Rate</Table.Th><Table.Th>Maturity</Table.Th><Table.Th>Current</Table.Th><Table.Th /></Table.Tr></Table.Thead>
-            <Table.Tbody>
-              {data.fds.map((fd) => (
-                <Table.Tr key={fd.id}>
-                  <Table.Td>{fd.label}{fd.is_emergency_fund && <Badge size="sm" color="orange" ml={4}>EF</Badge>}</Table.Td>
-                  <Table.Td><MoneyText value={fd.principal} /></Table.Td>
-                  <Table.Td>{fd.interest_rate}%</Table.Td>
-                  <Table.Td>{fd.maturity_date}</Table.Td>
-                  <Table.Td><MoneyText value={fd.current_value} /></Table.Td>
-                  <Table.Td><ConfirmActionButton size="sm" variant="subtle" color="red" leftSection={<IconTrash size={12} />} confirmTitle="Delete fixed deposit?" confirmDescription={`Delete ${fd.label}?`} onConfirm={() => deleteMut.mutateAsync(fd.id)}>Delete</ConfirmActionButton></Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Box>
-      )}
+        <Section title="PPF · NPS · Cash">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {data.ppf && (
+              <div className="rounded-lg border p-2">
+                <p className="text-xs text-muted-foreground">PPF</p>
+                <MoneyText value={data.total_ppf} className="text-sm font-semibold" />
+              </div>
+            )}
+            {data.nps && (
+              <div className="rounded-lg border p-2">
+                <p className="text-xs text-muted-foreground">NPS</p>
+                <MoneyText value={data.total_nps} className="text-sm font-semibold" />
+              </div>
+            )}
+            {data.cash && (
+              <div className="rounded-lg border p-2">
+                <p className="text-xs text-muted-foreground">Cash</p>
+                <MoneyText value={data.cash.current_value} className="text-sm font-semibold" />
+              </div>
+            )}
+            {data.usd_cash && (
+              <div className="rounded-lg border p-2">
+                <p className="text-xs text-muted-foreground">INDMoney</p>
+                <MoneyText value={data.usd_cash.current_value} className="text-sm font-semibold" />
+                <p className="text-xs text-muted-foreground">${data.usd_cash_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            )}
+          </div>
 
-      {/* Foreign equity list */}
-      {data.foreign_equities.length > 0 && (
-        <Box mt="md">
-          <Group justify="space-between" mb={4}>
-            <Text size="sm" fw={600}>Foreign Equity</Text>
-            <Text size="xs" c="dimmed">USD/INR: {data.usdinr_rate.toFixed(4)}</Text>
-          </Group>
-          <Table fz="sm" withColumnBorders={false}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Label</Table.Th>
-                <Table.Th>Invested ($)</Table.Th>
-                <Table.Th>Current ($)</Table.Th>
-                <Table.Th>Change ($)</Table.Th>
-                <Table.Th>Change (%)</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {data.foreign_equities.map((fe) => {
-                const editing = fxEdits[fe.id]
-                const chg = fe.invested_usd > 0 ? fe.value_usd - fe.invested_usd : null
-                const chgPct = fe.invested_usd > 0 ? ((fe.value_usd - fe.invested_usd) / fe.invested_usd) * 100 : null
-                const fmt = (n: number) => privacyMode ? '$•••' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                const chgColor = chg == null ? undefined : chg >= 0 ? 'var(--positive)' : 'var(--negative)'
-                if (editing) {
-                  return (
-                    <Table.Tr key={fe.id}>
-                      <Table.Td><TextInput size="xs" value={editing.label} onChange={(e) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], label: e.currentTarget.value } }))} w={100} /></Table.Td>
-                      <Table.Td><NumberInput size="xs" value={editing.invested} onChange={(v) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], invested: String(v) } }))} w={110} min={0} step={0.01} decimalScale={2} /></Table.Td>
-                      <Table.Td><NumberInput size="xs" value={editing.current} onChange={(v) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], current: String(v) } }))} w={110} min={0} step={0.01} decimalScale={2} /></Table.Td>
-                      <Table.Td colSpan={2} />
-                      <Table.Td>
-                        <Group gap={4} wrap="nowrap">
-                          <Button size="xs" loading={updateForeignMut.isPending} onClick={() => handleSaveForeignEquity(fe.id)}>Save</Button>
-                          <Button size="xs" variant="subtle" onClick={() => setFxEdits((p) => { const n = { ...p }; delete n[fe.id]; return n })}>Cancel</Button>
-                        </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  )
-                }
-                return (
-                  <Table.Tr key={fe.id}>
-                    <Table.Td>{fe.label}</Table.Td>
-                    <Table.Td>{fe.invested_usd > 0 ? fmt(fe.invested_usd) : '—'}</Table.Td>
-                    <Table.Td>{fmt(fe.value_usd)}</Table.Td>
-                    <Table.Td c={chgColor}>{chg != null ? (chg >= 0 ? '+' : '') + fmt(chg) : '—'}</Table.Td>
-                    <Table.Td c={chgColor}>{chgPct != null ? (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%' : '—'}</Table.Td>
-                    <Table.Td>
-                      <Group gap={4} wrap="nowrap">
-                        {open && <Button size="xs" variant="subtle" onClick={() => initFxEdit(fe)}>Edit</Button>}
-                        <ConfirmActionButton size="xs" variant="subtle" color="red" leftSection={<IconTrash size={12} />} confirmTitle="Delete foreign equity?" confirmDescription={`Delete ${fe.label}?`} onConfirm={() => deleteMut.mutateAsync(fe.id)}>Delete</ConfirmActionButton>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                )
-              })}
-            </Table.Tbody>
-          </Table>
-        </Box>
-      )}
+          {open && (
+            <div className="mt-3 space-y-3 border-t pt-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-36 space-y-1"><Label className="text-xs">PPF value</Label><Input type="number" value={ppfValue} onChange={(e) => setPpfValue(e.target.value)} className="h-8" /></div>
+                <ShadButton size="sm" disabled={ppfMut.isPending} onClick={() => ppfMut.mutate({ current_value: Number(ppfValue) })}>Save</ShadButton>
+                {data.ppf && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete PPF?" confirmDescription="Delete this PPF asset?" onConfirm={() => deleteMut.mutateAsync(data.ppf!.id)}>Delete</ConfirmActionButton>}
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-36 space-y-1"><Label className="text-xs">NPS value</Label><Input type="number" value={npsValue} onChange={(e) => setNpsValue(e.target.value)} className="h-8" /></div>
+                <ShadButton size="sm" disabled={npsMut.isPending} onClick={() => npsMut.mutate({ current_value: Number(npsValue) })}>Save</ShadButton>
+                {data.nps && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete NPS?" confirmDescription="Delete this NPS asset?" onConfirm={() => deleteMut.mutateAsync(data.nps!.id)}>Delete</ConfirmActionButton>}
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-36 space-y-1"><Label className="text-xs">Cash / Savings value</Label><Input type="number" value={cashValue} onChange={(e) => setCashValue(e.target.value)} className="h-8" /></div>
+                <ShadButton size="sm" disabled={cashMut.isPending} onClick={() => cashMut.mutate({ current_value: Number(cashValue) })}>Save</ShadButton>
+                {data.cash && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete cash?" confirmDescription="Delete this cash asset?" onConfirm={() => deleteMut.mutateAsync(data.cash!.id)}>Delete</ConfirmActionButton>}
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-36 space-y-1"><Label className="text-xs">INDMoney balance ($)</Label><Input type="number" min={0} step={0.01} value={usdCashValue} onChange={(e) => setUsdCashValue(e.target.value)} className="h-8" /></div>
+                <ShadButton size="sm" disabled={usdCashMut.isPending} onClick={() => usdCashMut.mutate({ current_value: Number(usdCashValue) })}>Save</ShadButton>
+                {data.usd_cash && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete USD cash?" confirmDescription="Delete this USD cash asset?" onConfirm={() => deleteMut.mutateAsync(data.usd_cash!.id)}>Delete</ConfirmActionButton>}
+              </div>
+            </div>
+          )}
+        </Section>
 
-      <Collapse expanded={open}>
-        <Stack gap="lg" mt="md">
-          {/* Add FD */}
-          <Box>
-            <Text size="sm" fw={600} mb="xs">Add FD</Text>
-            <Group align="flex-end" wrap="wrap">
-              <TextInput label="Label" value={fdLabel} onChange={(e) => setFdLabel(e.currentTarget.value)} size="sm" w={140} />
-              <NumberInput label="Principal" value={fdPrincipal} onChange={setFdPrincipal} size="sm" w={130} />
-              <NumberInput label="Rate %" value={fdRate} onChange={setFdRate} size="sm" w={100} step={0.1} />
-              <TextInput label="Start" type="date" value={fdStart} onChange={(e) => setFdStart(e.currentTarget.value)} size="sm" w={150} />
-              <TextInput label="Maturity" type="date" value={fdMaturity} onChange={(e) => setFdMaturity(e.currentTarget.value)} size="sm" w={150} />
-              <Button size="sm" loading={addFdMut.isPending} onClick={handleAddFd}>Add</Button>
-            </Group>
-          </Box>
+        <Section
+          title="Foreign Equity"
+          action={data.total_foreign_equity_inr > 0 ? <MoneyText value={data.total_foreign_equity_inr} className="text-sm font-semibold" /> : undefined}
+        >
+          <div className="space-y-3">
+            {data.foreign_equities.length > 0 && (
+              <ShadTable className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Invested ($)</TableHead>
+                    <TableHead>Current ($)</TableHead>
+                    <TableHead>Change ($)</TableHead>
+                    <TableHead>Change (%)</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.foreign_equities.map((fe) => {
+                    const editing = fxEdits[fe.id]
+                    const chg = fe.invested_usd > 0 ? fe.value_usd - fe.invested_usd : null
+                    const chgPct = fe.invested_usd > 0 ? ((fe.value_usd - fe.invested_usd) / fe.invested_usd) * 100 : null
+                    const fmt = (n: number) => privacyMode ? '$•••' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    const chgClass = chg == null ? undefined : chg >= 0 ? 'text-positive' : 'text-negative'
+                    if (editing) {
+                      return (
+                        <TableRow key={fe.id}>
+                          <TableCell><Input className="h-7 w-24" value={editing.label} onChange={(e) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], label: e.target.value } }))} /></TableCell>
+                          <TableCell><Input type="number" min={0} step={0.01} className="h-7 w-28" value={editing.invested} onChange={(e) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], invested: e.target.value } }))} /></TableCell>
+                          <TableCell><Input type="number" min={0} step={0.01} className="h-7 w-28" value={editing.current} onChange={(e) => setFxEdits((p) => ({ ...p, [fe.id]: { ...p[fe.id], current: e.target.value } }))} /></TableCell>
+                          <TableCell colSpan={2} />
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <ShadButton size="xs" disabled={updateForeignMut.isPending} onClick={() => handleSaveForeignEquity(fe.id)}>Save</ShadButton>
+                              <ShadButton size="xs" variant="ghost" onClick={() => setFxEdits((p) => { const n = { ...p }; delete n[fe.id]; return n })}>Cancel</ShadButton>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }
+                    return (
+                      <TableRow key={fe.id}>
+                        <TableCell>{fe.label}</TableCell>
+                        <TableCell>{fe.invested_usd > 0 ? fmt(fe.invested_usd) : '—'}</TableCell>
+                        <TableCell>{fmt(fe.value_usd)}</TableCell>
+                        <TableCell className={chgClass}>{chg != null ? (chg >= 0 ? '+' : '') + fmt(chg) : '—'}</TableCell>
+                        <TableCell className={chgClass}>{chgPct != null ? (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%' : '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {open && <ShadButton size="xs" variant="ghost" onClick={() => initFxEdit(fe)}>Edit</ShadButton>}
+                            <ConfirmActionButton size="icon-xs" variant="ghost" confirmTitle="Delete foreign equity?" confirmDescription={`Delete ${fe.label}?`} onConfirm={() => deleteMut.mutateAsync(fe.id)}>
+                              <Trash2 className="size-3" />
+                            </ConfirmActionButton>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </ShadTable>
+            )}
+            {open && (
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-sm font-medium">Add Foreign Equity (USD)</p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-36 space-y-1"><Label className="text-xs">Label</Label><Input placeholder="AAPL, VTI, …" value={fxLabel} onChange={(e) => setFxLabel(e.target.value)} className="h-8" /></div>
+                  <div className="w-32 space-y-1"><Label className="text-xs">Invested ($)</Label><Input type="number" min={0} step={0.01} value={fxInvested} onChange={(e) => setFxInvested(e.target.value)} className="h-8" /></div>
+                  <div className="w-32 space-y-1"><Label className="text-xs">Current ($)</Label><Input type="number" min={0} step={0.01} value={fxValue} onChange={(e) => setFxValue(e.target.value)} className="h-8" /></div>
+                  <ShadButton size="sm" disabled={addForeignMut.isPending} onClick={handleAddForeignEquity}>Add</ShadButton>
+                </div>
+              </div>
+            )}
+          </div>
+        </Section>
 
-          {/* PPF / NPS / Cash */}
-          <Group align="flex-end" wrap="wrap">
-            <Box>
-              <Text size="sm" fw={600} mb="xs">PPF</Text>
-              <Group align="flex-end" gap="xs">
-                <NumberInput label="Value" value={ppfValue} onChange={setPpfValue} size="sm" w={150} />
-                <Button size="sm" loading={ppfMut.isPending} onClick={() => ppfMut.mutate({ current_value: Number(ppfValue) })}>Save</Button>
-                {data.ppf && <ConfirmActionButton size="sm" variant="subtle" color="red" confirmTitle="Delete PPF?" confirmDescription="Delete this PPF asset?" onConfirm={() => deleteMut.mutateAsync(data.ppf!.id)}>Delete</ConfirmActionButton>}
-              </Group>
-            </Box>
-            <Box>
-              <Text size="sm" fw={600} mb="xs">NPS</Text>
-              <Group align="flex-end" gap="xs">
-                <NumberInput label="Value" value={npsValue} onChange={setNpsValue} size="sm" w={150} />
-                <Button size="sm" loading={npsMut.isPending} onClick={() => npsMut.mutate({ current_value: Number(npsValue) })}>Save</Button>
-                {data.nps && <ConfirmActionButton size="sm" variant="subtle" color="red" confirmTitle="Delete NPS?" confirmDescription="Delete this NPS asset?" onConfirm={() => deleteMut.mutateAsync(data.nps!.id)}>Delete</ConfirmActionButton>}
-              </Group>
-            </Box>
-            <Box>
-              <Text size="sm" fw={600} mb="xs">Cash / Savings</Text>
-              <Group align="flex-end" gap="xs">
-                <NumberInput label="Value" value={cashValue} onChange={setCashValue} size="sm" w={150} />
-                <Button size="sm" loading={cashMut.isPending} onClick={() => cashMut.mutate({ current_value: Number(cashValue) })}>Save</Button>
-                {data.cash && <ConfirmActionButton size="sm" variant="subtle" color="red" confirmTitle="Delete cash?" confirmDescription="Delete this cash asset?" onConfirm={() => deleteMut.mutateAsync(data.cash!.id)}>Delete</ConfirmActionButton>}
-              </Group>
-            </Box>
-            <Box>
-              <Text size="sm" fw={600} mb="xs">INDMoney Wallet (USD)</Text>
-              <Group align="flex-end" gap="xs">
-                <NumberInput label="Balance ($)" value={usdCashValue} onChange={setUsdCashValue} size="sm" w={150} min={0} step={0.01} decimalScale={2} />
-                <Button size="sm" loading={usdCashMut.isPending} onClick={() => usdCashMut.mutate({ current_value: Number(usdCashValue) })}>Save</Button>
-                {data.usd_cash && <ConfirmActionButton size="sm" variant="subtle" color="red" confirmTitle="Delete USD cash?" confirmDescription="Delete this USD cash asset?" onConfirm={() => deleteMut.mutateAsync(data.usd_cash!.id)}>Delete</ConfirmActionButton>}
-              </Group>
-            </Box>
-          </Group>
-
-          {/* Foreign equity */}
-          <Box>
-            <Text size="sm" fw={600} mb="xs">Add Foreign Equity (USD)</Text>
-            <Group align="flex-end" wrap="wrap">
-              <TextInput label="Label" placeholder="AAPL, VTI, …" value={fxLabel} onChange={(e) => setFxLabel(e.currentTarget.value)} size="sm" w={140} />
-              <NumberInput label="Invested ($)" value={fxInvested} onChange={setFxInvested} size="sm" w={130} min={0} step={0.01} decimalScale={2} />
-              <NumberInput label="Current ($)" value={fxValue} onChange={setFxValue} size="sm" w={130} min={0} step={0.01} decimalScale={2} />
-              <Button size="sm" loading={addForeignMut.isPending} onClick={handleAddForeignEquity}>Add</Button>
-            </Group>
-          </Box>
-
-          {/* USDINR rate */}
-          <Box>
-            <Text size="sm" fw={600} mb="xs">USD/INR Rate</Text>
-            <Group align="flex-end" wrap="wrap" gap="md">
-              <Box>
-                <Text size="xs" c="dimmed" mb={4}>Current: {data.usdinr_rate.toFixed(4)}</Text>
-                <Button
-                  size="sm"
-                  variant="light"
-                  leftSection={<IconRefreshTabler size={14} />}
-                  loading={refreshUsdinrMut.isPending}
-                  onClick={handleRefreshUsdinr}
-                >
-                  Refresh from Kite
-                </Button>
-              </Box>
-              <Box>
-                <Text size="xs" c="dimmed" mb={4}>Override manually</Text>
-                <Group align="flex-end" gap="xs">
-                  <NumberInput placeholder="e.g. 85.50" value={manualRate} onChange={setManualRate} size="sm" w={130} min={0} step={0.01} decimalScale={4} />
-                  <Button size="sm" variant="subtle" loading={setManualUsdinrMut.isPending} onClick={handleSetManualRate}>Set</Button>
-                </Group>
-              </Box>
-            </Group>
-          </Box>
-        </Stack>
-      </Collapse>
-    </Panel>
+        <Section title="USD/INR" action={<span className="text-sm font-semibold">{data.usdinr_rate.toFixed(4)}</span>}>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Refresh from Kite</Label>
+              <ShadButton size="sm" variant="outline" disabled={refreshUsdinrMut.isPending} onClick={handleRefreshUsdinr}>
+                <RefreshCw className="size-3.5" />
+                Refresh from Kite
+              </ShadButton>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Override manually</Label>
+              <div className="flex items-end gap-2">
+                <Input type="number" placeholder="e.g. 85.50" min={0} step={0.01} value={manualRate} onChange={(e) => setManualRate(e.target.value)} className="h-8 w-32" />
+                <ShadButton size="sm" variant="ghost" disabled={setManualUsdinrMut.isPending} onClick={handleSetManualRate}>Set</ShadButton>
+              </div>
+            </div>
+          </div>
+        </Section>
+      </div>
+    </div>
   )
 }
 
