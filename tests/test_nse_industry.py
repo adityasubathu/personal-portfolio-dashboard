@@ -1,4 +1,5 @@
 """Parser tests for the NSE adapter — pure functions, no network."""
+from app.services.composition import _resolve_level
 from app.services.nse_industry import (
     STATUS_API_ERROR,
     STATUS_CLASSIFIED,
@@ -110,3 +111,14 @@ class TestClassificationStatus:
         }
         status, _ = decide_status("INE009A01021", result, None)
         assert status == STATUS_CLASSIFIED
+
+
+class TestResolveLevel:
+    def test_each_level_name_returns_itself(self):
+        for level in ("macro_sector", "sector", "industry", "basic_industry"):
+            assert _resolve_level(level) == level
+
+    def test_unrecognised_values_fall_back_to_sector(self):
+        assert _resolve_level("nonsense") == "sector"
+        assert _resolve_level("") == "sector"
+        assert _resolve_level(None) == "sector"

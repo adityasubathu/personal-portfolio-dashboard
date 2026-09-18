@@ -185,14 +185,14 @@ async def category_composition(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/sector-composition")
-async def sector_composition(db: AsyncSession = Depends(get_db)):
-    data = await get_sector_composition(db, equity_only=True)
+async def sector_composition(level: str = "sector", db: AsyncSession = Depends(get_db)):
+    data = await get_sector_composition(db, equity_only=True, level=level)
     return JSONResponse(data)
 
 
 @router.get("/sector-stock-breakdown")
-async def sector_stock_breakdown(db: AsyncSession = Depends(get_db)):
-    data = await get_sector_stock_breakdown(db)
+async def sector_stock_breakdown(level: str = "sector", db: AsyncSession = Depends(get_db)):
+    data = await get_sector_stock_breakdown(db, level=level)
     return JSONResponse(data)
 
 

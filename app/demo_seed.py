@@ -22,12 +22,13 @@ from app.models.holding import Holding
 from app.models.import_log import CSVImportLog
 from app.models.instrument import Instrument
 from app.models.manual_asset import ManualAsset
-from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown, NseIndustryClassification
 from app.models.nav_history import NavHistory
 from app.models.nav_tracked_instrument import NavTrackedInstrument
 from app.models.policy_trigger import PolicyTriggerState
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
+from app.services.nse_industry import CLASSIFICATION_LEVELS, STATUS_CLASSIFIED
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _OHLC_DIR = os.path.join(_REPO_ROOT, "data", "demo", "ohlc")
@@ -135,55 +136,91 @@ _BOND_TRADES = [
 # MF scheme breakdown rows
 # ---------------------------------------------------------------------------
 
+# isin -> (symbol, macro_sector, sector, industry, basic_industry) — real NSE
+# classifications, keyed by ISIN as everywhere else in this pipeline.
+_DEMO_NSE_LEVELS = {
+    "INE002A01018": ("RELIANCE",   "Energy",                     "Oil Gas & Consumable Fuels",     "Petroleum Products",              "Refineries & Marketing"),
+    "INE040A01034": ("HDFCBANK",   "Financial Services",         "Financial Services",             "Banks",                           "Private Sector Bank"),
+    "INE009A01021": ("INFY",       "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE090A01021": ("ICICIBANK",  "Financial Services",         "Financial Services",             "Banks",                           "Private Sector Bank"),
+    "INE467B01029": ("TCS",        "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE397D01024": ("BHARTIARTL", "Telecommunication",          "Telecommunication",              "Telecom - Services",              "Telecom - Cellular & Fixed line services"),
+    "INE237A01028": ("KOTAKBANK",  "Financial Services",         "Financial Services",             "Banks",                           "Private Sector Bank"),
+    "INE238A01034": ("AXISBANK",   "Financial Services",         "Financial Services",             "Banks",                           "Private Sector Bank"),
+    "INE018A01030": ("LT",         "Industrials",                "Construction",                   "Construction",                    "Civil Construction"),
+    "INE030A01027": ("HINDUNILVR", "Fast Moving Consumer Goods", "Fast Moving Consumer Goods",     "Diversified FMCG",                "Diversified FMCG"),
+    "INE044A01036": ("SUNPHARMA",  "Healthcare",                 "Healthcare",                     "Pharmaceuticals & Biotechnology", "Pharmaceuticals"),
+    "INE280A01028": ("TITAN",      "Consumer Discretionary",     "Consumer Durables",              "Consumer Durables",               "Gems Jewellery And Watches"),
+    "INE296A01024": ("BAJFINANCE", "Financial Services",         "Financial Services",             "Finance",                         "Non Banking Financial Company (NBFC)"),
+    "INE075A01022": ("WIPRO",      "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE733E01010": ("NTPC",       "Utilities",                  "Power",                          "Power",                           "Power Generation"),
+    "INE262H01021": ("PERSISTENT", "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE918I01026": ("CDSL",       "Financial Services",         "Financial Services",             "Capital Markets",                 "Depositories Clearing Houses and Other Intermediaries"),
+    "INE591G01017": ("COFORGE",    "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE356A01018": ("MPHASIS",    "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    "INE226A01021": ("VOLTAS",     "Consumer Discretionary",     "Consumer Durables",              "Consumer Durables",               "Household Appliances"),
+    "INE660A01013": ("SUNDARMFIN", "Financial Services",         "Financial Services",             "Finance",                         "Non Banking Financial Company (NBFC)"),
+    "INE670A01012": ("TATAELXSI",  "Information Technology",     "Information Technology",         "IT - Software",                   "Computers - Software & Consulting"),
+    # present only in _MF_BREAKDOWN, not in _AMFI_ROWS
+    "INE093I01010": ("OBEROIRLTY", "Consumer Discretionary",     "Realty",                         "Realty",                          "Residential Commercial Projects"),
+    "INE299U01018": ("CROMPTON",   "Consumer Discretionary",     "Consumer Durables",              "Consumer Durables",               "Household Appliances"),
+    "INE092A01019": ("TATACHEM",   "Commodities",                "Chemicals",                      "Chemicals & Petrochemicals",      "Commodity Chemicals"),
+    "INE340A01012": ("BIRLACORPN", "Commodities",                "Construction Materials",         "Cement & Cement Products",        "Cement & Cement Products"),
+    "INE152A01029": ("THERMAX",    "Industrials",                "Capital Goods",                  "Electrical Equipment",            "Heavy Electrical Equipment"),
+    "INE572A01036": ("JBCHEPHARM", "Healthcare",                 "Healthcare",                     "Pharmaceuticals & Biotechnology", "Pharmaceuticals"),
+    "INE513A01022": ("SCHAEFFLER", "Consumer Discretionary",     "Automobile and Auto Components", "Auto Components",                 "Auto Components & Equipments"),
+    "INE536A01023": ("GRINDWELL",  "Industrials",                "Capital Goods",                  "Industrial Products",             "Abrasives & Bearings"),
+}
+
 _MF_BREAKDOWN = {
     "INF789F01YN0": [  # UTI Nifty 50 — large-cap index
-        ("Reliance Industries",          "Equity", 10.20, "Large Cap", "Oil & Gas"),
-        ("HDFC Bank",                    "Equity",  8.50, "Large Cap", "Financial Services"),
-        ("Infosys",                      "Equity",  6.80, "Large Cap", "Information Technology"),
-        ("ICICI Bank",                   "Equity",  6.30, "Large Cap", "Financial Services"),
-        ("TCS",                          "Equity",  5.90, "Large Cap", "Information Technology"),
-        ("Bharti Airtel",                "Equity",  4.20, "Large Cap", "Telecom"),
-        ("Kotak Mahindra Bank",          "Equity",  3.80, "Large Cap", "Financial Services"),
-        ("Axis Bank",                    "Equity",  3.50, "Large Cap", "Financial Services"),
-        ("L&T",                          "Equity",  3.20, "Large Cap", "Capital Goods"),
-        ("HUL",                          "Equity",  2.90, "Large Cap", "FMCG"),
-        ("Sun Pharma",                   "Equity",  2.80, "Large Cap", "Pharma"),
-        ("Titan",                        "Equity",  2.10, "Large Cap", "Consumer Discretionary"),
-        ("Bajaj Finance",                "Equity",  2.00, "Large Cap", "Financial Services"),
-        ("Wipro",                        "Equity",  1.80, "Large Cap", "Information Technology"),
-        ("NTPC",                         "Equity",  1.60, "Large Cap", "Power"),
+        ("Reliance Industries",          "Equity", 10.20, "Large Cap", "INE002A01018"),
+        ("HDFC Bank",                    "Equity",  8.50, "Large Cap", "INE040A01034"),
+        ("Infosys",                      "Equity",  6.80, "Large Cap", "INE009A01021"),
+        ("ICICI Bank",                   "Equity",  6.30, "Large Cap", "INE090A01021"),
+        ("TCS",                          "Equity",  5.90, "Large Cap", "INE467B01029"),
+        ("Bharti Airtel",                "Equity",  4.20, "Large Cap", "INE397D01024"),
+        ("Kotak Mahindra Bank",          "Equity",  3.80, "Large Cap", "INE237A01028"),
+        ("Axis Bank",                    "Equity",  3.50, "Large Cap", "INE238A01034"),
+        ("L&T",                          "Equity",  3.20, "Large Cap", "INE018A01030"),
+        ("HUL",                          "Equity",  2.90, "Large Cap", "INE030A01027"),
+        ("Sun Pharma",                   "Equity",  2.80, "Large Cap", "INE044A01036"),
+        ("Titan",                        "Equity",  2.10, "Large Cap", "INE280A01028"),
+        ("Bajaj Finance",                "Equity",  2.00, "Large Cap", "INE296A01024"),
+        ("Wipro",                        "Equity",  1.80, "Large Cap", "INE075A01022"),
+        ("NTPC",                         "Equity",  1.60, "Large Cap", "INE733E01010"),
         ("Cash and Equivalents",         "Cash",    3.40, "Cash", None),
     ],
     "INF174KA1CK2": [  # Kotak Emerging — mid-cap
-        ("Persistent Systems",           "Equity",  4.50, "Mid Cap", "Information Technology"),
-        ("CDSL",                         "Equity",  3.80, "Mid Cap", "Financial Services"),
-        ("Coforge",                      "Equity",  3.60, "Mid Cap", "Information Technology"),
-        ("Mphasis",                      "Equity",  3.40, "Mid Cap", "Information Technology"),
-        ("Voltas",                       "Equity",  3.20, "Mid Cap", "Consumer Discretionary"),
-        ("Oberoi Realty",                "Equity",  3.00, "Mid Cap", "Real Estate"),
-        ("Crompton Greaves Consumer",    "Equity",  2.80, "Mid Cap", "Consumer Discretionary"),
-        ("Sundaram Finance",             "Equity",  2.60, "Mid Cap", "Financial Services"),
-        ("Tata Chemicals",               "Equity",  2.40, "Mid Cap", "Chemicals"),
-        ("Birla Corporation",            "Equity",  2.20, "Mid Cap", "Cement"),
-        ("Thermax",                      "Equity",  2.00, "Mid Cap", "Capital Goods"),
-        ("JB Chemicals",                 "Equity",  1.80, "Mid Cap", "Pharma"),
-        ("Schaeffler India",             "Equity",  1.60, "Mid Cap", "Auto Ancillaries"),
-        ("Grindwell Norton",             "Equity",  1.40, "Mid Cap", "Capital Goods"),
+        ("Persistent Systems",           "Equity",  4.50, "Mid Cap", "INE262H01021"),
+        ("CDSL",                         "Equity",  3.80, "Mid Cap", "INE918I01026"),
+        ("Coforge",                      "Equity",  3.60, "Mid Cap", "INE591G01017"),
+        ("Mphasis",                      "Equity",  3.40, "Mid Cap", "INE356A01018"),
+        ("Voltas",                       "Equity",  3.20, "Mid Cap", "INE226A01021"),
+        ("Oberoi Realty",                "Equity",  3.00, "Mid Cap", "INE093I01010"),
+        ("Crompton Greaves Consumer",    "Equity",  2.80, "Mid Cap", "INE299U01018"),
+        ("Sundaram Finance",             "Equity",  2.60, "Mid Cap", "INE660A01013"),
+        ("Tata Chemicals",               "Equity",  2.40, "Mid Cap", "INE092A01019"),
+        ("Birla Corporation",            "Equity",  2.20, "Mid Cap", "INE340A01012"),
+        ("Thermax",                      "Equity",  2.00, "Mid Cap", "INE152A01029"),
+        ("JB Chemicals",                 "Equity",  1.80, "Mid Cap", "INE572A01036"),
+        ("Schaeffler India",             "Equity",  1.60, "Mid Cap", "INE513A01022"),
+        ("Grindwell Norton",             "Equity",  1.40, "Mid Cap", "INE536A01023"),
         ("Cash and Equivalents",         "Cash",    2.00, "Cash", None),
     ],
-    "INF247L01AP3": [  # MON100 / Nasdaq 100 — all foreign
-        ("Apple Inc",                    "Equity", 12.50, "Equity - Foreign", "Information Technology"),
-        ("Microsoft Corporation",        "Equity", 11.80, "Equity - Foreign", "Information Technology"),
-        ("Nvidia Corporation",           "Equity",  9.20, "Equity - Foreign", "Information Technology"),
-        ("Amazon.com Inc",               "Equity",  7.40, "Equity - Foreign", "Consumer Discretionary"),
-        ("Alphabet Inc Class A",         "Equity",  5.60, "Equity - Foreign", "Information Technology"),
-        ("Alphabet Inc Class C",         "Equity",  4.90, "Equity - Foreign", "Information Technology"),
-        ("Meta Platforms Inc",           "Equity",  4.30, "Equity - Foreign", "Information Technology"),
-        ("Tesla Inc",                    "Equity",  3.10, "Equity - Foreign", "Consumer Discretionary"),
-        ("Broadcom Inc",                 "Equity",  2.80, "Equity - Foreign", "Information Technology"),
-        ("Costco Wholesale",             "Equity",  2.20, "Equity - Foreign", "Consumer Staples"),
-        ("Netflix Inc",                  "Equity",  1.90, "Equity - Foreign", "Communication Services"),
-        ("Adobe Inc",                    "Equity",  1.60, "Equity - Foreign", "Information Technology"),
+    "INF247L01AP3": [  # MON100 / Nasdaq 100 — all foreign; NSE does not classify US stocks
+        ("Apple Inc",                    "Equity", 12.50, "Equity - Foreign", None),
+        ("Microsoft Corporation",        "Equity", 11.80, "Equity - Foreign", None),
+        ("Nvidia Corporation",           "Equity",  9.20, "Equity - Foreign", None),
+        ("Amazon.com Inc",               "Equity",  7.40, "Equity - Foreign", None),
+        ("Alphabet Inc Class A",         "Equity",  5.60, "Equity - Foreign", None),
+        ("Alphabet Inc Class C",         "Equity",  4.90, "Equity - Foreign", None),
+        ("Meta Platforms Inc",           "Equity",  4.30, "Equity - Foreign", None),
+        ("Tesla Inc",                    "Equity",  3.10, "Equity - Foreign", None),
+        ("Broadcom Inc",                 "Equity",  2.80, "Equity - Foreign", None),
+        ("Costco Wholesale",             "Equity",  2.20, "Equity - Foreign", None),
+        ("Netflix Inc",                  "Equity",  1.90, "Equity - Foreign", None),
+        ("Adobe Inc",                    "Equity",  1.60, "Equity - Foreign", None),
         ("Cash and Equivalents",         "Cash",    1.50, "Cash", None),
     ],
 }
@@ -467,18 +504,23 @@ async def seed_demo_data(db: AsyncSession) -> None:
 
     # 6. MF scheme breakdown
     bd_count = 0
-    for isin, rows in _MF_BREAKDOWN.items():
-        for name, htype, pct, cat, sector in rows:
+    for scheme_isin, rows in _MF_BREAKDOWN.items():
+        for name, htype, pct, cat, holding_isin in rows:
+            levels_entry = _DEMO_NSE_LEVELS.get(holding_isin or "")
+            levels = dict(zip(CLASSIFICATION_LEVELS, levels_entry[1:])) if levels_entry else {
+                level: None for level in CLASSIFICATION_LEVELS
+            }
             stmt = pg_insert(MfSchemeBreakdown).values(
-                scheme_isin=isin,
+                scheme_isin=scheme_isin,
                 name=name,
                 holding_type=htype,
                 holdings_pct=pct,
                 category=cat,
-                sector=sector,
+                isin=holding_isin,
+                **levels,
             ).on_conflict_do_update(
                 constraint="uq_mf_breakdown_scheme_name_type",
-                set_={"holdings_pct": pct, "category": cat, "sector": sector},
+                set_={"holdings_pct": pct, "category": cat, "isin": holding_isin, **levels},
             )
             await db.execute(stmt)
             bd_count += 1
@@ -488,12 +530,16 @@ async def seed_demo_data(db: AsyncSession) -> None:
 
     # 7. AMFI market cap
     amc_count = 0
-    for company, isin, ticker, cap, sector in _AMFI_ROWS:
+    for company, isin, ticker, cap, _legacy_sector in _AMFI_ROWS:
         existing = (await db.execute(
             select(AmfiMarketCap).where(AmfiMarketCap.isin == isin)
         )).scalar_one_or_none()
         if existing:
             continue
+        levels_entry = _DEMO_NSE_LEVELS.get(isin)
+        levels = dict(zip(CLASSIFICATION_LEVELS, levels_entry[1:])) if levels_entry else {
+            level: None for level in CLASSIFICATION_LEVELS
+        }
         db.add(AmfiMarketCap(
             company_name=company,
             isin=isin,
@@ -501,12 +547,31 @@ async def seed_demo_data(db: AsyncSession) -> None:
             primary_ticker=ticker,
             exchanges="NSE",
             categorization=cap,
-            sector=sector,
             name_normalized=_norm_name(company),
+            **levels,
         ))
         amc_count += 1
 
     await db.flush()
+
+    # 7b. NSE industry classification — one row per ISIN in _DEMO_NSE_LEVELS
+    nse_count = 0
+    for isin, (symbol, macro_sector, sector, industry, basic_industry) in _DEMO_NSE_LEVELS.items():
+        stmt = pg_insert(NseIndustryClassification).values(
+            isin=isin,
+            symbol=symbol,
+            series="EQ",
+            macro_sector=macro_sector,
+            sector=sector,
+            industry=industry,
+            basic_industry=basic_industry,
+            status=STATUS_CLASSIFIED,
+        ).on_conflict_do_nothing(index_elements=["isin"])
+        await db.execute(stmt)
+        nse_count += 1
+
+    await db.flush()
+    print(f"[demo]   nse_industry_classification rows: {nse_count}")
     print(f"[demo]   amfi_market_cap rows: {amc_count}")
 
     # 8. Allocation targets

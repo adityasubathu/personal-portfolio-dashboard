@@ -181,7 +181,7 @@ portfolio-mac-arm/
 │       └── 0001_baseline.py     # Full schema + data migrations
 ├── alembic.ini                  # DB URL set programmatically from app.config
 ├── data/
-│   ├── mf_portfolio_breakdown/  # Drop AMFI xlsx + sector_master.csv here; scheme holdings now come from OpenFin, not local CSVs
+│   ├── mf_portfolio_breakdown/  # Drop AMFI xlsx here; scheme holdings come from OpenFin, sector data from NSE — no CSV drop needed
 │   └── demo/                    # Committed fixture files for demo seed
 │       ├── ohlc/                # <SYMBOL>.json — daily OHLC rows (synthetic)
 │       └── nav/                 # <ISIN>.json — daily NAV rows (real, from mfapi.in)
@@ -225,10 +225,13 @@ Per-batch import metadata: filename, row counts, `errors_json`. `batch_id` enabl
 Non-traded assets. `asset_type`: FD, PPF, NPS, CASH, USD_CASH, FOREIGN_EQ. FDs have `principal` (cost), `interest_rate`, `start_date`, `maturity_date`, `is_emergency_fund`. PPF/NPS/Cash store `current_value` in INR. USD_CASH stores `current_value` in USD (e.g. INDMoney wallet); the INR equivalent is computed at query time and folded into the cash total. FOREIGN_EQ stores `current_value` (USD market value) and `principal` (USD cost basis); the INR equivalent is computed at query time using the stored USDINR rate.
 
 ### AmfiMarketCap
-AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker`, `exchanges`, `categorization`, `sector`, `aliases`.
+AMFI's semi-annual company → market-cap classification (Large / Mid / Small Cap). Loaded from local xlsx in `data/mf_portfolio_breakdown/`. Fields: `isin`, `company_name`, `name_normalized`, `nse_symbol`, `bse_symbol`, `msei_symbol`, `primary_ticker`, `exchanges`, `categorization`, `sector`, `macro_sector`, `industry`, `basic_industry`, `aliases`. The four sector/industry fields are backfilled by ISIN from `NseIndustryClassification` after every ingest.
 
 ### MfSchemeBreakdown
-Per-holding breakdown of each MF/ETF scheme. Fetched from the OpenFin disclosure API. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `market_value` (INR, fund-level), `category`, `sector`, `as_of` (disclosure date, shared by all rows for a scheme — compared against the catalog's `latest_as_of` to decide which schemes need refetching; a stale scheme's rows are fully deleted and reinserted, never merged).
+Per-holding breakdown of each MF/ETF scheme. Fetched from the OpenFin disclosure API. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `market_value` (INR, fund-level), `category`, `isin` (the holding's own ISIN, from OpenFin), `sector`, `macro_sector`, `industry`, `basic_industry`, `as_of` (disclosure date, shared by all rows for a scheme — compared against the catalog's `latest_as_of` to decide which schemes need refetching; a stale scheme's rows are fully deleted and reinserted, never merged).
+
+### NseIndustryClassification
+NSE's four-level industry taxonomy (Macro-Economic Sector → Sector → Industry → Basic Industry), one row per ISIN, fetched from NSE's live quote API. **ISIN is the only identifier used to join classifications to holdings anywhere in this pipeline** — no company-name or ticker matching. Fields: `isin` (PK), `symbol`, `company_name`, `series`, `macro_sector`, `sector`, `industry`, `basic_industry`, `status` (`CLASSIFIED` / `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH`), `error_message`, `first_seen_at`, `updated_at`. Rows are never deleted — a company's classification is permanent reference data. A `CLASSIFIED` row is never re-fetched; only the other three statuses are retried on the next ingest.
 
 ### EquityCategoryOverride
 Persists manual market-cap classifications for equity holdings not found in the AMFI list. Keyed by `name_normalized`. Applied automatically on subsequent ingests.
@@ -306,7 +309,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 ### MF Breakdown (`/api/v1/mf-breakdown`)
 | Endpoint | Description |
 |---|---|
-| `GET /ingest/stream` | SSE: load AMFI xlsx + refresh stale disclosures from OpenFin |
+| `GET /ingest/stream` | SSE: load AMFI xlsx, refresh stale disclosures from OpenFin, then classify held ISINs from NSE. First run classifies ~750 ISINs (~6 min); later runs only query ISINs new to the portfolio. |
 | `PATCH /classify-batch` | Manual category override for unmatched equities |
 | `GET /chart-data` | Allocation doughnut data |
 | `GET /allocation-comparison` | Current vs target allocation with deltas (`?mode=anchored\|free_float`) |
@@ -431,5 +434,6 @@ venv/bin/alembic downgrade -1
 | mfapi.in / finapi.upvaly.com | Historical MF NAVs (user-toggled source) | REST per scheme (`mfapi_nav.py`) |
 | AMFI xlsx (local) | Company → market-cap classification | Manual download into `data/mf_portfolio_breakdown/` |
 | openfin.pocketedge.in | Per-fund MF holding disclosures (catalog + holdings) | REST, no auth (`mf_ingest.py`) |
-| sector_master.csv (local) | Company → SEBI sector mapping | NSE index CSV; place in `data/mf_portfolio_breakdown/sector_master.csv` |
+| NSE equity master (`EQUITY_L.csv`) | ISIN → NSE symbol index | HTTP fetch each refresh, not stored (`nse_industry.py`) |
+| NSE quote API | Four-level industry taxonomy per held ISIN | HTTP fetch, cached permanently in `nse_industry_classification` (`nse_industry.py`) |
 | company_master.csv (auto) | ISIN master with tickers, exchanges, sector, aliases | Auto-generated on each AMFI sync; edit only the `aliases` column |

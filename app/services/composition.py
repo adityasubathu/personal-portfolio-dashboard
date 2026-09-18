@@ -1,6 +1,5 @@
 import json
 from collections import defaultdict
-from difflib import SequenceMatcher
 
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -12,7 +11,14 @@ from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquitySectorOverride, MfSchemeBreakdown
 from app.services.allocation import _classify_stock_instrument, _load_amfi_lookups
 from app.services.mf_ingest import COMMODITY_ETF_CATEGORY, MF_BREAKDOWN_CHECK_KEY, _SGB_RE, normalize_company_name
+from app.services.nse_industry import CLASSIFICATION_LEVELS, load_classification_lookup
 from app.time_util import now_ist
+
+
+def _resolve_level(level: str) -> str:
+    """Returns the requested taxonomy level, or "sector" for anything unrecognised
+    so a bad query string never 500s the endpoint."""
+    return level if level in CLASSIFICATION_LEVELS else "sector"
 
 _CAT_ORDER = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign", "Equity - Arbitrage", "Real Estate Trust", "Gold", "Silver", "Debt", "Cash", "Derivatives - Leveraged", "Other"]
 
@@ -264,9 +270,11 @@ async def get_category_composition(db: AsyncSession) -> list[dict]:
     return out
 
 
-async def get_sector_composition(db: AsyncSession, equity_only: bool = False) -> list[dict]:
+async def get_sector_composition(db: AsyncSession, equity_only: bool = False, level: str = "sector") -> list[dict]:
     """Returns per-sector breakdown showing each contributing source and its value."""
     from app.services.manual_assets import get_manual_assets_summary
+
+    level = _resolve_level(level)
 
     result = await db.execute(
         select(Holding, Instrument)
@@ -275,10 +283,8 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
     )
     all_holdings = result.all()
 
-    # Sector lookups for direct stocks
-    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
-    isin_to_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
-    name_to_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
+    # Classification lookup for direct stocks, keyed by ISIN only.
+    classification_lookup = await load_classification_lookup(db)
 
     composition: dict[str, list[dict]] = {}
 
@@ -307,7 +313,7 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
 
         scheme_sector: dict[tuple, float] = defaultdict(float)
         for row in breakdown_rows:
-            sec = row.sector or "Unknown"
+            sec = getattr(row, level) or "Unknown"
             scheme_sector[(row.scheme_isin, sec)] += float(row.holdings_pct)
 
         for (isin, sec), pct in scheme_sector.items():
@@ -324,18 +330,8 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
             val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
             if val <= 0:
                 continue
-            sec = isin_to_sector.get(i.isin or "")
-            if sec is None and (i.name or i.tradingsymbol):
-                norm = normalize_company_name(i.name or i.tradingsymbol or "")
-                sec = name_to_sector.get(norm)
-                if sec is None:
-                    best_r, best_s = 0.0, None
-                    for amfi_norm, amfi_sec in name_to_sector.items():
-                        r = SequenceMatcher(None, norm, amfi_norm).ratio()
-                        if r > best_r:
-                            best_r, best_s = r, amfi_sec
-                    if best_r >= 0.85:
-                        sec = best_s
+            levels = classification_lookup.get(i.isin or "")
+            sec = levels[level] if levels else None
             _add(sec or "Unknown", {"name": i.name or i.tradingsymbol or "Unknown", "source_type": "stock", "fund_pct": 100.0, "contribution": round(val, 2)})
 
     if not equity_only:
@@ -378,8 +374,10 @@ async def get_sector_composition(db: AsyncSession, equity_only: bool = False) ->
     return out
 
 
-async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
+async def get_sector_stock_breakdown(db: AsyncSession, level: str = "sector") -> list[dict]:
     """Per-sector breakdown listing underlying stock holdings aggregated across all funds and direct positions."""
+    level = _resolve_level(level)
+
     fund_result = await db.execute(
         select(Holding, Instrument)
         .join(Instrument, Holding.instrument_id == Instrument.id)
@@ -416,14 +414,13 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
             contrib = fund_values[row.scheme_isin] * float(row.holdings_pct) / 100
             if contrib <= 0:
                 continue
-            sec = row.sector or "Unknown"
+            sec = getattr(row, level) or "Unknown"
             key = normalize_company_name(row.name)
             display_name.setdefault(key, row.name)
             bucket = sector_stocks.setdefault(sec, {})
             bucket[key] = bucket.get(key, 0) + contrib
 
-    isin_to_sector: dict[str, str] = {a.isin: a.sector for a in amfi_all if a.isin and a.sector}
-    name_to_sector: dict[str, str] = {a.name_normalized: a.sector for a in amfi_all if a.sector}
+    classification_lookup = await load_classification_lookup(db)
 
     stock_result = await db.execute(
         select(Holding, Instrument)
@@ -435,18 +432,8 @@ async def get_sector_stock_breakdown(db: AsyncSession) -> list[dict]:
         val = float(h.quantity) * ltp if ltp else float(h.total_cost or 0)
         if val <= 0:
             continue
-        sec = isin_to_sector.get(i.isin or "")
-        if sec is None:
-            norm = normalize_company_name(i.name or i.tradingsymbol or "")
-            sec = name_to_sector.get(norm)
-            if sec is None:
-                best_r, best_s = 0.0, None
-                for amfi_norm, amfi_sec in name_to_sector.items():
-                    r = SequenceMatcher(None, norm, amfi_norm).ratio()
-                    if r > best_r:
-                        best_r, best_s = r, amfi_sec
-                if best_r >= 0.85:
-                    sec = best_s
+        levels = classification_lookup.get(i.isin or "")
+        sec = levels[level] if levels else None
         if sec in _NON_EQUITY_SECTORS:
             continue
         sec = sec or "Unknown"
