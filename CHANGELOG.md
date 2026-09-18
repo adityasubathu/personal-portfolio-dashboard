@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-18-22-25-37 — Professional portfolio tracker UI redesign
+
+- Established the semantic light/dark design foundation and local system typography. (2026-09-18-22-38-36 · pending)
+
 ---
 
 ## 2026-09-18-18-37-35 — Dead-code audit: unreachable endpoints, dead metadata, duplicated logic
