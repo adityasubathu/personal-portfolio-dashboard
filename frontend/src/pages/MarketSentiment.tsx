@@ -1,26 +1,16 @@
 import { useMemo, useState, useRef, useCallback } from 'react'
-import {
-  Divider,
-  Group,
-  Loader,
-  ScrollArea,
-  SegmentedControl,
-  Table,
-  Text,
-  Title,
-} from '@mantine/core'
 import { AlertCircle, Info, RefreshCw } from 'lucide-react'
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
@@ -655,80 +645,71 @@ function SectorTrendsTable() {
 
   const benchLabel = bench === 'vs_n50' ? 'Nifty 50' : 'Nifty 500'
 
-  const thStyle: React.CSSProperties = { textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
-  const tdRight: React.CSSProperties = { textAlign: 'right' }
-  const groupDivider = '2px solid black'
-  const subHd: React.CSSProperties = { textAlign: 'center', color: 'var(--mantine-color-dimmed)', fontWeight: 400, fontSize: 'var(--mantine-font-size-xs)' }
-
   return (
-    <Panel p="md">
-      <Group justify="space-between" align="center" mb="xs" wrap="wrap" gap="xs">
-        <Group gap={6} align="center">
-          <Text fw={600}>Sector Trends</Text>
-          {data.as_of && <Text size="xs" c="dimmed">as of {data.as_of}</Text>}
+    <Section
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          Sector Trends
+          {data.as_of && <span className="text-xs font-normal text-muted-foreground">as of {data.as_of}</span>}
           <ChartInfo text={EXPLANATIONS.sectorTrends} />
-        </Group>
-        <SegmentedControl
-          size="xs"
-          value={bench}
-          onChange={v => { setBench(v as SectorBench); setSortKey(null) }}
-          data={[
-            { value: 'vs_n50',  label: 'vs Nifty 50' },
-            { value: 'vs_n500', label: 'vs Nifty 500' },
-          ]}
-        />
-      </Group>
-      <ScrollArea>
-        <Table withTableBorder withColumnBorders fz="sm" style={{ minWidth: 820 }}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Index</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Short</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Mid</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Long</Table.Th>
-              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</Table.Th>
-              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</Table.Th>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th colSpan={4} />
-              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Annualised CAGR</Table.Th>
-              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Excess CAGR vs {benchLabel} (pp)</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+        </span>
+      }
+      action={
+        <ToggleGroup type="single" variant="outline" size="sm" value={bench} onValueChange={(v) => { if (v) { setBench(v as SectorBench); setSortKey(null) } }}>
+          <ToggleGroupItem value="vs_n50">vs Nifty 50</ToggleGroupItem>
+          <ToggleGroupItem value="vs_n500">vs Nifty 500</ToggleGroupItem>
+        </ToggleGroup>
+      }
+      bodyClassName="p-0"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 820 }}>
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 sticky left-0 z-20 bg-card px-2 text-left font-medium text-muted-foreground">Index</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Short</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Mid</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Long</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground border-l-2 border-foreground select-none" onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground border-l-2 border-foreground select-none" onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</th>
+            </tr>
+            <tr className="sticky top-8 z-10 bg-card">
+              <th colSpan={4} className="sticky left-0 z-20 bg-card" />
+              <th colSpan={3} className="border-l-2 border-foreground text-center text-[11px] font-normal text-muted-foreground">Annualised CAGR</th>
+              <th colSpan={3} className="border-l-2 border-foreground text-center text-[11px] font-normal text-muted-foreground">Excess CAGR vs {benchLabel} (pp)</th>
+            </tr>
+          </thead>
+          <tbody>
             {allRows.map((row, idx) => {
               const isBench = row.is_benchmark
               const sepAfterBench = !isBench && idx > 0 && allRows[idx - 1].is_benchmark
               return (
-                <Table.Tr
+                <tr
                   key={row.symbol}
-                  style={{
-                    fontWeight: isBench ? 600 : undefined,
-                    borderTop: sepAfterBench ? '2px solid var(--mantine-color-gray-3)' : undefined,
-                  }}
+                  className={cn('hover:bg-muted/50', isBench && 'font-semibold', sepAfterBench && 'border-t-2 border-border')}
                 >
-                  <Table.Td>
-                    <Text size="sm" fw={isBench ? 600 : undefined}>{row.label}</Text>
-                  </Table.Td>
+                  <td className="sticky left-0 z-10 bg-card px-2 py-1.5">
+                    {row.label}
+                  </td>
                   {(['short', 'mid', 'long'] as const).map(h => (
-                    <Table.Td key={h} style={{ textAlign: 'center' }}>
+                    <td key={h} className="px-2 py-1.5 text-center">
                       {row.trend ? (
                         <TrendChip horizon={row.trend[h]} />
-                      ) : <Text c="dimmed" size="xs">—</Text>}
-                    </Table.Td>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
                   ))}
                   {horizons.map((h, ci) => {
                     const v = cagrVal(row, h)
                     const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci])
                     return (
-                      <Table.Td key={`cagr_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
-                        {v != null ? pct(v, 1) : <Text c="dimmed" size="xs" component="span">—</Text>}
-                      </Table.Td>
+                      <td key={`cagr_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
+                        {v != null ? pct(v, 1) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
                     )
                   })}
                   {horizons.map((h, ci) => {
@@ -736,18 +717,18 @@ function SectorTrendsTable() {
                     const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci])
                     return (
-                      <Table.Td key={`vs_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
-                        {v != null ? pct(v, 1, true) : <Text c="dimmed" size="xs" component="span">—</Text>}
-                      </Table.Td>
+                      <td key={`vs_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
+                        {v != null ? pct(v, 1, true) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
                     )
                   })}
-                </Table.Tr>
+                </tr>
               )
             })}
-          </Table.Tbody>
-        </Table>
-      </ScrollArea>
-    </Panel>
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -815,7 +796,7 @@ export function MarketSentiment() {
     setEnabledOverlays(next)
   }
 
-  if (summaryLoading) return <Loader size="sm" m="xl" />
+  if (summaryLoading) return <Skeleton className="m-8 h-8 w-32" />
   if (summary?.no_data) {
     return (
       <Alert>
@@ -916,7 +897,7 @@ export function MarketSentiment() {
 
       {/* Price chart */}
       {seriesLoading ? (
-        <Loader size="sm" />
+        <Skeleton className="h-[440px] w-full" />
       ) : filteredCandles.length > 0 ? (
         <Section
           bodyClassName="p-2"
@@ -1019,7 +1000,6 @@ export function MarketSentiment() {
         </>
       )}
 
-      <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Sector Trends</Title>} labelPosition="center" />
       <SectorTrendsTable />
     </div>
   )
