@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { Autocomplete, Box, SimpleGrid, Stack, Table, Text } from '@mantine/core'
-import { IconBuildingBank } from '@tabler/icons-react'
+import { Landmark, Check, ChevronsUpDown } from 'lucide-react'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
@@ -9,28 +8,21 @@ import { shortDate, shortDateTime } from '../lib/format'
 import type { SchemeListItem } from '../types/mfBreakdown'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { cn } from '@/lib/utils'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
 export function FundBreakdown() {
   const { data: schemes } = useAvailableSchemes()
   const [selectedIsin, setSelectedIsin] = usePersistentState<string | null>('fund-breakdown-isin', null)
-  const [search, setSearch] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
   const { data: breakdown, isLoading } = useSchemeBreakdown(selectedIsin)
 
-  const schemeOptions = schemes?.map((s) => ({
-    value: s.scheme_isin,
-    label: schemeLabel(s),
-  })) ?? []
-
   const selectedScheme = schemes?.find((s) => s.scheme_isin === selectedIsin)
-  const searchValue = search ?? (selectedScheme ? schemeLabel(selectedScheme) : '')
-
-  function handleSelect(label: string) {
-    const match = schemeOptions.find((o) => o.label === label)
-    if (match) setSelectedIsin(match.value)
-  }
 
   const catLabels = breakdown?.category_summary.map((s) => s.category) ?? []
   const catValues = breakdown?.category_summary.map((s) => s.value) ?? []
@@ -38,82 +30,109 @@ export function FundBreakdown() {
   const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
   return (
-    <Stack gap="lg">
-      <PageHeader title="Fund Detail" />
-      <Panel><Autocomplete
-        placeholder="Search fund by name or ISIN…"
-        data={schemeOptions.map((o) => o.label)}
-        value={searchValue}
-        onChange={setSearch}
-        onOptionSubmit={handleSelect}
-        w={400}
-        size="sm"
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Fund Detail"
+        actions={
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
+                {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
+                <ChevronsUpDown className="size-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-96 p-0">
+              <Command>
+                <CommandInput placeholder="Search fund by name or ISIN…" />
+                <CommandList>
+                  <CommandEmpty>No fund found.</CommandEmpty>
+                  <CommandGroup>
+                    {(schemes ?? []).map((s) => (
+                      <CommandItem
+                        key={s.scheme_isin}
+                        value={schemeLabel(s)}
+                        onSelect={() => {
+                          setSelectedIsin(s.scheme_isin)
+                          setOpen(false)
+                        }}
+                      >
+                        <Check className={cn('size-4', selectedIsin === s.scheme_isin ? 'opacity-100' : 'opacity-0')} />
+                        {schemeLabel(s)}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        }
       />
 
-      {selectedIsin == null && <EmptyState icon={<IconBuildingBank size={22} />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />}
-      {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
+      {selectedIsin == null && (
+        <EmptyState icon={<Landmark className="size-5" />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />
+      )}
+      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
-        <Box>
-          <Text size="xs" c="dimmed">
+        <div>
+          <p className="text-xs text-muted-foreground">
             {[
               breakdown.as_of && `Portfolio as of ${shortDate(breakdown.as_of)}`,
               breakdown.fetched_at && `fetched ${shortDateTime(breakdown.fetched_at)}`,
               breakdown.last_checked_at && `last checked ${shortDateTime(breakdown.last_checked_at)}`,
             ].filter(Boolean).join(' · ')}
-          </Text>
+          </p>
           {breakdown.server_latest_filing && breakdown.as_of && breakdown.server_latest_filing > breakdown.as_of && (
-            <Text size="xs" c="orange">
+            <p className="text-xs text-warning">
               Server's newest filing: {shortDate(breakdown.server_latest_filing)}
               {breakdown.server_latest_portfolio_count != null && ` (${breakdown.server_latest_portfolio_count} funds)`}
               {' '}— this fund hasn't filed yet
-            </Text>
+            </p>
           )}
-        </Box>
-      )}</Panel>
+        </div>
+      )}
 
       {breakdown && (catLabels.length > 0 || sectorLabels.length > 0) && (
-        <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg">
+        <div className="grid gap-4 xl:grid-cols-2">
           {catLabels.length > 0 && (
-            <Box>
-              <Text fw={600} mb="xs">Market cap &amp; asset class</Text>
+            <Section title="Market cap & asset class">
               <DonutChart labels={catLabels} values={catValues} />
-            </Box>
+            </Section>
           )}
           {sectorLabels.length > 0 && (
-            <Box>
-              <Text fw={600} mb="xs">Sector</Text>
+            <Section title="Sector">
               <DonutChart labels={sectorLabels} values={sectorValues} colorMode="sector" />
-            </Box>
+            </Section>
           )}
-        </SimpleGrid>
+        </div>
       )}
 
       {breakdown && breakdown.holdings.length > 0 && (
-        <Box>
-          <Text fw={600} mb="xs">Holdings</Text>
-          <Table fz="sm" withColumnBorders={false} highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Name</Table.Th>
-                <Table.Th>Category</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>%</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {breakdown.holdings.map((h, i) => (
-                <Table.Tr key={i}>
-                  <Table.Td>{h.name}</Table.Td>
-                  <Table.Td>{h.category}</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{h.pct.toFixed(2)}%</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Box>
+        <Section title="Holdings" bodyClassName="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="sticky top-0 z-10 bg-card">
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Name</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Category</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">%</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.holdings.map((h, i) => (
+                  <tr key={i} className="hover:bg-muted/50">
+                    <td className="px-2 py-1.5">{h.name}</td>
+                    <td className="px-2 py-1.5">{h.category}</td>
+                    <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
+                    <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
       )}
-    </Stack>
+    </div>
   )
 }

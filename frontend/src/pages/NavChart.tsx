@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
-import { Box, Button, Group, Select, Stack, Text } from '@mantine/core'
-import { IconChartHistogram, IconPlus, IconX } from '@tabler/icons-react'
+import { BarChart3, Plus, X } from 'lucide-react'
 import { useNavChartInstruments, useNavChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
 import { usePersistentState } from '../hooks/usePersistentState'
 import type { NavPoint } from '../types/charts'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 
 function normalizeToPercent(data: NavPoint[]): NavPoint[] {
   if (!data.length) return []
@@ -28,16 +30,20 @@ function CompareSelect({
   exclude: string | null
 }) {
   return (
-    <Select
-      placeholder="Add comparison…"
-      data={instruments.filter((i) => i.value !== exclude)}
-      value={value}
-      onChange={onChange}
-      searchable
-      clearable
-      w={260}
-      size="xs"
-    />
+    <Select value={value ?? undefined} onValueChange={onChange}>
+      <SelectTrigger size="sm" className="w-56">
+        <SelectValue placeholder="Add comparison…" />
+      </SelectTrigger>
+      <SelectContent>
+        {instruments
+          .filter((i) => i.value !== exclude)
+          .map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -84,58 +90,76 @@ export function NavChart() {
   }, [compareMode, mainData, selectedInstr])
 
   return (
-    <Stack gap="md">
-      <PageHeader title="Fund NAV Chart" />
-      <Panel><Group align="flex-end">
-        <Select
-          placeholder="Select fund…"
-          data={options}
-          value={selectedId != null ? String(selectedId) : null}
-          onChange={(v) => { setSelectedId(v != null ? Number(v) : null); setCompareMode(false); setCompareId(null) }}
-          searchable
-          clearable
-          w={320}
-          size="sm"
-        />
-        {selectedId && !compareMode && (
-          <Button size="xs" variant="light" leftSection={<IconPlus size={12} />} onClick={() => setCompareMode(true)}>
-            Compare
-          </Button>
-        )}
-        {compareMode && (
-          <Group gap="xs">
-            <CompareSelect
-              instruments={options}
-              value={compareId != null ? String(compareId) : null}
-              onChange={(v) => setCompareId(v != null ? Number(v) : null)}
-              exclude={selectedId != null ? String(selectedId) : null}
-            />
-            <Button size="xs" variant="subtle" color="red" leftSection={<IconX size={12} />} onClick={() => { setCompareMode(false); setCompareId(null) }}>
-              Remove
-            </Button>
-          </Group>
-        )}
-      </Group>
-      {selectedId == null && <EmptyState icon={<IconChartHistogram size={22} />} title="Select a fund" description="Choose a fund to view and compare NAV history." />}
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Fund NAV Chart"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={selectedId != null ? String(selectedId) : undefined}
+              onValueChange={(v) => {
+                setSelectedId(v ? Number(v) : null)
+                setCompareMode(false)
+                setCompareId(null)
+              }}
+            >
+              <SelectTrigger className="w-72">
+                <SelectValue placeholder="Select fund…" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedId && !compareMode && (
+              <Button size="sm" variant="outline" onClick={() => setCompareMode(true)}>
+                <Plus className="size-3.5" />
+                Compare
+              </Button>
+            )}
+            {compareMode && (
+              <>
+                <CompareSelect
+                  instruments={options}
+                  value={compareId != null ? String(compareId) : null}
+                  onChange={(v) => setCompareId(v != null ? Number(v) : null)}
+                  exclude={selectedId != null ? String(selectedId) : null}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-negative"
+                  onClick={() => {
+                    setCompareMode(false)
+                    setCompareId(null)
+                  }}
+                >
+                  <X className="size-3.5" />
+                  Remove
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      />
 
-      {compareMode && (
-        <Text size="xs" c="dimmed">Compare mode: series normalised to % change from first point.</Text>
-      )}</Panel>
+      {selectedId == null && (
+        <EmptyState icon={<BarChart3 className="size-5" />} title="Select a fund" description="Choose a fund to view and compare NAV history." />
+      )}
 
-      {mainLoading && <Text size="sm" c="dimmed">Loading…</Text>}
+      {compareMode && <p className="text-xs text-muted-foreground">Compare mode: series normalised to % change from first point.</p>}
+
+      {selectedId != null && mainLoading && <Skeleton className="h-[520px] w-full" />}
 
       {mainData && selectedId != null && (
-        <>
+        <Section bodyClassName="p-2">
           {compareMode && compareLines ? (
-            <LwChart
-              seriesType="line"
-              compareLines={compareLines}
-              persistKey="nav_chart_h"
-              defaultHeight={520}
-              maskInPrivacy={false}
-            />
+            <LwChart seriesType="line" compareLines={compareLines} persistKey="nav_chart_h" defaultHeight={520} maskInPrivacy={false} />
           ) : (
-            <Box>
+            <div>
               <LwChart
                 seriesType="area"
                 line={mainLine}
@@ -147,14 +171,12 @@ export function NavChart() {
                 maskInPrivacy={false}
               />
               {etfCompareLines && (
-                <Text size="xs" c="dimmed" mt={4}>
-                  Blue = NAV · Orange = daily close price (Kite OHLC)
-                </Text>
+                <p className="mt-1 text-xs text-muted-foreground">Blue = NAV · Orange = daily close price (Kite OHLC)</p>
               )}
-            </Box>
+            </div>
           )}
-        </>
+        </Section>
       )}
-    </Stack>
+    </div>
   )
 }
