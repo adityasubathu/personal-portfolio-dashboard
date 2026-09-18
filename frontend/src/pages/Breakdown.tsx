@@ -1,11 +1,19 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  Box, Button, Group, NumberInput, Paper, Select, SegmentedControl, Stack,
-  Table, Tabs, Text,
+  Box, Button, Group, Paper, Select, SegmentedControl, Stack,
+  Table, Text,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useDebouncedValue } from '@mantine/hooks'
-import { IconRefresh } from '@tabler/icons-react'
+import { RefreshCw } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Button as ShadButton } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
+import { notify } from '@/lib/notify'
 import {
   useBreakdownChart,
   useSectorComposition,
@@ -25,8 +33,6 @@ import { DataTable } from '../components/DataTable'
 import type { Column } from '../components/DataTable'
 import { DonutChart } from '../components/DonutChart'
 import { SsePanel } from '../components/SsePanel'
-import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
 import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
 import { usePersistentState } from '../hooks/usePersistentState'
@@ -34,6 +40,15 @@ import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact, shortDate } from '../lib/format'
 import type { ClassificationLevel, IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
+
+function useDebouncedValue<T>(value: T, delay: number): [T] {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return [debounced]
+}
 
 const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
   { value: 'macro_sector', label: 'Macro' },
@@ -60,7 +75,7 @@ function splitOthers(sectors: SectorRow[], totalSum: number): { rows: SectorRow[
 }
 
 function diffColor(diff: number): string | undefined {
-  return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
+  return Math.abs(diff) >= 3 ? 'text-negative' : undefined
 }
 
 // ── Rebalance calculator — shared by asset-class and category tables ────────────
@@ -77,25 +92,21 @@ function RebalanceControls({
   onCashChange: (v: number | '') => void
 }) {
   return (
-    <Stack gap={2} mb="xs">
-      <Group gap="sm" align="center">
-        <Text size="sm">Extra cash to add:</Text>
-        <NumberInput
-          size="xs"
-          w={140}
-          value={cash}
-          onChange={(v) => onCashChange(v === '' ? '' : Number(v))}
-          placeholder="0"
-          min={0}
-          prefix="₹"
-          thousandSeparator=","
-        />
-        <Text size="xs" c="dimmed">
-          Sell <MoneyText value={totalSell} compact style={{ color: 'var(--mantine-color-red-6)' }} /> from over-target buckets,
-          buy <MoneyText value={totalBuy} compact style={{ color: 'var(--mantine-color-green-6)' }} /> into under-target ones — every bucket lands exactly on target.
-        </Text>
-      </Group>
-    </Stack>
+    <div className="mb-2 flex flex-wrap items-center gap-2">
+      <Label className="text-sm font-normal">Extra cash to add:</Label>
+      <Input
+        type="number"
+        min={0}
+        value={cash}
+        onChange={(e) => onCashChange(e.target.value === '' ? '' : Number(e.target.value))}
+        placeholder="0"
+        className="h-8 w-36"
+      />
+      <p className="text-xs text-muted-foreground">
+        Sell <MoneyText value={totalSell} compact className="text-negative" /> from over-target buckets,
+        buy <MoneyText value={totalBuy} compact className="text-positive" /> into under-target ones — every bucket lands exactly on target.
+      </p>
+    </div>
   )
 }
 
@@ -103,32 +114,28 @@ function RebalanceRows({ buckets }: { buckets: RebalanceBucket[] }) {
   return (
     <>
       {buckets.map((b) => (
-        <Table.Tr key={b.category}>
-          <Table.Td>
-            <Group gap={6}>
-              <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(b.category) }} />
+        <tr key={b.category} className="hover:bg-muted/50">
+          <td className="px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 rounded-sm" style={{ background: categoryColor(b.category) }} />
               {b.category}
-            </Group>
-          </Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}>{b.target_pct.toFixed(1)}%</Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}>{b.current_pct.toFixed(2)}%</Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}>
+            </div>
+          </td>
+          <td data-numeric className="px-2 py-1.5 text-right">{b.target_pct.toFixed(1)}%</td>
+          <td data-numeric className="px-2 py-1.5 text-right">{b.current_pct.toFixed(2)}%</td>
+          <td data-numeric className="px-2 py-1.5 text-right">
             {Math.abs(b.invest) > 1 ? (
-              <Group gap={4} justify="flex-end" wrap="nowrap">
-                <Text size="xs" c="dimmed">{b.invest > 0 ? 'Buy' : 'Sell'}</Text>
-                <MoneyText
-                  value={Math.abs(b.invest)}
-                  compact
-                  style={{ color: b.invest > 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)' }}
-                />
-              </Group>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">{b.invest > 0 ? 'Buy' : 'Sell'}</span>
+                <MoneyText value={Math.abs(b.invest)} compact className={b.invest > 0 ? 'text-positive' : 'text-negative'} />
+              </span>
             ) : '—'}
-          </Table.Td>
-          <Table.Td style={{ textAlign: 'right' }}>{b.new_pct.toFixed(2)}%</Table.Td>
-          <Table.Td style={{ textAlign: 'right', color: 'var(--mantine-color-green-6)' }}>
+          </td>
+          <td data-numeric className="px-2 py-1.5 text-right">{b.new_pct.toFixed(2)}%</td>
+          <td data-numeric className="px-2 py-1.5 text-right text-positive">
             {b.remaining_drift >= 0 ? '+' : ''}{b.remaining_drift.toFixed(2)}%
-          </Table.Td>
-        </Table.Tr>
+          </td>
+        </tr>
       ))}
     </>
   )
@@ -136,32 +143,32 @@ function RebalanceRows({ buckets }: { buckets: RebalanceBucket[] }) {
 
 function TargetsTableHead({ firstColumn }: { firstColumn: string }) {
   return (
-    <Table.Thead>
-      <Table.Tr>
-        <Table.Th>{firstColumn}</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Diff</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Shortfall / Surplus</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Value</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>New target</Table.Th>
-      </Table.Tr>
-    </Table.Thead>
+    <thead>
+      <tr>
+        <th className="h-8 px-2 text-left font-medium text-muted-foreground">{firstColumn}</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Target %</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Current %</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Diff</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Shortfall / Surplus</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">New target</th>
+      </tr>
+    </thead>
   )
 }
 
 function RebalanceTableHead() {
   return (
-    <Table.Thead>
-      <Table.Tr>
-        <Table.Th>Category</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Target %</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Current %</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Invest</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>New %</Table.Th>
-        <Table.Th style={{ textAlign: 'right' }}>Remaining drift</Table.Th>
-      </Table.Tr>
-    </Table.Thead>
+    <thead>
+      <tr>
+        <th className="h-8 px-2 text-left font-medium text-muted-foreground">Category</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Target %</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Current %</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Invest</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">New %</th>
+        <th className="h-8 px-2 text-right font-medium text-muted-foreground">Remaining drift</th>
+      </tr>
+    </thead>
   )
 }
 
@@ -188,34 +195,32 @@ function AssetClassTargetsSection({
       )
       updated['Equity - Foreign'] = targets['Equity - Foreign'] ?? ac!.foreign_equity_target
       await saveMut.mutateAsync(updated)
-      notifications.show({ color: 'green', message: 'Asset class targets saved.' })
+      notify.success('Asset class targets saved.')
       refetch()
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
   const { emergency_fund, cash } = ac.excluded
 
   return (
-    <Box>
-      <Group justify="space-between" align="center" mb="xs">
-        <Text fw={600}>
+    <Section
+      title={
+        <>
           Asset class targets{' '}
-          <Text component="span" size="xs" c="dimmed" fw={400}>
+          <span className="text-xs font-normal text-muted-foreground">
             (% of invested portfolio · <MoneyText value={ac.investable_total} compact />)
-          </Text>
-        </Text>
-        <SegmentedControl
-          size="xs"
-          value={rebalanceView ? 'rebalance' : 'shortfall'}
-          onChange={(v) => onToggleRebalanceView(v === 'rebalance')}
-          data={[
-            { label: 'Shortfall / Surplus', value: 'shortfall' },
-            { label: 'Rebalance', value: 'rebalance' },
-          ]}
-        />
-      </Group>
+          </span>
+        </>
+      }
+      action={
+        <ToggleGroup type="single" variant="outline" size="sm" value={rebalanceView ? 'rebalance' : 'shortfall'} onValueChange={(v) => v && onToggleRebalanceView(v === 'rebalance')}>
+          <ToggleGroupItem value="shortfall">Shortfall / Surplus</ToggleGroupItem>
+          <ToggleGroupItem value="rebalance">Rebalance</ToggleGroupItem>
+        </ToggleGroup>
+      }
+    >
       {rebalanceView && plan && (
         <RebalanceControls
           totalBuy={plan.asset_class_total_buy}
@@ -224,84 +229,82 @@ function AssetClassTargetsSection({
           onCashChange={setCashInput}
         />
       )}
-      <Text size="xs" c="dimmed" hiddenFrom="sm">Scroll horizontally to view all columns</Text>
-      <Box style={{ overflowX: 'auto' }}>
-      <Table fz="sm" withColumnBorders={false} style={{ minWidth: 760 }}>
-        {rebalanceView ? <RebalanceTableHead /> : (
-        <TargetsTableHead firstColumn="Asset class" />
-        )}
-        <Table.Tbody>
-          {rebalanceView && plan ? (
-            <RebalanceRows buckets={plan.asset_class} />
-          ) : ac.rows.map((r) => (
-            <Table.Tr key={r.asset_class}>
-              <Table.Td>
-                <Group gap={6}>
-                  <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(r.asset_class) }} />
-                  {r.asset_class}
-                </Group>
-              </Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>{r.target_pct.toFixed(1)}%</Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
-              <Table.Td style={{ textAlign: 'right', color: diffColor(r.current_diff) }}>
-                {r.current_diff >= 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
-              </Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>
-                <MoneyText value={r.shortfall} compact showSign style={{ color: diffColor(r.current_diff) }} />
-              </Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>
-                <NumberInput
-                  size="xs"
-                  w={80}
-                  value={targets[r.asset_class] ?? r.target_pct}
-                  onChange={(v) => setTargets((p) => ({ ...p, [r.asset_class]: Number(v) }))}
-                  min={0}
-                  max={100}
-                  step={1}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-          {!rebalanceView && (
-          <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
-            <Table.Td>
-              <Group gap={6}>
-                <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor('Equity - Foreign') }} />
-                Equity - Foreign
-                <Text size="xs" c="dimmed">(% of total equity)</Text>
-              </Group>
-            </Table.Td>
-            <Table.Td colSpan={5} />
-            <Table.Td style={{ textAlign: 'right' }}>
-              <NumberInput
-                size="xs"
-                w={80}
-                value={targets['Equity - Foreign'] ?? ac.foreign_equity_target}
-                onChange={(v) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(v) }))}
-                min={0}
-                max={100}
-                step={1}
-              />
-            </Table.Td>
-          </Table.Tr>
-          )}
-        </Table.Tbody>
-      </Table>
-      </Box>
+      <p className="text-xs text-muted-foreground sm:hidden">Scroll horizontally to view all columns</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 760 }}>
+          {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Asset class" />}
+          <tbody>
+            {rebalanceView && plan ? (
+              <RebalanceRows buckets={plan.asset_class} />
+            ) : ac.rows.map((r) => (
+              <tr key={r.asset_class} className="hover:bg-muted/50">
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-sm" style={{ background: categoryColor(r.asset_class) }} />
+                    {r.asset_class}
+                  </div>
+                </td>
+                <td data-numeric className="px-2 py-1.5 text-right">{r.target_pct.toFixed(1)}%</td>
+                <td data-numeric className="px-2 py-1.5 text-right">{r.current_pct.toFixed(2)}%</td>
+                <td data-numeric className={cn('px-2 py-1.5 text-right', diffColor(r.current_diff))}>
+                  {r.current_diff >= 0 ? '+' : ''}{r.current_diff.toFixed(2)}%
+                </td>
+                <td data-numeric className="px-2 py-1.5 text-right">
+                  <MoneyText value={r.shortfall} compact showSign className={diffColor(r.current_diff)} />
+                </td>
+                <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={r.current_value} compact /></td>
+                <td data-numeric className="px-2 py-1.5 text-right">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={targets[r.asset_class] ?? r.target_pct}
+                    onChange={(e) => setTargets((p) => ({ ...p, [r.asset_class]: Number(e.target.value) }))}
+                    className="h-7 w-20"
+                  />
+                </td>
+              </tr>
+            ))}
+            {!rebalanceView && (
+              <tr className="border-t">
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-sm" style={{ background: categoryColor('Equity - Foreign') }} />
+                    Equity - Foreign
+                    <span className="text-xs text-muted-foreground">(% of total equity)</span>
+                  </div>
+                </td>
+                <td colSpan={5} />
+                <td data-numeric className="px-2 py-1.5 text-right">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={targets['Equity - Foreign'] ?? ac.foreign_equity_target}
+                    onChange={(e) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(e.target.value) }))}
+                    className="h-7 w-20"
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
       {!rebalanceView && (
-      <Group gap="lg" mt="xs" align="center">
-        <Button size="xs" loading={saveMut.isPending} onClick={handleSave}>
-          Save targets
-        </Button>
-        <Text size="xs" c="dimmed">
-          Excludes:{' '}
-          {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
-          {cash > 0 && <>Savings {inrCompact(cash)}</>}
-        </Text>
-      </Group>
+        <div className="mt-2 flex items-center gap-4">
+          <ShadButton size="xs" disabled={saveMut.isPending} onClick={handleSave}>
+            Save targets
+          </ShadButton>
+          <p className="text-xs text-muted-foreground">
+            Excludes:{' '}
+            {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
+            {cash > 0 && <>Savings {inrCompact(cash)}</>}
+          </p>
+        </div>
       )}
-    </Box>
+    </Section>
   )
 }
 
@@ -335,14 +338,14 @@ function OverviewTab() {
         )
       }
       await saveMut.mutateAsync({ targets: allTargets, mode })
-      notifications.show({ color: 'green', message: 'Targets saved.' })
+      notify.success('Targets saved.')
       refetchComp()
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
-  if (!chart) return <Text size="sm" c="dimmed">Loading…</Text>
+  if (!chart) return <p className="text-sm text-muted-foreground">Loading…</p>
 
   // High-level allocation donut — order: Equity, Debt, Precious Metals, Emergency Fund, Cash, Real Estate Trust, Others
   const emergencyFund = ac?.excluded.emergency_fund ?? 0
@@ -386,58 +389,48 @@ function OverviewTab() {
   const catValues = catEntries.map(([, v]) => v)
 
   const modeToggle = (
-    <SegmentedControl
-      size="xs"
-      value={mode}
-      onChange={(v) => { setMode(v as 'anchored' | 'free_float'); setTargets({}) }}
-      data={[
-        { label: 'Large Cap Anchored', value: 'anchored' },
-        { label: 'Free Float', value: 'free_float' },
-      ]}
-    />
+    <ToggleGroup type="single" variant="outline" size="sm" value={mode} onValueChange={(v) => { if (v) { setMode(v as 'anchored' | 'free_float'); setTargets({}) } }}>
+      <ToggleGroupItem value="anchored">Large Cap Anchored</ToggleGroupItem>
+      <ToggleGroupItem value="free_float">Free Float</ToggleGroupItem>
+    </ToggleGroup>
   )
 
   return (
-    <Stack gap="lg">
+    <div className="flex flex-col gap-4">
       {chart.labels.length > 0 && (
-        <Group align="stretch" wrap="wrap" gap="md" grow>
-          <Panel title="Asset Allocation" style={{ flex: 1, minWidth: 280 }}>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Section title="Asset Allocation">
             <DonutChart labels={hlLabels} values={hlValues} total={chart.total} />
-          </Panel>
-          <Panel title="Category Breakdown" style={{ flex: 1, minWidth: 280 }}>
+          </Section>
+          <Section title="Category Breakdown">
             <DonutChart labels={catLabels} values={catValues} total={chart.total} />
-          </Panel>
-        </Group>
+          </Section>
+        </div>
       )}
 
       {isAnchored && (
-        <Panel><AssetClassTargetsSection rebalanceView={rebalanceView} onToggleRebalanceView={setRebalanceView} /></Panel>
+        <AssetClassTargetsSection rebalanceView={rebalanceView} onToggleRebalanceView={setRebalanceView} />
       )}
 
       {comparison && (
-        <Panel>
-          <Group justify="space-between" align="center" mb="xs">
-            <Text fw={600}>
-              {isAnchored ? (
-                <>Equity allocation targets <Text component="span" size="xs" fw={400}>(% of domestic equity)</Text></>
-              ) : (
-                <>Allocation targets <Text component="span" size="xs" fw={400}>(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund & cash)</Text></>
-              )}
-            </Text>
-            <Group gap="sm">
-              <SegmentedControl
-                size="xs"
-                value={rebalanceView ? 'rebalance' : 'shortfall'}
-                onChange={(v) => setRebalanceView(v === 'rebalance')}
-                data={[
-                  { label: 'Shortfall / Surplus', value: 'shortfall' },
-                  { label: 'Rebalance', value: 'rebalance' },
-                ]}
-              />
+        <Section
+          title={
+            isAnchored ? (
+              <>Equity allocation targets <span className="text-xs font-normal text-muted-foreground">(% of domestic equity)</span></>
+            ) : (
+              <>Allocation targets <span className="text-xs font-normal text-muted-foreground">(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund & cash)</span></>
+            )
+          }
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <ToggleGroup type="single" variant="outline" size="sm" value={rebalanceView ? 'rebalance' : 'shortfall'} onValueChange={(v) => v && setRebalanceView(v === 'rebalance')}>
+                <ToggleGroupItem value="shortfall">Shortfall / Surplus</ToggleGroupItem>
+                <ToggleGroupItem value="rebalance">Rebalance</ToggleGroupItem>
+              </ToggleGroup>
               {modeToggle}
-            </Group>
-          </Group>
-
+            </div>
+          }
+        >
           {rebalanceView && plan && (
             <RebalanceControls
               totalBuy={plan.total_buy}
@@ -447,76 +440,72 @@ function OverviewTab() {
             />
           )}
           {rebalanceView && plan?.conflict_note && (
-            <Text size="xs" c="dimmed" mb="xs">{plan.conflict_note}</Text>
+            <p className="mb-2 text-xs text-muted-foreground">{plan.conflict_note}</p>
           )}
 
-          <Text size="xs" c="dimmed" hiddenFrom="sm">Scroll horizontally to view all columns</Text>
-          <Box style={{ overflowX: 'auto' }}>
-          <Table fz="sm" withColumnBorders={false} style={{ minWidth: 760 }}>
-            {rebalanceView ? <RebalanceTableHead /> : (
-            <TargetsTableHead firstColumn="Category" />
-            )}
-            <Table.Tbody>
-              {rebalanceView && plan ? (
-                <RebalanceRows buckets={plan.buckets} />
-              ) : comparison.rows.map((r) => {
-                const isForeign = r.category === 'Equity - Foreign'
-                const isAnchor = isAnchored && r.category === 'Large Cap'
-                const showShortfall = !isAnchor
-                const showTargetInput = !(isAnchored && isForeign)
-                const inputVal = targets[r.category] ?? (isAnchored && isForeign ? comparison.foreign.target_pct : r.target_pct)
-                return (
-                  <Table.Tr key={r.category}>
-                    <Table.Td>
-                      <Group gap={6}>
-                        <Box style={{ width: 8, height: 8, borderRadius: 2, background: categoryColor(r.category) }} />
-                        {r.category}
-                      </Group>
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>
-                      {r.anchor_note
-                        ? <Text size="xs">{r.anchor_note}</Text>
-                        : `${r.target_pct.toFixed(1)}%`}
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>{r.current_pct.toFixed(2)}%</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', color: isAnchor ? undefined : diffColor(r.current_diff) }}>
-                      {isAnchor ? '—' : `${r.current_diff > 0 ? '+' : ''}${r.current_diff.toFixed(2)}%`}
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>
-                      {showShortfall && (
-                        <MoneyText value={r.current_value_diff} compact showSign style={{ color: diffColor(r.current_diff) }} />
-                      )}
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}><MoneyText value={r.current_value} compact /></Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>
-                      {showTargetInput ? (
-                        <NumberInput
-                          size="xs"
-                          w={80}
-                          value={inputVal}
-                          onChange={(v) => setTargets((p) => ({ ...p, [r.category]: Number(v) }))}
-                          min={0}
-                          max={100}
-                          step={0.1}
-                        />
-                      ) : (
-                        <Text size="xs">50% of LC</Text>
-                      )}
-                    </Table.Td>
-                  </Table.Tr>
-                )
-              })}
-            </Table.Tbody>
-          </Table>
-          </Box>
+          <p className="text-xs text-muted-foreground sm:hidden">Scroll horizontally to view all columns</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ minWidth: 760 }}>
+              {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Category" />}
+              <tbody>
+                {rebalanceView && plan ? (
+                  <RebalanceRows buckets={plan.buckets} />
+                ) : comparison.rows.map((r) => {
+                  const isForeign = r.category === 'Equity - Foreign'
+                  const isAnchor = isAnchored && r.category === 'Large Cap'
+                  const showShortfall = !isAnchor
+                  const showTargetInput = !(isAnchored && isForeign)
+                  const inputVal = targets[r.category] ?? (isAnchored && isForeign ? comparison.foreign.target_pct : r.target_pct)
+                  return (
+                    <tr key={r.category} className="hover:bg-muted/50">
+                      <td className="px-2 py-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2 rounded-sm" style={{ background: categoryColor(r.category) }} />
+                          {r.category}
+                        </div>
+                      </td>
+                      <td data-numeric className="px-2 py-1.5 text-right">
+                        {r.anchor_note ? <span className="text-xs">{r.anchor_note}</span> : `${r.target_pct.toFixed(1)}%`}
+                      </td>
+                      <td data-numeric className="px-2 py-1.5 text-right">{r.current_pct.toFixed(2)}%</td>
+                      <td data-numeric className={cn('px-2 py-1.5 text-right', !isAnchor && diffColor(r.current_diff))}>
+                        {isAnchor ? '—' : `${r.current_diff > 0 ? '+' : ''}${r.current_diff.toFixed(2)}%`}
+                      </td>
+                      <td data-numeric className="px-2 py-1.5 text-right">
+                        {showShortfall && (
+                          <MoneyText value={r.current_value_diff} compact showSign className={diffColor(r.current_diff)} />
+                        )}
+                      </td>
+                      <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={r.current_value} compact /></td>
+                      <td data-numeric className="px-2 py-1.5 text-right">
+                        {showTargetInput ? (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={inputVal}
+                            onChange={(e) => setTargets((p) => ({ ...p, [r.category]: Number(e.target.value) }))}
+                            className="h-7 w-20"
+                          />
+                        ) : (
+                          <span className="text-xs">50% of LC</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           {!rebalanceView && (
-            <Button size="xs" mt="xs" loading={saveMut.isPending} onClick={handleSaveTargets}>
+            <ShadButton size="xs" className="mt-2" disabled={saveMut.isPending} onClick={handleSaveTargets}>
               Save targets
-            </Button>
+            </ShadButton>
           )}
-        </Panel>
+        </Section>
       )}
-    </Stack>
+    </div>
   )
 }
 
@@ -1020,17 +1009,12 @@ export function Breakdown() {
   const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
 
   return (
-    <Stack gap="lg">
+    <div className="flex flex-col gap-4">
       <PageHeader title="Portfolio Breakdown" actions={
-        <Button
-          size="xs"
-          leftSection={<IconRefresh size={12} />}
-          onClick={ingestSse.start}
-          loading={ingestSse.status === 'running'}
-          disabled={ingestSse.status === 'running'}
-        >
+        <ShadButton size="xs" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
+          <RefreshCw className="size-3.5" />
           Refresh disclosures
-        </Button>
+        </ShadButton>
       } />
 
       <SsePanel
@@ -1046,22 +1030,22 @@ export function Breakdown() {
         />
       )}
 
-      <Panel p="md"><Tabs defaultValue="overview">
-        <Tabs.List>
-          <Tabs.Tab value="overview">Overview</Tabs.Tab>
-          <Tabs.Tab value="sector">Sector</Tabs.Tab>
-          <Tabs.Tab value="composition">Composition</Tabs.Tab>
-        </Tabs.List>
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="sector">Sector</TabsTrigger>
+          <TabsTrigger value="composition">Composition</TabsTrigger>
+        </TabsList>
 
-        <Tabs.Panel value="overview" pt="md"><OverviewTab /></Tabs.Panel>
-        <Tabs.Panel value="sector" pt="md">
+        <TabsContent value="overview" className="pt-4"><OverviewTab /></TabsContent>
+        <TabsContent value="sector" className="pt-4">
           <SectorTab
             dismissedLevels={dismissedLevels}
             onDismiss={(lvl) => setDismissedLevels(dismissedLevels.includes(lvl) ? dismissedLevels : [...dismissedLevels, lvl])}
           />
-        </Tabs.Panel>
-        <Tabs.Panel value="composition" pt="md"><CompositionTab /></Tabs.Panel>
-      </Tabs></Panel>
-    </Stack>
+        </TabsContent>
+        <TabsContent value="composition" className="pt-4"><CompositionTab /></TabsContent>
+      </Tabs>
+    </div>
   )
 }
