@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import {
   Badge, Box, Button, Collapse, Group, Paper, Stack,
-  Switch, Table, Text, TextInput, Title,
+  Switch, Table, Text, TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { usePolicyTracker, useSetTriggerStateMutation } from '../api/policyTracker'
 import type { TriggerResult, TriggerStatus } from '../types/policyTracker'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 
 const STATUS_COLOR: Record<TriggerStatus, string> = {
   ok: 'green',
@@ -305,9 +307,7 @@ export function PolicyTracker() {
 
   return (
     <Stack gap="lg" maw={860}>
-      <Group justify="space-between" align="center">
-        <Title order={3}>Policy Tracker</Title>
-        <Paper
+      <PageHeader title="Policy Tracker" meta={<Paper
           px="md"
           py="xs"
           style={{
@@ -322,16 +322,14 @@ export function PolicyTracker() {
               : 'All clear'}
           </Text>
           <Text size="xs" c="dimmed">as of {new Date(data.generated_at).toLocaleTimeString('en-IN')}</Text>
-        </Paper>
-      </Group>
+        </Paper>} />
 
       {data.sections.map((section) => (
-        <Box key={section.section}>
-          <Text fw={600} size="lg" my="xs" style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', padding: '4px 0' }}>{section.section}</Text>
+        <Panel key={section.section} title={section.section}>
           {section.triggers.map((trigger) => (
             <TriggerRow key={trigger.key} trigger={trigger} />
           ))}
-        </Box>
+        </Panel>
       ))}
     </Stack>
   )

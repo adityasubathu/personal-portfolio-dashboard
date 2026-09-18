@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   Alert,
   Badge,
-  Box,
   Card,
   Divider,
   Group,
@@ -15,7 +14,6 @@ import {
   Stack,
   Table,
   Text,
-  Title,
   UnstyledButton,
 } from '@mantine/core'
 import { IconAlertCircle, IconChevronDown, IconChevronRight, IconInfoCircle } from '@tabler/icons-react'
@@ -23,12 +21,12 @@ import { useCapitalGains, useCapitalGainsYears } from '../api/capitalGains'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { MoneyText } from '../components/MoneyText'
+import { PageHeader } from '../components/PageHeader'
+import { Panel } from '../components/Panel'
 import { gainColor, inr } from '../lib/format'
 
 const MASK = '₹•••'
 import type { GainBucket, RealizedLot, AttentionItem } from '../types/capitalGains'
-
-const PAGE_PX = 128
 
 const LT_BUCKETS = new Set([
   'equity_ltcg_10', 'equity_ltcg_125',
@@ -400,17 +398,17 @@ export function CapitalGains() {
 
   if (yearsLoading) {
     return (
-      <Box px={PAGE_PX} py="xl">
+      <Panel>
         <Loader size="sm" />
-      </Box>
+      </Panel>
     )
   }
 
   if (fys.length === 0) {
     return (
-      <Box px={PAGE_PX} py="xl">
+      <Panel>
         <Alert color="gray" variant="light">No sell trades found. Import your tradebook to see capital gains.</Alert>
-      </Box>
+      </Panel>
     )
   }
 
@@ -427,11 +425,8 @@ export function CapitalGains() {
   const totalEstTax = (data?.totals.est_tax ?? 0) + slabTax
 
   return (
-    <Box px={PAGE_PX}>
-      <Group mb="md" gap="sm" align="center">
-        <Title order={3}>Capital Gains</Title>
-        <InfoPopover text={HELP_TEXT} />
-      </Group>
+    <Stack gap="lg">
+      <PageHeader title="Capital Gains" actions={<InfoPopover text={HELP_TEXT} />} />
 
       <Group mb="lg" align="flex-end" justify="space-between" wrap="wrap">
         <Group align="center" gap="sm">
@@ -481,7 +476,7 @@ export function CapitalGains() {
 
           {/* FY totals — STCG / LTCG / est. tax */}
           {data.buckets.length > 0 && (
-            <Card withBorder padding="sm" radius="md" style={{ maxWidth: 420 }}>
+            <Panel style={{ maxWidth: 420 }}>
               <Stack gap={4}>
                 <Group justify="space-between">
                   <Group gap="xs">
@@ -513,7 +508,7 @@ export function CapitalGains() {
                   {slabRate === 0 && ' Set your slab rate above to include slab-rate gains.'}
                 </Text>
               </Stack>
-            </Card>
+            </Panel>
           )}
 
           <Divider />
@@ -543,6 +538,6 @@ export function CapitalGains() {
           )}
         </Stack>
       )}
-    </Box>
+    </Stack>
   )
 }

@@ -11,6 +11,7 @@
 - Redesigned allocation analysis with responsive panels, table scrolling, and lint-safe state handling. (2026-09-18-23-03-02 · 9b0ddab)
 - Redesigned Market Sentiment surfaces for responsive chart and analysis presentation. (2026-09-18-23-05-28 · efd3544)
 - Redesigned portfolio exploration routes with shared panels and selection empty states. (2026-09-18-23-08-24 · pending)
+- Redesigned tax and policy views with shared decision surfaces. (2026-09-18-23-11-03 · pending)
 
 ---
 
