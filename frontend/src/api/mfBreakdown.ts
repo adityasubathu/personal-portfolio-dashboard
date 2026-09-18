@@ -11,6 +11,7 @@ import type {
   SchemeBreakdown,
   SchemeListItem,
   SectorClassifyResult,
+  SectorClassifyRow,
   SectorCompositionItem,
   SectorStockBreakdownItem,
 } from '../types/mfBreakdown'
@@ -124,17 +125,17 @@ export function useSaveAllocationTargetsMutation() {
   })
 }
 
-export function useSectorList() {
+export function useSectorList(level: ClassificationLevel = 'sector') {
   return useQuery({
-    queryKey: breakdownKeys.sectorList,
-    queryFn: () => request<string[]>('/api/v1/mf-breakdown/sector-list'),
+    queryKey: [...breakdownKeys.sectorList, level],
+    queryFn: () => request<string[]>(`/api/v1/mf-breakdown/sector-list?level=${level}`),
   })
 }
 
 export function useSectorClassifyBatchMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (rows: Array<{ name: string; sector: string }>) =>
+    mutationFn: (rows: SectorClassifyRow[]) =>
       request<SectorClassifyResult>('/api/v1/mf-breakdown/sector-classify-batch', {
         method: 'PATCH',
         body: JSON.stringify(rows),

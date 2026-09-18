@@ -502,20 +502,25 @@ function OverviewTab() {
 }
 
 function SectorClassifyPanel({
+  level,
   unknownHoldings,
   onDone,
 }: {
+  level: ClassificationLevel
   unknownHoldings: Array<{ name: string; value: number; pct: number }>
   onDone: () => void
 }) {
   const [selections, setSelections] = useState<Record<string, string>>({})
-  const { data: sectorList } = useSectorList()
+  const { data: valueList } = useSectorList(level)
   const classifyMut = useSectorClassifyBatchMutation()
+  const levelLabel = LEVEL_OPTIONS.find((o) => o.value === level)?.label ?? 'Sector'
+
+  useEffect(() => { setSelections({}) }, [level])
 
   async function handleSave() {
     const rows = unknownHoldings
       .filter((h) => selections[h.name])
-      .map((h) => ({ name: h.name, sector: selections[h.name] }))
+      .map((h) => ({ name: h.name, level, value: selections[h.name] }))
     if (!rows.length) return
     try {
       const res = await classifyMut.mutateAsync(rows)
@@ -531,13 +536,13 @@ function SectorClassifyPanel({
   return (
     <Paper withBorder p="sm">
       <Text fw={600} size="sm" mb="xs">
-        Classify unknown-sector stocks ({unknownHoldings.length})
+        Classify unknown-{levelLabel.toLowerCase()} stocks ({unknownHoldings.length})
       </Text>
       <Table fz="sm" withColumnBorders={false}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Stock name</Table.Th>
-            <Table.Th style={{ width: 220 }}>Sector</Table.Th>
+            <Table.Th style={{ width: 260 }}>{levelLabel}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -547,8 +552,8 @@ function SectorClassifyPanel({
               <Table.Td>
                 <Select
                   size="xs"
-                  placeholder="Select sector…"
-                  data={sectorList ?? []}
+                  placeholder={`Select ${levelLabel.toLowerCase()}…`}
+                  data={valueList ?? []}
                   searchable
                   value={selections[h.name] ?? null}
                   onChange={(v) => setSelections((prev) => ({ ...prev, [h.name]: v ?? '' }))}
@@ -575,7 +580,13 @@ function SectorClassifyPanel({
   )
 }
 
-function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: () => void }) {
+function SectorTab({
+  dismissedLevels,
+  onDismiss,
+}: {
+  dismissedLevels: ClassificationLevel[]
+  onDismiss: (level: ClassificationLevel) => void
+}) {
   const [level, setLevel] = usePersistentState<ClassificationLevel>('sectorLevel', 'sector')
   const { data: sectors } = useSectorComposition(level)
   const { data: stockBreakdown } = useSectorStockBreakdown(level)
@@ -661,8 +672,8 @@ function SectorTab({ dismissed, onDismiss }: { dismissed: boolean; onDismiss: ()
         </Table>
       </Box>
 
-      {level === 'sector' && !dismissed && unknownHoldings.length > 0 && (
-        <SectorClassifyPanel unknownHoldings={unknownHoldings} onDone={onDismiss} />
+      {!dismissedLevels.includes(level) && unknownHoldings.length > 0 && (
+        <SectorClassifyPanel level={level} unknownHoldings={unknownHoldings} onDone={() => onDismiss(level)} />
       )}
     </Stack>
   )
@@ -958,16 +969,16 @@ function ClassifyPanel({
 export function Breakdown() {
   const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
   const [unmatchedEquities, setUnmatchedEquities] = useState<UnmatchedEquity[]>([])
-  const [sectorClassifyDismissed, setSectorClassifyDismissed] = usePersistentState('sectorClassifyDismissed', false)
+  const [dismissedLevels, setDismissedLevels] = usePersistentState<ClassificationLevel[]>('sectorClassifyDismissedLevels', [])
 
   useEffect(() => {
     const equities = ingestSse.result?.ingest?.unmatched_equities
     if (equities?.length) {
       setUnmatchedEquities(equities)
     }
-    // Reset sector classify dismiss whenever a new ingest completes
+    // A fresh ingest re-offers classification at every level
     if (ingestSse.result) {
-      setSectorClassifyDismissed(false)
+      setDismissedLevels([])
     }
   }, [ingestSse.result])
 
@@ -1007,7 +1018,12 @@ export function Breakdown() {
         </Tabs.List>
 
         <Tabs.Panel value="overview" pt="md"><OverviewTab /></Tabs.Panel>
-        <Tabs.Panel value="sector" pt="md"><SectorTab dismissed={sectorClassifyDismissed} onDismiss={() => setSectorClassifyDismissed(true)} /></Tabs.Panel>
+        <Tabs.Panel value="sector" pt="md">
+          <SectorTab
+            dismissedLevels={dismissedLevels}
+            onDismiss={(lvl) => setDismissedLevels(dismissedLevels.includes(lvl) ? dismissedLevels : [...dismissedLevels, lvl])}
+          />
+        </Tabs.Panel>
         <Tabs.Panel value="composition" pt="md"><CompositionTab /></Tabs.Panel>
       </Tabs>
     </Stack>

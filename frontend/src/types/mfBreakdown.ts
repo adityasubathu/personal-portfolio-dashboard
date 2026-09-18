@@ -146,8 +146,15 @@ export interface ClassifyResult {
   updated: number
 }
 
+export interface SectorClassifyRow {
+  name: string
+  level: ClassificationLevel
+  value: string
+}
+
 export interface SectorClassifyResult {
   updated: number
+  rows_updated: number
 }
 
 export interface SyncedFund {
