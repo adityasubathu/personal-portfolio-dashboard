@@ -3,7 +3,7 @@
 ---
 
 ## 2026-09-18-18-25-17 — Exclude derivative/futures legs from equity-only sector views
-- `get_sector_composition` and `get_sector_stock_breakdown` now exclude `Derivatives - Leveraged` rows alongside `Equity - Arbitrage`, fixing a leak where a fund's futures/derivative leg (e.g. an unclassified-sector position with no real equity exposure) showed up as a stock holding in the Sector tab's `Unknown` bucket. (2026-09-18-18-25-17 · TBD)
+- `get_sector_composition` and `get_sector_stock_breakdown` now exclude `Derivatives - Leveraged` rows alongside `Equity - Arbitrage`, fixing a leak where a fund's futures/derivative leg (e.g. an unclassified-sector position with no real equity exposure) showed up as a stock holding in the Sector tab's `Unknown` bucket. (2026-09-18-18-25-17 · b5628c6)
 
 ---
 
