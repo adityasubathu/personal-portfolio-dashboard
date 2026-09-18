@@ -20,7 +20,10 @@ class AmfiMarketCap(Base):
     exchanges: Mapped[str | None] = mapped_column(String(50))
     aliases: Mapped[str | None] = mapped_column(Text, nullable=True)
     categorization: Mapped[str] = mapped_column(String(20))
-    sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    macro_sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    basic_industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     name_normalized: Mapped[str] = mapped_column(String(255), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)
 
@@ -49,6 +52,7 @@ class MfSchemeBreakdown(Base):
     __tablename__ = "mf_scheme_breakdown"
     __table_args__ = (
         Index("ix_mf_breakdown_scheme_isin", "scheme_isin"),
+        Index("ix_mf_breakdown_isin", "isin"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -58,6 +62,40 @@ class MfSchemeBreakdown(Base):
     holdings_pct: Mapped[float] = mapped_column(Numeric(14, 8))
     market_value: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     category: Mapped[str] = mapped_column(String(30))
-    sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    isin: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    macro_sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    basic_industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     as_of: Mapped[date | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
+
+
+class NseIndustryClassification(Base):
+    """NSE's four-level industry taxonomy, one row per ISIN.
+
+    Written only by app/services/nse_industry.py. ISIN is the identity: the NSE
+    API is addressed by symbol, but every response's ISIN is verified against the
+    one we looked the symbol up by, and every join elsewhere is ISIN to ISIN.
+
+    Rows are never deleted — a company's classification is permanent reference
+    data, so a stock that leaves the portfolio keeps its row and costs nothing to
+    resolve again later.
+    """
+    __tablename__ = "nse_industry_classification"
+
+    isin: Mapped[str] = mapped_column(String(12), primary_key=True)
+    symbol: Mapped[str | None] = mapped_column(String(20), index=True, nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    series: Mapped[str | None] = mapped_column(String(5), nullable=True)
+
+    macro_sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    basic_industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16))
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
