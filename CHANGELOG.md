@@ -5,6 +5,8 @@
 ## 2026-09-18-17-39-25 — Multi-level classification overrides and the Others bucket
 - `equity_sector_override` now holds a manual fix at any of the four NSE levels instead of sector alone, and a new taxonomy parent map cascades a chosen value up its NSE hierarchy. (2026-09-18-17-39-25 · 0e345cc)
 - `PATCH /sector-classify-batch` accepts `{name, level, value}` and cascades the save up the hierarchy; `GET /sector-list?level=` now offers NSE's full taxonomy at any of the four levels. (2026-09-18-17-41-01 · 005012f)
+- Manual taxonomy overrides now apply at every level during ingest, are auto-pruned level by level once NSE resolves them, and reach directly held stocks (previously fund holdings only). (2026-09-18-17-43-35 · 7742324)
+- The Sector tab's manual-classify panel now works on all four taxonomy levels (Macro/Sector/Industry/Basic), not sector alone, and dismissal is tracked per level. (2026-09-18-17-46-11 · 98197a5)
 
 ---
 

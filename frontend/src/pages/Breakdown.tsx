@@ -40,6 +40,23 @@ const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
   { value: 'basic_industry', label: 'Basic' },
 ]
 
+const OTHERS_LABEL = 'Others'
+const OTHERS_THRESHOLD_PCT = 1
+
+type SectorRow = { sector: string; total: number }
+
+/** Basic Industry fans out to ~148 values, most of them a rounding error. Anything
+ *  under 1% of equity collapses into one grey slice — but only when there are at
+ *  least two of them, so a lone small slice never becomes a one-item dropdown.
+ *  Unknown is never clubbed: it means something different from "small". */
+function splitOthers(sectors: SectorRow[], totalSum: number): { rows: SectorRow[]; others: SectorRow[] } {
+  const threshold = totalSum * (OTHERS_THRESHOLD_PCT / 100)
+  const small = sectors.filter((s) => s.sector !== 'Unknown' && s.total < threshold)
+  if (small.length < 2) return { rows: sectors, others: [] }
+  const smallLabels = new Set(small.map((s) => s.sector))
+  return { rows: sectors.filter((s) => !smallLabels.has(s.sector)), others: small }
+}
+
 function diffColor(diff: number): string | undefined {
   return Math.abs(diff) >= 3 ? 'var(--mantine-color-red-5)' : undefined
 }
@@ -603,8 +620,19 @@ function SectorTab({
 
   const totalSum = sectors.reduce((acc, s) => acc + s.total, 0)
   const grandTotal = stockBreakdown ? stockBreakdown.reduce((acc, s) => acc + s.total, 0) : 0
-  const labels = sectors.map((s) => s.sector)
-  const values = sectors.map((s) => s.total)
+
+  const { rows: mainRows, others: othersRows } =
+    level === 'basic_industry' ? splitOthers(sectors, totalSum) : { rows: sectors as SectorRow[], others: [] as SectorRow[] }
+  const othersTotal = othersRows.reduce((acc, s) => acc + s.total, 0)
+  // One array drives the donut, its legend and the table, so the swatches always agree.
+  const chartRows: SectorRow[] = othersRows.length
+    ? [...mainRows, { sector: OTHERS_LABEL, total: othersTotal }]
+    : mainRows
+
+  const labels = chartRows.map((s) => s.sector)
+  const values = chartRows.map((s) => s.total)
+
+  const pctOfEquity = (value: number) => (totalSum > 0 ? (value / totalSum * 100).toFixed(2) : '0.00')
 
   const stocksBySector = stockBreakdown
     ? Object.fromEntries(stockBreakdown.map((s) => [s.sector, s.holdings]))
@@ -641,7 +669,7 @@ function SectorTab({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sectors.map((s, i) => (
+            {chartRows.map((s, i) => (
               <React.Fragment key={s.sector}>
                 <Table.Tr
                   style={{ cursor: 'pointer', background: 'var(--mantine-color-gray-1)' }}
@@ -650,14 +678,40 @@ function SectorTab({
                   <Table.Td fw={600}>
                     {expanded.has(s.sector) ? '▾' : '▸'}{' '}
                     <Box component="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <Box component="span" style={{ width: 8, height: 8, borderRadius: 2, background: sectorColor(i, sectors.length, s.sector), display: 'inline-block' }} />
+                      <Box component="span" style={{ width: 8, height: 8, borderRadius: 2, background: sectorColor(i, chartRows.length, s.sector), display: 'inline-block' }} />
                       {s.sector}
+                      {s.sector === OTHERS_LABEL && <Text component="span" c="dimmed" size="xs">({othersRows.length})</Text>}
                     </Box>
                   </Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{totalSum > 0 ? (s.total / totalSum * 100).toFixed(2) : '0.00'}%</Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>{pctOfEquity(s.total)}%</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}><MoneyText value={s.total} compact /></Table.Td>
                 </Table.Tr>
-                {expanded.has(s.sector) && (stocksBySector[s.sector] ?? []).map((h, j) => (
+
+                {expanded.has(s.sector) && s.sector === OTHERS_LABEL && othersRows.map((o) => {
+                  const key = `others:${o.sector}`
+                  return (
+                    <React.Fragment key={key}>
+                      <Table.Tr style={{ cursor: 'pointer' }} onClick={() => toggle(key)}>
+                        <Table.Td pl="lg" fw={500}>
+                          {expanded.has(key) ? '▾' : '▸'} {o.sector}
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: 'right' }}>{pctOfEquity(o.total)}%</Table.Td>
+                        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={o.total} compact /></Table.Td>
+                      </Table.Tr>
+                      {expanded.has(key) && (stocksBySector[o.sector] ?? []).map((h, j) => (
+                        <Table.Tr key={`${key}-${j}`}>
+                          <Table.Td pl={48}>{h.name}</Table.Td>
+                          <Table.Td style={{ textAlign: 'right' }}>
+                            <Text c="dimmed">{h.pct.toFixed(2)}% in {o.sector} · {grandTotal > 0 ? (h.value / grandTotal * 100).toFixed(2) : '0.00'}% of equity</Text>
+                          </Table.Td>
+                          <Table.Td style={{ textAlign: 'right' }}><MoneyText value={h.value} compact /></Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </React.Fragment>
+                  )
+                })}
+
+                {expanded.has(s.sector) && s.sector !== OTHERS_LABEL && (stocksBySector[s.sector] ?? []).map((h, j) => (
                   <Table.Tr key={`${s.sector}-${j}`}>
                     <Table.Td pl="xl">{h.name}</Table.Td>
                     <Table.Td style={{ textAlign: 'right' }}>
