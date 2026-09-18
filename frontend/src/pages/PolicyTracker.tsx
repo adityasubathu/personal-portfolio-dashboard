@@ -1,41 +1,29 @@
 import { useState } from 'react'
-import {
-  Badge, Box, Button, Collapse, Group, Paper, Stack,
-  Switch, Table, Text, TextInput,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
+import { ChevronDown } from 'lucide-react'
 import { usePolicyTracker, useSetTriggerStateMutation } from '../api/policyTracker'
 import type { TriggerResult, TriggerStatus } from '../types/policyTracker'
 import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
+import { notify } from '@/lib/notify'
 
-const STATUS_COLOR: Record<TriggerStatus, string> = {
-  ok: 'green',
-  watch: 'blue',
-  action: 'orange',
-  breach: 'red',
-  manual: 'yellow',
+const STATUS_CLASS: Record<TriggerStatus, string> = {
+  ok: 'bg-positive/10 text-positive',
+  watch: 'bg-info/10 text-info',
+  action: 'bg-warning/10 text-warning',
+  breach: 'bg-destructive text-white',
+  manual: 'bg-muted text-muted-foreground',
 }
 
-const STATUS_VARIANT: Record<TriggerStatus, 'filled' | 'light'> = {
-  ok: 'light',
-  watch: 'light',
-  action: 'filled',
-  breach: 'filled',
-  manual: 'light',
-}
-
-const ROW_ACCENT: Partial<Record<TriggerStatus, React.CSSProperties>> = {
-  action: {
-    borderLeft: '3px solid var(--mantine-color-orange-5)',
-    background: 'var(--mantine-color-orange-0)',
-    paddingLeft: 10,
-  },
-  breach: {
-    borderLeft: '3px solid var(--mantine-color-red-5)',
-    background: 'var(--mantine-color-red-0)',
-    paddingLeft: 10,
-  },
+const ROW_ACCENT: Partial<Record<TriggerStatus, string>> = {
+  action: 'border-l-2 border-warning bg-warning/5 pl-2.5',
+  breach: 'border-l-2 border-destructive bg-destructive/5 pl-2.5',
 }
 
 function isNestedRecord(v: unknown): v is Record<string, Record<string, unknown>> {
@@ -51,41 +39,41 @@ function DetailView({ detail, threshold }: { detail: Record<string, unknown>; th
     const high = threshold?.high as number | undefined
     const bg = low !== undefined && high !== undefined
       ? premium < low
-        ? 'var(--mantine-color-green-1)'
+        ? 'bg-positive/15'
         : premium <= high
-          ? 'var(--mantine-color-yellow-1)'
-          : 'var(--mantine-color-red-1)'
+          ? 'bg-warning/15'
+          : 'bg-destructive/15'
       : undefined
     return (
-      <Table withTableBorder={false} fz="xs" style={{ width: 'auto' }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th style={{ textAlign: 'right' }}>Exchange close</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>NAV</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Premium</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>As of</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          <Table.Tr>
-            <Table.Td style={{ textAlign: 'right' }}>{(detail.exchange_close as number).toFixed(2)}</Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{(detail.nav as number).toFixed(4)}</Table.Td>
-            <Table.Td style={{ textAlign: 'right', background: bg, borderRadius: 3 }}>
+      <table className="w-auto text-xs">
+        <thead>
+          <tr>
+            <th className="px-2 py-1 text-right">Exchange close</th>
+            <th className="px-2 py-1 text-right">NAV</th>
+            <th className="px-2 py-1 text-right">Premium</th>
+            <th className="px-2 py-1 text-right">As of</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="px-2 py-1 text-right">{(detail.exchange_close as number).toFixed(2)}</td>
+            <td className="px-2 py-1 text-right">{(detail.nav as number).toFixed(4)}</td>
+            <td className={cn('rounded px-2 py-1 text-right', bg)}>
               {premium > 0 ? '+' : ''}{premium.toFixed(2)}%
-            </Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{detail.nav_date as string}{detail.stale ? ' ⚠' : ''}</Table.Td>
-          </Table.Tr>
-        </Table.Tbody>
+            </td>
+            <td className="px-2 py-1 text-right">{detail.nav_date as string}{detail.stale ? ' ⚠' : ''}</td>
+          </tr>
+        </tbody>
         {low !== undefined && high !== undefined && (
-          <Table.Tfoot>
-            <Table.Tr>
-              <Table.Td colSpan={4} style={{ color: 'var(--mantine-color-dimmed)', fontStyle: 'italic' }}>
+          <tfoot>
+            <tr>
+              <td colSpan={4} className="px-2 py-1 text-muted-foreground italic">
                 low ≤{low}% · high {'>'}{high}%
-              </Table.Td>
-            </Table.Tr>
-          </Table.Tfoot>
+              </td>
+            </tr>
+          </tfoot>
         )}
-      </Table>
+      </table>
     )
   }
 
@@ -97,30 +85,30 @@ function DetailView({ detail, threshold }: { detail: Record<string, unknown>; th
     const pcts = detail.rung_pcts as number[]
     const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 })
     return (
-      <Table withTableBorder={false} fz="xs" style={{ width: 'auto' }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th style={{ textAlign: 'right' }}>Current</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Peak</Table.Th>
-            <Table.Th style={{ textAlign: 'right' }}>Drawdown</Table.Th>
-            {pcts.map((p, i) => <Table.Th key={i} style={{ textAlign: 'right' }}>Rung {i + 1} (−{p}%)</Table.Th>)}
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          <Table.Tr>
-            <Table.Td style={{ textAlign: 'right' }}>{fmt(current)}</Table.Td>
-            <Table.Td style={{ textAlign: 'right' }}>{fmt(peak)}</Table.Td>
-            <Table.Td style={{ textAlign: 'right', color: drawdown <= -15 ? 'var(--mantine-color-red-6)' : undefined }}>
+      <table className="w-auto text-xs">
+        <thead>
+          <tr>
+            <th className="px-2 py-1 text-right">Current</th>
+            <th className="px-2 py-1 text-right">Peak</th>
+            <th className="px-2 py-1 text-right">Drawdown</th>
+            {pcts.map((p, i) => <th key={i} className="px-2 py-1 text-right">Rung {i + 1} (−{p}%)</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="px-2 py-1 text-right">{fmt(current)}</td>
+            <td className="px-2 py-1 text-right">{fmt(peak)}</td>
+            <td className={cn('px-2 py-1 text-right', drawdown <= -15 && 'text-negative')}>
               {drawdown.toFixed(2)}%
-            </Table.Td>
+            </td>
             {levels.map((lvl, i) => (
-              <Table.Td key={i} style={{ textAlign: 'right', color: current <= lvl ? 'var(--mantine-color-red-6)' : undefined }}>
+              <td key={i} className={cn('px-2 py-1 text-right', current <= lvl && 'text-negative')}>
                 {fmt(lvl)}
-              </Table.Td>
+              </td>
             ))}
-          </Table.Tr>
-        </Table.Tbody>
-      </Table>
+          </tr>
+        </tbody>
+      </table>
     )
   }
 
@@ -131,58 +119,58 @@ function DetailView({ detail, threshold }: { detail: Record<string, unknown>; th
       ? (Object.values(threshold).find((v) => typeof v === 'number') as number | undefined)
       : undefined
     return (
-      <Table withTableBorder={false} fz="xs" style={{ width: 'auto' }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th></Table.Th>
-            {cols.map((c) => <Table.Th key={c} style={{ textAlign: 'right' }}>{c.replace(/_/g, ' ')}</Table.Th>)}
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
+      <table className="w-auto text-xs">
+        <thead>
+          <tr>
+            <th className="px-2 py-1" />
+            {cols.map((c) => <th key={c} className="px-2 py-1 text-right">{c.replace(/_/g, ' ')}</th>)}
+          </tr>
+        </thead>
+        <tbody>
           {rows.map(([name, vals]) => (
-            <Table.Tr key={name}>
-              <Table.Td fw={500}>{name}</Table.Td>
+            <tr key={name}>
+              <td className="px-2 py-1 font-medium">{name}</td>
               {cols.map((c) => {
                 const raw = (vals as Record<string, unknown>)[c]
                 const n = typeof raw === 'number' ? raw : null
                 const isdiff = c === 'diff'
                 const breached = isdiff && n !== null && thresholdNum !== undefined && Math.abs(n) > thresholdNum
                 return (
-                  <Table.Td key={c} style={{ textAlign: 'right', color: breached ? 'var(--mantine-color-red-6)' : undefined }}>
+                  <td key={c} className={cn('px-2 py-1 text-right', breached && 'text-negative')}>
                     {n !== null ? (c.endsWith('_pct') || isdiff ? `${n > 0 ? '+' : ''}${n.toFixed(2)}%` : String(n)) : String(raw)}
-                  </Table.Td>
+                  </td>
                 )
               })}
-            </Table.Tr>
+            </tr>
           ))}
-        </Table.Tbody>
+        </tbody>
         {thresholdNum !== undefined && (
-          <Table.Tfoot>
-            <Table.Tr>
-              <Table.Td colSpan={cols.length + 1} style={{ color: 'var(--mantine-color-dimmed)', fontStyle: 'italic' }}>
+          <tfoot>
+            <tr>
+              <td colSpan={cols.length + 1} className="px-2 py-1 text-muted-foreground italic">
                 threshold ±{thresholdNum.toFixed(1)}%
-              </Table.Td>
-            </Table.Tr>
-          </Table.Tfoot>
+              </td>
+            </tr>
+          </tfoot>
         )}
-      </Table>
+      </table>
     )
   }
 
   return (
     <>
       {Object.entries(detail).map(([k, v]) => (
-        <Text key={k} size="xs" style={{ fontFamily: 'monospace' }}>
+        <p key={k} className="font-mono text-xs">
           {k}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-        </Text>
+        </p>
       ))}
       {threshold && (
         <>
-          <Text size="xs" mt={4} fw={500}>thresholds:</Text>
+          <p className="mt-1 text-xs font-medium">thresholds:</p>
           {Object.entries(threshold).map(([k, v]) => (
-            <Text key={k} size="xs" style={{ fontFamily: 'monospace' }}>
+            <p key={k} className="font-mono text-xs">
               {k}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-            </Text>
+            </p>
           ))}
         </>
       )}
@@ -201,7 +189,7 @@ function TriggerRow({ trigger }: { trigger: TriggerResult }) {
     try {
       await mut.mutateAsync({ key: trigger.key, value_bool: true, ...extra })
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
@@ -209,128 +197,114 @@ function TriggerRow({ trigger }: { trigger: TriggerResult }) {
     try {
       await mut.mutateAsync({ key: trigger.key, value_bool: val })
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
   const hasDetail = Object.keys(trigger.detail).length > 0 || trigger.threshold != null
 
   return (
-    <Box
-      py="xs"
-      style={{
-        borderBottom: '1px solid var(--mantine-color-gray-2)',
-        ...ROW_ACCENT[trigger.status],
-      }}
-    >
-      <Group justify="space-between" wrap="nowrap" align="flex-start">
-        <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-          <Group gap="xs" wrap="nowrap">
-            <Text size="sm" fw={500}>{trigger.label}</Text>
-            {trigger.cta && trigger.status !== 'ok' && (
-              <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>— {trigger.cta}</Text>
-            )}
-          </Group>
-          <Text size="xs" c="dimmed">{trigger.summary}</Text>
-
-          {trigger.mode === 'manual_ack' && trigger.status !== 'ok' && (
-            <Group gap="xs" mt={4} wrap="nowrap">
-              {trigger.key.includes('audit') && (
-                <TextInput
-                  size="xs"
-                  placeholder="Result note (e.g. +1.2% vs TRI — pass)"
-                  value={auditNote}
-                  onChange={(e) => setAuditNote(e.currentTarget.value)}
-                  style={{ flex: 1 }}
-                />
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
+      <div className={cn('border-b py-3 last:border-b-0', ROW_ACCENT[trigger.status])}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">{trigger.label}</p>
+              {trigger.cta && trigger.status !== 'ok' && (
+                <p className="text-xs text-muted-foreground italic">— {trigger.cta}</p>
               )}
-              <Button
-                size="xs"
-                variant="light"
-                loading={mut.isPending}
-                onClick={() => ack(trigger.key.includes('audit') && auditNote ? { value_text: auditNote } : undefined)}
-              >
-                Mark done
-              </Button>
-            </Group>
-          )}
+            </div>
+            <p className="text-xs text-muted-foreground">{trigger.summary}</p>
 
-          {trigger.mode === 'manual_input' && (
-            <Switch
-              mt={4}
-              size="xs"
-              checked={trigger.status === 'action'}
-              onChange={(e) => toggle(e.currentTarget.checked)}
-              label={trigger.key === 'sp500_inflows_open' ? 'Fund open to inflows' : 'Purchase intent active'}
-            />
-          )}
-        </Stack>
+            {trigger.mode === 'manual_ack' && trigger.status !== 'ok' && (
+              <div className="mt-1 flex items-center gap-2">
+                {trigger.key.includes('audit') && (
+                  <Input
+                    placeholder="Result note (e.g. +1.2% vs TRI — pass)"
+                    value={auditNote}
+                    onChange={(e) => setAuditNote(e.target.value)}
+                    className="h-7 flex-1 text-xs"
+                  />
+                )}
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={mut.isPending}
+                  onClick={() => ack(trigger.key.includes('audit') && auditNote ? { value_text: auditNote } : undefined)}
+                >
+                  Mark done
+                </Button>
+              </div>
+            )}
 
-        <Group gap="xs" wrap="nowrap" align="flex-start">
-          <Badge
-            color={STATUS_COLOR[trigger.status]}
-            variant={STATUS_VARIANT[trigger.status]}
-            size="sm"
-          >
-            {trigger.status}
-          </Badge>
-          {hasDetail && (
-            <Button
-              size="xs"
-              variant="subtle"
-              color="gray"
-              onClick={() => setExpanded((v) => !v)}
-              style={{ padding: '2px 6px', minWidth: 0 }}
-            >
-              {expanded ? '▲' : '▼'}
-            </Button>
-          )}
-        </Group>
-      </Group>
+            {trigger.mode === 'manual_input' && (
+              <div className="mt-1 flex items-center gap-2">
+                <Switch
+                  size="sm"
+                  checked={trigger.status === 'action'}
+                  onCheckedChange={toggle}
+                  id={`trigger-${trigger.key}`}
+                />
+                <Label htmlFor={`trigger-${trigger.key}`} className="text-xs font-normal">
+                  {trigger.key === 'sp500_inflows_open' ? 'Fund open to inflows' : 'Purchase intent active'}
+                </Label>
+              </div>
+            )}
+          </div>
 
-      {hasDetail && (
-        <Collapse expanded={expanded}>
-          <Box mt="xs" p="xs" style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
-            <DetailView detail={trigger.detail} threshold={trigger.threshold} />
-          </Box>
-        </Collapse>
-      )}
-    </Box>
+          <div className="flex shrink-0 items-start gap-2">
+            <Badge className={STATUS_CLASS[trigger.status]} variant="outline">{trigger.status}</Badge>
+            {hasDetail && (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon-xs">
+                  <ChevronDown className={cn('size-3.5 transition-transform', expanded && 'rotate-180')} />
+                </Button>
+              </CollapsibleTrigger>
+            )}
+          </div>
+        </div>
+
+        {hasDetail && (
+          <CollapsibleContent>
+            <div className="mt-2 overflow-x-auto rounded-md bg-muted p-2">
+              <DetailView detail={trigger.detail} threshold={trigger.threshold} />
+            </div>
+          </CollapsibleContent>
+        )}
+      </div>
+    </Collapsible>
   )
 }
 
 export function PolicyTracker() {
   const { data, isLoading } = usePolicyTracker()
 
-  if (isLoading) return <Text size="sm" c="dimmed">Loading…</Text>
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
   if (!data) return null
 
   return (
-    <Stack gap="lg" maw={860}>
-      <PageHeader title="Policy Tracker" meta={<Paper
-          px="md"
-          py="xs"
-          style={{
-            background: data.action_count > 0
-              ? 'var(--mantine-color-orange-1)'
-              : 'var(--mantine-color-green-1)',
-          }}
-        >
-          <Text size="sm" fw={500} c={data.action_count > 0 ? 'orange.8' : 'green.8'}>
-            {data.action_count > 0
-              ? `${data.action_count} action${data.action_count > 1 ? 's' : ''} pending`
-              : 'All clear'}
-          </Text>
-          <Text size="xs" c="dimmed">as of {new Date(data.generated_at).toLocaleTimeString('en-IN')}</Text>
-        </Paper>} />
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+      <PageHeader
+        title="Policy Tracker"
+        meta={
+          <div className={cn('rounded-md px-3 py-1.5', data.action_count > 0 ? 'bg-warning/10' : 'bg-positive/10')}>
+            <p className={cn('text-sm font-medium', data.action_count > 0 ? 'text-warning' : 'text-positive')}>
+              {data.action_count > 0
+                ? `${data.action_count} action${data.action_count > 1 ? 's' : ''} pending`
+                : 'All clear'}
+            </p>
+            <p className="text-xs text-muted-foreground">as of {new Date(data.generated_at).toLocaleTimeString('en-IN')}</p>
+          </div>
+        }
+      />
 
       {data.sections.map((section) => (
-        <Panel key={section.section} title={section.section}>
+        <Section key={section.section} title={section.section}>
           {section.triggers.map((trigger) => (
             <TriggerRow key={trigger.key} trigger={trigger} />
           ))}
-        </Panel>
+        </Section>
       ))}
-    </Stack>
+    </div>
   )
 }
