@@ -30,11 +30,11 @@ export function heatmapBg(
   if (value > 0 && max != null && max > 0) {
     const intensity = Math.min(value / max, 1)
     const color = mode === 'rb' ? 'var(--info)' : 'var(--positive)'
-    return `color-mix(in oklab, ${color} ${Math.round(7 + intensity * 11)}%, var(--surface-panel))`
+    return `color-mix(in oklab, ${color} ${Math.round(7 + intensity * 11)}%, var(--card))`
   }
   if (value < 0 && min != null && min < 0) {
     const intensity = Math.min(Math.abs(value) / Math.abs(min), 1)
-    return `color-mix(in oklab, var(--negative) ${Math.round(7 + intensity * 11)}%, var(--surface-panel))`
+    return `color-mix(in oklab, var(--negative) ${Math.round(7 + intensity * 11)}%, var(--card))`
   }
   return undefined
 }
