@@ -45,7 +45,7 @@ export function heatmapTextColor(
   max: number | null | undefined,
   mode: 'rg' | 'rb' = 'rg',
 ): string | undefined {
-  return heatmapBg(value, min, max, mode) ? 'var(--text-primary)' : undefined
+  return heatmapBg(value, min, max, mode) ? 'var(--foreground)' : undefined
 }
 
 export function gainColor(value: number | null | undefined): string {

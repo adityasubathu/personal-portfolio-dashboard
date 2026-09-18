@@ -8,9 +8,7 @@
     <script>
       (function () {
         var dark = matchMedia('(prefers-color-scheme: dark)').matches
-        var root = document.documentElement
-        root.classList.toggle('dark', dark)
-        root.setAttribute('data-mantine-color-scheme', dark ? 'dark' : 'light')
+        document.documentElement.classList.toggle('dark', dark)
       })()
     </script>
   </head>

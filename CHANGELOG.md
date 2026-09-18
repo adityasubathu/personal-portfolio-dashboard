@@ -2,6 +2,28 @@
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
+- Installed the shadcn/ui primitives and defined the flat white/bordered surface tokens; the colour scheme now follows the OS via a `dark` class. (2026-09-19-00-05-00 · 1fb334d)
+- Rebuilt the app shell (navigation, top bar) on the shadcn sidebar block. (2026-09-19-00-10-00 · e5254d3)
+- Rebuilt Section/PageHeader/MetricCard/EmptyState/MoneyText on Tailwind; Panel becomes a temporary compatibility shim. (2026-09-19-00-15-00 · a1c291a)
+- Rebuilt ConfirmActionButton on Dialog and SsePanel on Section; added the notify() toast helper over sonner. (2026-09-19-00-20-00 · c3af86b)
+- Rebuilt DataTable on plain Tailwind table markup, keeping its sort/section/heatmap contract unchanged. (2026-09-19-00-25-00 · 5bdbc3f)
+- Rebuilt DonutChart on recharts; chart.js and react-chartjs-2 are gone. (2026-09-19-00-30-00 · a955deb)
+- Dropped Mantine from the lightweight-charts wrapper markup. (2026-09-19-00-35-00 · 99680f8)
+- Rebuilt Price Chart, Fund NAV Chart and Fund Detail on the shared layout grammar. (2026-09-19-00-40-00 · 22a98cf)
+- Rebuilt Settings and Kite pages on Tailwind. (2026-09-19-00-45-00 · b7d07a2)
+- Rebuilt the Import page on a two-column Tailwind grid. (2026-09-19-00-50-00 · 0b4a12f)
+- Rebuilt the Trades page with a dense table, search/pagination and a mobile card list. (2026-09-19-00-55-00 · 7e286ed)
+- Rebuilt the Policy Tracker on Section + Collapsible detail rows. (2026-09-19-01-00-00 · ddb8d6e)
+- Rebuilt the NAV History page on Tailwind sections. (2026-09-19-01-05-00 · e76ecb5)
+- Rebuilt the Capital Gains page on Tailwind. (2026-09-19-01-10-00 · 9ded8ea)
+- Rebuilt the Dashboard summary cards and holdings table on Tailwind. (2026-09-19-01-15-00 · 913121e)
+- Rebuilt Dashboard manual assets as four focused Sections; Dashboard.tsx is Mantine-free. (2026-09-19-01-20-00 · e0b887a)
+- Rebuilt the Breakdown page shell and Overview tab on Tailwind. (2026-09-19-01-25-00 · f3dc2a4)
+- Rebuilt the Breakdown Sector tab and classify panels on Tailwind. (2026-09-19-01-30-00 · 365bce0)
+- Rebuilt the Breakdown Composition tab; Breakdown.tsx is Mantine-free. (2026-09-19-01-35-00 · 001e10f)
+- Rebuilt the Market Sentiment header, summary and price chart on Tailwind. (2026-09-19-01-40-00 · c2b3703)
+- Rebuilt the Market Sentiment oscillator, volatility and breadth panels on Tailwind. (2026-09-19-01-45-00 · 5fe2e6a)
+- Rebuilt the Market Sentiment sector trends table; MarketSentiment.tsx is Mantine-free. (2026-09-19-01-50-00 · ed5fbea)
 
 ## 2026-09-18-23-37-05 — Neutral surfaces, blue navigation, system colour scheme
 
