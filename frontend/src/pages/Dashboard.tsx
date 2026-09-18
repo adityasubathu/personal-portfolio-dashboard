@@ -1,12 +1,11 @@
 import React, { useState } from 'react'
 import {
-  Accordion, Badge, Box, Button, Collapse, Divider, Group,
-  NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Skeleton,
-  Stack, Table, Text, TextInput, Tooltip,
+  Badge, Box, Button, Collapse, Group,
+  NumberInput, Paper, SimpleGrid, Stack, Table, Text, TextInput,
 } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconChevronUp, IconRefresh, IconTrash } from '@tabler/icons-react'
+import { IconChevronDown as IconChevronDownTabler, IconChevronUp as IconChevronUpTabler, IconRefresh as IconRefreshTabler, IconTrash } from '@tabler/icons-react'
+import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { useSummaryCards, useHoldings, useUpdateLtpMutation } from '../api/portfolio'
 import {
   useManualAssets,
@@ -24,67 +23,46 @@ import {
 import { MoneyText } from '../components/MoneyText'
 import { inr, pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { HoldingRow } from '../types/portfolio'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { Section } from '@/components/Section'
 import { MetricCard } from '../components/MetricCard'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { Button as ShadButton } from '@/components/ui/button'
+import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import { notify } from '@/lib/notify'
 
 // ── Summary cards ──────────────────────────────────────────────────────────────
 
 function SummaryCards() {
   const { data } = useSummaryCards()
-  if (!data) return <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">{Array.from({ length: 4 }, (_, index) => <MetricCard key={index} label="" value="" loading />)}</SimpleGrid>
+  if (!data) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <MetricCard key={index} label="" value="" loading />)}</div>
   const pnlPositive = data.total_pnl >= 0
   return (
-    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <MetricCard label="Invested" value={<MoneyText value={data.total_cost} />} />
       <MetricCard label="Current value" value={<MoneyText value={data.total_value} />} />
-      <MetricCard tone={pnlPositive ? 'positive' : 'negative'} label="Total P&L" value={<Text fw={700} c={pnlPositive ? 'var(--positive)' : 'var(--negative)'}>
-          <MoneyText value={data.total_pnl} showSign />
-          {' '}
-          <Text span size="xs">({pct((data.total_pnl / data.total_cost) * 100)})</Text>
-        </Text>} />
+      <MetricCard
+        tone={pnlPositive ? 'positive' : 'negative'}
+        label="Total P&L"
+        value={
+          <>
+            <MoneyText value={data.total_pnl} showSign />
+            {' '}
+            <span className="text-xs">({pct((data.total_pnl / data.total_cost) * 100)})</span>
+          </>
+        }
+      />
       <MetricCard tone={data.xirr != null && data.xirr >= 0 ? 'positive' : 'negative'} label="XIRR" value={data.xirr != null ? pct(data.xirr * 100) : '—'} />
-    </SimpleGrid>
-  )
-}
-
-// ── LTP update bar ─────────────────────────────────────────────────────────────
-
-function LtpUpdateBar() {
-  const { data } = useSummaryCards()
-  const mut = useUpdateLtpMutation()
-
-  function handleClick() {
-    mut.mutate(undefined, {
-      onSuccess: (r) => {
-        notifications.show({ color: 'green', message: `LTP updated: ${r.updated} instruments` })
-      },
-      onError: (e) => {
-        notifications.show({ color: 'red', message: String(e) })
-      },
-    })
-  }
-
-  return (
-    <Group justify="flex-end" gap="sm">
-      {data?.last_ltp_update && (
-        <Text size="xs" c="dimmed">
-          LTP as of {new Date(data.last_ltp_update).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      )}
-      <Button
-        size="xs"
-        variant="light"
-        leftSection={<IconRefresh size={12} />}
-        loading={mut.isPending}
-        onClick={handleClick}
-      >
-        Update LTP
-      </Button>
-    </Group>
+    </div>
   )
 }
 
@@ -142,7 +120,7 @@ function NumQty({ value }: { value: number }) {
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
-  return <Stack gap={1}><Text size="xs" c="dimmed">{label}</Text><Text size="sm" data-numeric>{children}</Text></Stack>
+  return <div className="space-y-0.5"><p className="text-xs text-muted-foreground">{label}</p><p className="text-sm" data-numeric>{children}</p></div>
 }
 
 // ── Holdings table ──────────────────────────────────────────────────────────────
@@ -159,15 +137,54 @@ const SORT_OPTIONS = [
 ]
 
 function HoldingsTable() {
-  const mobile = useMediaQuery('(max-width: 48em)')
+  const mobile = useMediaQuery('(max-width: 767px)')
   const [sort, setSort] = usePersistentState('dashboard.sort', 'symbol')
   const [dir, setDir] = usePersistentState<'asc' | 'desc'>('dashboard.dir', 'asc')
   const [sections, setSections] = usePersistentState<'on' | 'off'>('dashboard.sections', 'on')
   const [compare, setCompare] = usePersistentState<'prev_close' | 'open'>('dashboard.compare', 'prev_close')
+  const { data: summary } = useSummaryCards()
+  const ltpMut = useUpdateLtpMutation()
 
   const { data, isLoading } = useHoldings({ sort, dir, sections, compare })
 
-  if (isLoading) return <Stack gap="xs">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} height={44} />)}</Stack>
+  function handleUpdateLtp() {
+    ltpMut.mutate(undefined, {
+      onSuccess: (r) => notify.success(`LTP updated: ${r.updated} instruments`),
+      onError: (e) => notify.error(String(e)),
+    })
+  }
+
+  const sectionsToggle = (
+    <ToggleGroup type="single" variant="outline" size="sm" value={sections} onValueChange={(v) => v && setSections(v as 'on' | 'off')}>
+      <ToggleGroupItem value="on">Sections</ToggleGroupItem>
+      <ToggleGroupItem value="off">Flat</ToggleGroupItem>
+    </ToggleGroup>
+  )
+  const compareToggle = (
+    <ToggleGroup type="single" variant="outline" size="sm" value={compare} onValueChange={(v) => v && setCompare(v as 'prev_close' | 'open')}>
+      <ToggleGroupItem value="prev_close">vs Prev Close</ToggleGroupItem>
+      <ToggleGroupItem value="open">vs Open</ToggleGroupItem>
+    </ToggleGroup>
+  )
+  const refreshButton = (
+    <ShadButton size="sm" variant="outline" disabled={ltpMut.isPending} onClick={handleUpdateLtp}>
+      <RefreshCw className="size-3.5" />
+      Update LTP
+    </ShadButton>
+  )
+  const asOfText = summary?.last_ltp_update && (
+    <span className="text-xs text-muted-foreground">
+      LTP as of {new Date(summary.last_ltp_update).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+    </span>
+  )
+
+  if (isLoading) {
+    return (
+      <Section title="Holdings">
+        <div className="space-y-1.5">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-11 w-full" />)}</div>
+      </Section>
+    )
+  }
   if (!data) return null
 
   const { groups, pnl_pct_min, pnl_pct_max, day_chg_pct_min, day_chg_pct_max } = data
@@ -176,112 +193,203 @@ function HoldingsTable() {
     const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb')
     const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb')
     return (
-      <Table.Tr key={r.instrument_id}>
-        <Table.Td fw={500} style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-panel)', maxWidth: 230 }}><Tooltip label={r.symbol}><Text truncate="end">{r.symbol}</Text></Tooltip></Table.Td>
-        <Table.Td style={{ color: 'var(--mantine-color-dimmed)' }}>{r.type}</Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><NumQty value={r.qty} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><NumPrice value={r.avg_price} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.cost} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
+      <tr key={r.instrument_id} className="hover:bg-muted/50">
+        <td className="sticky left-0 z-10 max-w-[230px] bg-card px-2 py-1.5 font-medium">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="block truncate">{r.symbol}</span>
+            </TooltipTrigger>
+            <TooltipContent>{r.symbol}</TooltipContent>
+          </Tooltip>
+        </td>
+        <td className="px-2 py-1.5 text-muted-foreground">{r.type}</td>
+        <td data-numeric className="px-2 py-1.5 text-right"><NumQty value={r.qty} /></td>
+        <td data-numeric className="px-2 py-1.5 text-right"><NumPrice value={r.avg_price} /></td>
+        <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.cost} /></td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
           <NumPct value={r.day_chg_pct} />
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', color: (r.day_chg_abs ?? 0) >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+        </td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right', (r.day_chg_abs ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumMoney value={r.day_chg_abs} showSign />
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
+        </td>
+        <td data-numeric className="px-2 py-1.5 text-right text-[13px]">
           <NumPrice value={r.prev_close} />
-          {r.prev_close_date && <Text size="xs" c="dimmed">{r.prev_close_date}</Text>}
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', fontSize: '13px' }}>
+          {r.prev_close_date && <p className="text-xs text-muted-foreground">{r.prev_close_date}</p>}
+        </td>
+        <td data-numeric className="px-2 py-1.5 text-right text-[13px]">
           <NumPrice value={r.ltp} />
-          {r.as_of && <Text size="xs" c="dimmed">{r.as_of}</Text>}
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><NumMoney value={r.value} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right', color: r.pnl >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+          {r.as_of && <p className="text-xs text-muted-foreground">{r.as_of}</p>}
+        </td>
+        <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.value} /></td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right', r.pnl >= 0 ? 'text-positive' : 'text-negative')}>
           <NumMoney value={r.pnl} showSign />
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb') }}>
+        </td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb') }}>
           <NumPct value={r.pnl_pct} />
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', color: (r.xirr ?? 0) >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+        </td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right', (r.xirr ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumPct value={r.xirr} />
-        </Table.Td>
-      </Table.Tr>
+        </td>
+      </tr>
     )
   }
-
-  const totalDayChgColor = data.total_day_chg >= 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)'
 
   function toggleSort(next: string) {
     if (sort === next) setDir(dir === 'asc' ? 'desc' : 'asc')
     else { setSort(next); setDir('asc') }
   }
   const sortable = new Set(SORT_OPTIONS.map((option) => option.value))
-  const header = (label: string, key?: string) => key && sortable.has(key) ? <Table.Th aria-sort={sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'} style={{ textAlign: 'right' }}><Button variant="subtle" size="compact-xs" onClick={() => toggleSort(key)} rightSection={sort === key ? (dir === 'asc' ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />) : undefined}>{label}</Button></Table.Th> : <Table.Th style={{ textAlign: label === 'Symbol' || label === 'Type' ? undefined : 'right' }}>{label}</Table.Th>
+  const header = (label: string, key?: string) =>
+    key && sortable.has(key) ? (
+      <th className="h-8 px-2 text-right font-medium text-muted-foreground" aria-sort={sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" onClick={() => toggleSort(key)} className="inline-flex items-center gap-1">
+          {label}
+          {sort === key && (dir === 'asc' ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />)}
+        </button>
+      </th>
+    ) : (
+      <th className={cn('h-8 px-2 font-medium text-muted-foreground', label !== 'Symbol' && label !== 'Type' && 'text-right')}>{label}</th>
+    )
 
-  if (mobile) return <Stack gap="sm">
-    <Group grow align="end"><Select data={SORT_OPTIONS} value={sort} onChange={(value) => value && setSort(value)} label="Sort holdings" size="xs" /><Button variant="default" size="xs" onClick={() => setDir(dir === 'asc' ? 'desc' : 'asc')}>{dir === 'asc' ? 'Ascending' : 'Descending'}</Button></Group>
-    <Group grow><SegmentedControl data={[{ value: 'on', label: 'Sections' }, { value: 'off', label: 'Flat' }]} value={sections} onChange={(value) => setSections(value as 'on' | 'off')} size="xs" /><SegmentedControl data={[{ value: 'prev_close', label: 'Prev close' }, { value: 'open', label: 'Open' }]} value={compare} onChange={(value) => setCompare(value as 'prev_close' | 'open')} size="xs" /></Group>
-    {groups.map((group) => <Stack key={group.label ?? '__ungrouped'} gap="xs">{group.label && <Text size="xs" fw={700} tt="uppercase" c="dimmed">{group.label}</Text>}{group.rows.map((r) => <Accordion key={r.instrument_id} variant="contained"><Accordion.Item value={String(r.instrument_id)}><Accordion.Control><Group justify="space-between" wrap="nowrap" gap="xs"><Box miw={0}><Text fw={600} truncate="end">{r.symbol}</Text><Text size="xs" c="dimmed">{r.type}</Text></Box><Stack gap={0} align="flex-end"><NumMoney value={r.value} /><Text size="xs" c={(r.pnl_pct ?? 0) >= 0 ? 'var(--positive)' : 'var(--negative)'}>Gain <NumPct value={r.pnl_pct} /> · Day <NumPct value={r.day_chg_pct} /></Text></Stack></Group></Accordion.Control><Accordion.Panel><SimpleGrid cols={2} spacing="xs"><Detail label="Qty"><NumQty value={r.qty} /></Detail><Detail label="Avg"><NumPrice value={r.avg_price} /></Detail><Detail label="Cost"><NumMoney value={r.cost} /></Detail><Detail label="Day ₹"><NumMoney value={r.day_chg_abs} showSign /></Detail><Detail label={`Compare (${r.prev_close_date ?? '—'})`}><NumPrice value={r.prev_close} /></Detail><Detail label={`LTP (${r.as_of ?? '—'})`}><NumPrice value={r.ltp} /></Detail><Detail label="Gain ₹"><NumMoney value={r.pnl} showSign /></Detail><Detail label="XIRR"><NumPct value={r.xirr} /></Detail></SimpleGrid></Accordion.Panel></Accordion.Item></Accordion>)}</Stack>)}
-    <Panel><SimpleGrid cols={2} spacing="xs"><Detail label="Total cost"><NumMoney value={data.total_cost} /></Detail><Detail label="Day %"><NumPct value={data.total_day_chg_pct} /></Detail><Detail label="Day ₹"><NumMoney value={data.total_day_chg} showSign /></Detail><Detail label="Current value"><NumMoney value={data.total_value} /></Detail><Detail label="Total gain"><NumMoney value={data.total_value - data.total_cost} showSign /></Detail></SimpleGrid></Panel>
-  </Stack>
+  if (mobile) {
+    return (
+      <Section
+        title="Holdings"
+        action={<div className="flex flex-wrap items-center gap-2">{asOfText}{refreshButton}</div>}
+        bodyClassName="p-4 space-y-3"
+      >
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs text-muted-foreground">Sort holdings</label>
+            <ShadSelect value={sort} onValueChange={(v) => setSort(v)}>
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </ShadSelect>
+          </div>
+          <ShadButton variant="outline" size="sm" onClick={() => setDir(dir === 'asc' ? 'desc' : 'asc')}>
+            {dir === 'asc' ? 'Ascending' : 'Descending'}
+          </ShadButton>
+        </div>
+        <div className="flex gap-2">
+          {sectionsToggle}
+          {compareToggle}
+        </div>
+        {groups.map((group) => (
+          <div key={group.label ?? '__ungrouped'} className="space-y-1">
+            {group.label && <p className="text-xs font-bold text-muted-foreground uppercase">{group.label}</p>}
+            {group.rows.map((r) => (
+              <Accordion key={r.instrument_id} type="single" collapsible className="rounded-md border px-3">
+                <AccordionItem value={String(r.instrument_id)} className="border-b-0">
+                  <AccordionTrigger className="py-2 hover:no-underline">
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{r.symbol}</p>
+                        <p className="text-xs text-muted-foreground">{r.type}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end">
+                        <NumMoney value={r.value} />
+                        <p className={cn('text-xs', (r.pnl_pct ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
+                          Gain <NumPct value={r.pnl_pct} /> · Day <NumPct value={r.day_chg_pct} />
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Detail label="Qty"><NumQty value={r.qty} /></Detail>
+                      <Detail label="Avg"><NumPrice value={r.avg_price} /></Detail>
+                      <Detail label="Cost"><NumMoney value={r.cost} /></Detail>
+                      <Detail label="Day ₹"><NumMoney value={r.day_chg_abs} showSign /></Detail>
+                      <Detail label={`Compare (${r.prev_close_date ?? '—'})`}><NumPrice value={r.prev_close} /></Detail>
+                      <Detail label={`LTP (${r.as_of ?? '—'})`}><NumPrice value={r.ltp} /></Detail>
+                      <Detail label="Gain ₹"><NumMoney value={r.pnl} showSign /></Detail>
+                      <Detail label="XIRR"><NumPct value={r.xirr} /></Detail>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ))}
+          </div>
+        ))}
+        <div className="rounded-xl border bg-card p-4">
+          <div className="grid grid-cols-2 gap-2">
+            <Detail label="Total cost"><NumMoney value={data.total_cost} /></Detail>
+            <Detail label="Day %"><NumPct value={data.total_day_chg_pct} /></Detail>
+            <Detail label="Day ₹"><NumMoney value={data.total_day_chg} showSign /></Detail>
+            <Detail label="Current value"><NumMoney value={data.total_value} /></Detail>
+            <Detail label="Total gain"><NumMoney value={data.total_value - data.total_cost} showSign /></Detail>
+          </div>
+        </div>
+      </Section>
+    )
+  }
 
   return (
-    <Stack gap="xs">
-      <Group gap="sm" wrap="wrap">
-        <SegmentedControl data={[{ value: 'on', label: 'Sections' }, { value: 'off', label: 'Flat' }]} value={sections} onChange={(v) => setSections(v as 'on' | 'off')} size="xs" style={{ alignSelf: 'flex-end' }} />
-        <SegmentedControl data={[{ value: 'prev_close', label: 'vs Prev Close' }, { value: 'open', label: 'vs Open' }]} value={compare} onChange={(v) => setCompare(v as 'prev_close' | 'open')} size="xs" style={{ alignSelf: 'flex-end' }} />
-      </Group>
-
-      <Box style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <Table fz="sm" withRowBorders style={{ minWidth: 1380 }} styles={{ th: { position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-panel)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.03em' } }}>
-          <Table.Thead>
-            <Table.Tr>
+    <Section
+      title="Holdings"
+      bodyClassName="p-0"
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          {asOfText}
+          {sectionsToggle}
+          {compareToggle}
+          {refreshButton}
+        </div>
+      }
+    >
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
+        <table className="w-full text-xs" style={{ minWidth: 1380 }}>
+          <thead>
+            <tr className="sticky top-0 z-20 bg-card">
               {header('Symbol', 'symbol')}
-              <Table.Th>Type</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>Qty</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>Avg</Table.Th>
+              <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Avg</th>
               {header('Cost', 'cost')}{header('Day %', 'day_chg_pct')}{header('Day ₹', 'day_chg_abs')}
-              <Table.Th style={{ textAlign: 'right' }}>Prev Close</Table.Th>
-              <Table.Th style={{ textAlign: 'right' }}>LTP</Table.Th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Prev Close</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">LTP</th>
               {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('Gain %', 'pnl_pct')}{header('XIRR', 'xirr')}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+            </tr>
+          </thead>
+          <tbody>
             {groups.map((g) => (
               <React.Fragment key={g.label ?? '__ungrouped'}>
                 {g.label && sections === 'on' && (
-                  <Table.Tr>
-                    <Table.Td colSpan={13} style={{ background: 'var(--surface-muted)', fontWeight: 600, fontSize: '0.75rem', padding: '6px 8px' }}>
+                  <tr>
+                    <td colSpan={13} className="bg-muted px-2 py-1.5 text-xs font-semibold">
                       {g.label}
-                    </Table.Td>
-                  </Table.Tr>
+                    </td>
+                  </tr>
                 )}
                 {g.rows.map((r) => row(r))}
               </React.Fragment>
             ))}
-          </Table.Tbody>
-          <Table.Tfoot>
-            <Table.Tr style={{ fontWeight: 600, background: 'var(--surface-panel)' }}>
-              <Table.Td colSpan={4}>Total</Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}><NumMoney value={data.total_cost} /></Table.Td>
-              <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
+          </tbody>
+          <tfoot>
+            <tr className={cn('sticky bottom-0 z-20 bg-card font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
+              <td colSpan={4} className="px-2 py-1.5 text-foreground">Total</td>
+              <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_cost} /></td>
+              <td data-numeric className="px-2 py-1.5 text-right">
                 <NumPct value={data.total_day_chg_pct} />
-              </Table.Td>
-              <Table.Td style={{ textAlign: 'right', color: totalDayChgColor }}>
+              </td>
+              <td data-numeric className="px-2 py-1.5 text-right">
                 <NumMoney value={data.total_day_chg} showSign />
-              </Table.Td>
-              <Table.Td colSpan={2} />
-              <Table.Td style={{ textAlign: 'right' }}><NumMoney value={data.total_value} /></Table.Td>
-              <Table.Td style={{ textAlign: 'right' }}>
+              </td>
+              <td colSpan={2} />
+              <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_value} /></td>
+              <td data-numeric className="px-2 py-1.5 text-right text-foreground">
                 <NumMoney value={data.total_value - data.total_cost} showSign />
-              </Table.Td>
-              <Table.Td colSpan={2} />
-            </Table.Tr>
-          </Table.Tfoot>
-        </Table>
-      </Box>
-    </Stack>
+              </td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -389,7 +497,7 @@ function ManualAssets() {
   return (
     <Panel title="Manual Assets" action={<Text size="xs" c="dimmed"><MoneyText value={data.total_manual} /> total</Text>}>
       <Group justify="space-between" mb="xs">
-        <Button size="xs" variant="subtle" rightSection={open ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />} onClick={toggleEditor}>
+        <Button size="xs" variant="subtle" rightSection={open ? <IconChevronUpTabler size={12} /> : <IconChevronDownTabler size={12} />} onClick={toggleEditor}>
           {open ? 'Hide' : 'Edit'}
         </Button>
       </Group>
@@ -590,7 +698,7 @@ function ManualAssets() {
                 <Button
                   size="sm"
                   variant="light"
-                  leftSection={<IconRefresh size={14} />}
+                  leftSection={<IconRefreshTabler size={14} />}
                   loading={refreshUsdinrMut.isPending}
                   onClick={handleRefreshUsdinr}
                 >
@@ -616,12 +724,11 @@ function ManualAssets() {
 
 export function Dashboard() {
   return (
-    <Stack gap="lg">
-      <PageHeader title="Dashboard" actions={<LtpUpdateBar />} />
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Dashboard" />
       <SummaryCards />
-      <Panel title="Holdings"><HoldingsTable /></Panel>
-      <Divider />
+      <HoldingsTable />
       <ManualAssets />
-    </Stack>
+    </div>
   )
 }
