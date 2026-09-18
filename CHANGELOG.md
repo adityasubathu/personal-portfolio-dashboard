@@ -7,6 +7,7 @@
 - `PATCH /sector-classify-batch` accepts `{name, level, value}` and cascades the save up the hierarchy; `GET /sector-list?level=` now offers NSE's full taxonomy at any of the four levels. (2026-09-18-17-41-01 · 005012f)
 - Manual taxonomy overrides now apply at every level during ingest, are auto-pruned level by level once NSE resolves them, and reach directly held stocks (previously fund holdings only). (2026-09-18-17-43-35 · 7742324)
 - The Sector tab's manual-classify panel now works on all four taxonomy levels (Macro/Sector/Industry/Basic), not sector alone, and dismissal is tracked per level. (2026-09-18-17-46-11 · 98197a5)
+- The Basic Industry donut and table now club sub-1%-of-equity slices into a single grey `Others` bucket, which the table expands into per-industry rows and then into holdings; the other three levels are unaffected. (2026-09-18-17-47-38 · 1a323ae)
 
 ---
 

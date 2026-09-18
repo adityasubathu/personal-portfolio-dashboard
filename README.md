@@ -85,7 +85,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py              # KiteConfig (singleton) + KiteSyncLog
 │   │   ├── import_log.py        # CSVImportLog — per-batch import metadata
 │   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash / USD_CASH / FOREIGN_EQ
-│   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown
+│   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown + EquityCategoryOverride + EquitySectorOverride + NseIndustryClassification
 │   │   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
 │   │   ├── app_config.py        # AppConfig — KV store for cached config (USDINR rate)
 │   │   └── nav_tracked_instrument.py
@@ -114,7 +114,7 @@ portfolio-mac-arm/
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
-│       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, sector overrides
+│       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, manual taxonomy overrides (any of the four NSE levels, cascading up the hierarchy)
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
 │       ├── usdinr.py            # USDINR rate: fetch from Kite CDS near-month FUT, persist, read
 │       ├── manual_ohlc.py       # Manual OHLC CSV upload for delisted stocks
@@ -156,7 +156,7 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector), Composition
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level, sub-1% Others clubbing on Basic), Composition
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
@@ -320,6 +320,8 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /category-composition` | Per-category breakdown by contributing scheme |
 | `GET /sector-composition` | Per-sector breakdown (`?level=macro_sector\|sector\|industry\|basic_industry`, defaults to `sector`) |
 | `GET /sector-stock-breakdown` | Per-sector individual stock holdings (`?level=` as above) |
+| `GET /sector-list` | Selectable values at a taxonomy level (`?level=` as above), unioning what's currently held with NSE's full classified taxonomy |
+| `PATCH /sector-classify-batch` | Manual taxonomy fix, `[{name, level, value}]` → `{updated, rows_updated}`; the chosen value cascades up NSE's hierarchy and merges into `equity_sector_override` |
 | `GET /schemes` | Schemes with breakdown data |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list + market-cap/asset-class and sector summaries |
 
@@ -394,7 +396,7 @@ Click "Sync price history (Kite)" → opens EventSource → server acquires asyn
 
 1. **AMFI sync.** Load the local xlsx → enrich each company's `sector`/`macro_sector`/`industry`/`basic_industry` by ISIN from `nse_industry_classification` → write `company_master.csv`.
 2. **OpenFin disclosures.** Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`. Each row also records the holding's own `isin`, straight from OpenFin.
-3. **NSE classification.** Collect every ISIN held directly or inside a fund → skip any already `CLASSIFIED` → resolve the rest to an NSE symbol via the equity master and fetch the four-level taxonomy → verify the response's ISIN matches the one queried (mismatches are recorded, never applied) → write results to `nse_industry_classification` → backfill the four levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. A `CLASSIFIED` row is permanent and never re-fetched; `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH` rows are retried on every subsequent refresh, since a company that NSE currently has no data for could get classified later — a handful of names can stay in this retry state indefinitely if NSE genuinely never returns taxonomy data for them.
+3. **NSE classification.** Collect every ISIN held directly or inside a fund → skip any already `CLASSIFIED` → resolve the rest to an NSE symbol via the equity master and fetch the four-level taxonomy → verify the response's ISIN matches the one queried (mismatches are recorded, never applied) → write results to `nse_industry_classification` → backfill the four levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. The backfill never writes a blank level over one already stored, so a `CLASSIFIED` row with gaps can't erase a manual fix. A `CLASSIFIED` row is permanent and never re-fetched; `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH` rows are retried on every subsequent refresh, since a company that NSE currently has no data for could get classified later — a handful of names can stay in this retry state indefinitely if NSE genuinely never returns taxonomy data for them. This step also runs the manual-override auto-prune: any level of `equity_sector_override` that the automatic pipeline can now resolve on its own is cleared, and a row left with nothing set is deleted.
 
 Steps 1 and 2 must complete before step 3, since step 3's backfill needs both a populated `amfi_market_cap` and `isin` values on `mf_scheme_breakdown`. First run classifies roughly 750 ISINs (~6 minutes); later runs only query ISINs new to the portfolio, typically seconds.
 
