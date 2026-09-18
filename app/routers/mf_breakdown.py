@@ -32,6 +32,7 @@ from app.services.mf_ingest import (
     normalize_company_name,
     sync_amfi_market_cap,
 )
+from app.services.nse_industry import refresh_held_classifications
 from app.time_util import now_ist
 
 router = APIRouter(prefix="/api/v1/mf-breakdown", tags=["mf-breakdown"])
@@ -45,9 +46,11 @@ async def ingest_stream(db: AsyncSession = Depends(get_db)):
         amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
         if "error" not in amfi:
             ingest = await ingest_from_openfin(db, on_progress=on_progress)
+            nse = await refresh_held_classifications(db, on_progress=on_progress)
         else:
             ingest = {"error": "Skipped — AMFI classification not loaded"}
-        return {"amfi": amfi, "ingest": ingest}
+            nse = {"error": "Skipped — AMFI classification not loaded"}
+        return {"amfi": amfi, "ingest": ingest, "nse": nse}
 
     return sse_stream(_runner, lock=_ingest_lock, busy_msg="An ingest is already running.")
 

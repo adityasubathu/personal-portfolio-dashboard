@@ -17,6 +17,7 @@ from app.models.holding import Holding
 from app.models.instrument import Instrument
 from app.models.mf_breakdown import AmfiMarketCap, EquityCategoryOverride, EquitySectorOverride, MfSchemeBreakdown
 from app.services.mfapi_nav import resolve_scheme_codes
+from app.services.nse_industry import CLASSIFICATION_LEVELS, load_classification_lookup
 from app.time_util import now_ist
 
 BREAKDOWN_DIR = Path("data/mf_portfolio_breakdown")
@@ -130,38 +131,6 @@ def _parse_amfi_date(filename: str) -> date | None:
     return date(year, month, day)
 
 
-def _load_sector_master() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
-    """Returns ({isin: sector}, {normalized_name: sector}, {nse_symbol: sector})."""
-    path = BREAKDOWN_DIR / "sector_master.csv"
-    if not path.exists():
-        return {}, {}, {}
-    try:
-        text = path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        text = path.read_text(encoding="latin-1")
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        return {}, {}, {}
-    reader.fieldnames = [f.strip() for f in reader.fieldnames]
-    isin_sector: dict[str, str] = {}
-    name_sector: dict[str, str] = {}
-    symbol_sector: dict[str, str] = {}
-    for row in reader:
-        isin = (row.get("ISIN Code") or "").strip()
-        sector = (row.get("Industry") or "").strip()
-        company = (row.get("Company Name") or "").strip()
-        symbol = (row.get("Symbol") or "").strip()
-        if not sector:
-            continue
-        if isin:
-            isin_sector[isin] = sector
-        if company:
-            name_sector[normalize_company_name(company)] = sector
-        if symbol:
-            symbol_sector[symbol] = sector
-    return isin_sector, name_sector, symbol_sector
-
-
 def _write_company_master(rows: list[dict]) -> None:
     master_path = BREAKDOWN_DIR / "company_master.csv"
     BREAKDOWN_DIR.mkdir(parents=True, exist_ok=True)
@@ -264,6 +233,9 @@ async def sync_amfi_market_cap(db: AsyncSession, on_progress=None) -> dict:
             "aliases": preserved_aliases.get(isin or "") or None,
             "categorization": cat,
             "sector": None,
+            "macro_sector": None,
+            "industry": None,
+            "basic_industry": None,
             "name_normalized": normalize_company_name(company),
             "updated_at": now_ist(),
         })
@@ -276,20 +248,18 @@ async def sync_amfi_market_cap(db: AsyncSession, on_progress=None) -> dict:
             f"(Large: {counts['Large Cap']}, Mid: {counts['Mid Cap']}, Small: {counts['Small Cap']})"
         )
 
-    # Enrich with sector: ISIN → NSE symbol → normalized name
-    isin_sector, name_sector, symbol_sector = _load_sector_master()
-    sectors_loaded = len(isin_sector)
-    if isin_sector or name_sector or symbol_sector:
-        for row in rows_to_insert:
-            sec = isin_sector.get(row["isin"] or "")
-            if not sec and row["nse_symbol"]:
-                sec = symbol_sector.get(row["nse_symbol"])
-            if not sec:
-                sec = name_sector.get(row["name_normalized"] or "")
-            if sec:
-                row["sector"] = sec
-        if on_progress:
-            await on_progress(f"Sector enrichment: {sectors_loaded} ISIN mappings applied")
+    # Enrich with NSE's four-level taxonomy. ISIN is the only join key.
+    lookup = await load_classification_lookup(db)
+    sectors_from_nse = 0
+    for row in rows_to_insert:
+        levels = lookup.get(row["isin"] or "")
+        if not levels:
+            continue
+        for level in CLASSIFICATION_LEVELS:
+            row[level] = levels[level]
+        sectors_from_nse += 1
+    if on_progress:
+        await on_progress(f"NSE classification: {sectors_from_nse} ISIN mappings applied")
 
     await db.execute(delete(AmfiMarketCap))
     if rows_to_insert:
@@ -305,7 +275,7 @@ async def sync_amfi_market_cap(db: AsyncSession, on_progress=None) -> dict:
         "large": counts["Large Cap"],
         "mid": counts["Mid Cap"],
         "small": counts["Small Cap"],
-        "sectors_loaded": sectors_loaded,
+        "sectors_from_nse": sectors_from_nse,
         "file": xlsx_path.name,
     }
     if file_date:
@@ -452,6 +422,7 @@ class _AmfiLookups:
         self.name_to_isin: dict[str, str] = {}
         self.isin_to_mcap: dict[str, str] = {}
         self.isin_to_sector: dict[str, str] = {}
+        self.isin_to_levels: dict[str, dict] = {}
         self.amfi_by_name: dict[str, str] = {}
         self.amfi_name_sector: dict[str, str] = {}
         for a in amfi_all:
@@ -463,6 +434,11 @@ class _AmfiLookups:
                 self.name_to_isin[a.name_normalized] = a.isin
                 if a.sector:
                     self.isin_to_sector[a.isin] = a.sector
+                self.isin_to_levels[a.isin] = {
+                    "macro_sector": a.macro_sector,
+                    "industry": a.industry,
+                    "basic_industry": a.basic_industry,
+                }
                 if a.aliases:
                     for alias in a.aliases.split("|"):
                         alias_norm = normalize_company_name(alias.strip())
@@ -503,6 +479,18 @@ class _AmfiLookups:
         if sector is None:
             sector = self.sector_overrides.get(normalize_company_name(name))
         return sector
+
+    def resolve_levels(self, name: str, holding_isin: str | None) -> dict:
+        """Returns {level: value} across CLASSIFICATION_LEVELS. Only "sector" can
+        come from a manual override — the other three are ISIN-only, with no
+        name-based fallback."""
+        entry = self.isin_to_levels.get(holding_isin or "")
+        return {
+            "macro_sector": entry.get("macro_sector") if entry else None,
+            "sector": self.resolve_sector(name, holding_isin),
+            "industry": entry.get("industry") if entry else None,
+            "basic_industry": entry.get("basic_industry") if entry else None,
+        }
 
 
 def _classify_non_equity(
@@ -594,7 +582,7 @@ def _map_scheme_holdings(
         if matched > 0:
             rows.append({
                 "name": name, "holding_type": "Arbitrage", "category": "Equity - Arbitrage",
-                "sector": lookups.resolve_sector(name, isin), "market_value": matched,
+                "isin": isin, **lookups.resolve_levels(name, isin), "market_value": matched,
             })
         if residual > 1e-6:
             if long_mv > short_mv:
@@ -603,12 +591,12 @@ def _map_scheme_holdings(
                     unmatched.append({"name": name, "scheme_isin": fund_isin})
                 rows.append({
                     "name": name, "holding_type": "Equity", "category": category,
-                    "sector": lookups.resolve_sector(name, isin), "market_value": residual,
+                    "isin": isin, **lookups.resolve_levels(name, isin), "market_value": residual,
                 })
             else:
                 rows.append({
                     "name": name, "holding_type": "Derivative", "category": "Derivatives - Leveraged",
-                    "sector": lookups.resolve_sector(name, isin), "market_value": -residual,
+                    "isin": isin, **lookups.resolve_levels(name, isin), "market_value": -residual,
                 })
 
     for h in plain:
@@ -632,23 +620,28 @@ def _map_scheme_holdings(
         api_type = "equity" if is_mislabeled_equity else h["holding_type"]
 
         if api_type == "equity" and h.get("instrument_yield") is not None:
-            holding_type, category, sector = "Certificate of Deposit", "Debt", "Fixed Income"
+            holding_type, category = "Certificate of Deposit", "Debt"
+            levels = {level: "Fixed Income" for level in CLASSIFICATION_LEVELS}
         elif api_type == "equity":
             if _REIT_RE.search(section) or _REIT_RE.search(name):
-                holding_type, category, sector = "Reits", "Real Estate Trust", "Real Estate Trust"
+                holding_type, category = "Reits", "Real Estate Trust"
+                levels = {level: "Real Estate Trust" for level in CLASSIFICATION_LEVELS}
             else:
                 category = lookups.classify_equity(name, holding_isin, fund_isin)
                 if category == "Unclassified Equity":
                     unmatched.append({"name": name, "scheme_isin": fund_isin})
-                holding_type, sector = "Equity", lookups.resolve_sector(name, holding_isin)
+                holding_type = "Equity"
+                levels = lookups.resolve_levels(name, holding_isin)
         elif api_type == "derivative":
-            holding_type, category, sector = "Derivative", "Derivatives - Leveraged", lookups.resolve_sector(name, holding_isin)
+            holding_type, category = "Derivative", "Derivatives - Leveraged"
+            levels = lookups.resolve_levels(name, holding_isin)
         else:
             holding_type, category, sector = _classify_non_equity(api_type, section, name, holding_isin, catalog_by_isin)
+            levels = {level: sector for level in CLASSIFICATION_LEVELS}
 
         rows.append({
             "name": name, "holding_type": holding_type, "category": category,
-            "sector": sector, "market_value": market_value,
+            "isin": holding_isin, **levels, "market_value": market_value,
         })
 
     return rows, unmatched
@@ -805,7 +798,11 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
                 "holdings_pct": round(r["market_value"] / total_mv * 100, 8) if total_mv else 0.0,
                 "market_value": round(r["market_value"], 2),
                 "category": r["category"],
+                "isin": r.get("isin"),
                 "sector": r["sector"],
+                "macro_sector": r["macro_sector"],
+                "industry": r["industry"],
+                "basic_industry": r["basic_industry"],
                 "as_of": scheme_as_of,
                 "updated_at": now_ist(),
             } for r in rows]
@@ -841,7 +838,11 @@ async def ingest_from_openfin(db: AsyncSession, on_progress=None) -> dict:
             "holding_type": commodity_cat,
             "holdings_pct": 100.0,
             "category": commodity_cat,
+            "isin": None,
             "sector": commodity_cat,
+            "macro_sector": commodity_cat,
+            "industry": commodity_cat,
+            "basic_industry": commodity_cat,
             "updated_at": now_ist(),
         }])
         seen_isins.add(isin)

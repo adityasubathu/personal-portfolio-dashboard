@@ -301,6 +301,7 @@ async def refresh_held_classifications(db: AsyncSession, on_progress=None) -> di
 
     await db.flush()
     enriched, backfilled = await apply_classifications(db)
+    await db.commit()
     if on_progress:
         await on_progress(
             f"NSE classification: {classified} new, {unclassified} unclassified, "
