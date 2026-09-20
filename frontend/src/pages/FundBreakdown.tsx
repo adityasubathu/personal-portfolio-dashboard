@@ -36,7 +36,7 @@ const industryPath = (h: SchemeHolding) =>
     : ''
 
 // The holdings table is read asset class by asset class. Anything outside these
-// four falls into a trailing "Other" group so no holding is silently dropped.
+// four falls into a trailing "Others" group so no holding is silently dropped.
 const HOLDING_GROUPS: { label: string; categories: string[] }[] = [
   { label: 'Equity', categories: ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign', 'Equity - Arbitrage', 'Real Estate Trust'] },
   { label: 'Debt', categories: ['Debt'] },
@@ -51,7 +51,7 @@ function groupHoldings(holdings: SchemeHolding[]) {
   }))
   const claimed = new Set(HOLDING_GROUPS.flatMap((g) => g.categories))
   const rest = holdings.filter((h) => !claimed.has(h.category))
-  if (rest.length > 0) grouped.push({ label: 'Other', rows: rest })
+  if (rest.length > 0) grouped.push({ label: 'Others', rows: rest })
   return grouped
     .filter((g) => g.rows.length > 0)
     .map((g) => ({
