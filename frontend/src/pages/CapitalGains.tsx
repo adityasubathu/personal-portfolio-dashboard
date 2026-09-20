@@ -7,13 +7,12 @@ import { MoneyText } from '../components/MoneyText'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { InfoPopover } from '@/components/InfoPopover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS } from '@/lib/colors'
@@ -77,21 +76,6 @@ Estimated tax = taxable gain × flat rate. It excludes surcharge and 4% health &
 
 Not included: buyback proceeds (taxed as dividend Oct 2024 – Mar 2026 and indistinguishable from market sales in the tradebook), carry-forward of losses from prior years.`
 
-function InfoPopover({ text }: { text: string }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label="How these numbers are computed">
-          <Info className="size-4 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-96" align="start">
-        <p className="text-xs leading-relaxed whitespace-pre-line">{text}</p>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number }) {
   const { privacyMode } = usePrivacy()
   const fmt = (v: number) => privacyMode ? MASK : inr(v)
@@ -102,7 +86,7 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
     : (slabRate > 0 ? Math.round(bucket.taxable * slabRate) / 100 : null)
 
   return (
-    <div className="basis-[calc((100%-0.75rem)/2)] rounded-xl border bg-card p-3 sm:basis-[calc((100%-1.5rem)/3)] md:basis-[calc((100%-2.25rem)/4)]">
+    <div className="basis-[calc((100%-2.25rem)/4)] rounded-xl border bg-card p-3">
       <p className="mb-1 line-clamp-2 text-xs">{bucket.label}</p>
       <MoneyText value={bucket.gross_gain} colorize className="text-base font-semibold" />
       {(bucket.setoff_applied > 0 || bucket.exemption_applied > 0) && (
@@ -387,10 +371,10 @@ export function CapitalGains() {
   const totalEstTax = (data?.totals.est_tax ?? 0) + slabTax
 
   return (
-    <div className="flex flex-col gap-4 px-12 md:px-48">
+    <div className="flex flex-col gap-4 px-48">
       <PageHeader
         title="Capital Gains"
-        actions={<InfoPopover text={HELP_TEXT} />}
+        actions={<InfoPopover text={HELP_TEXT} className="w-96" />}
       />
 
       <div className="flex flex-wrap items-end justify-between gap-3">

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-20-17-18-05 — Dead-code sweep and mobile-UI removal
+- Deleted six unused shadcn primitives (`card`, `chart`, `dropdown-menu`, `pagination`, `scroll-area`, `sonner`) and the `next-themes` dependency that only `ui/sonner` pulled in. (2026-09-20-17-18-05)
+- Removed the mobile-only render paths: the Dashboard holdings accordion view, the Trades order cards, and the two "scroll horizontally" hints on Breakdown. The `useMediaQuery` and `useColorScheme` hooks went with them. (2026-09-20-17-18-05)
+- Collapsed `sm:`/`md:` responsive classes to their desktop values across Dashboard, Breakdown, CapitalGains, FundBreakdown, NavHistory and AppLayout. Desktop rendering is unchanged. (2026-09-20-17-18-05)
+- Hoisted the two duplicated `useDebouncedValue` copies into `hooks/useDebouncedValue.ts` and the two `InfoPopover` variants into `components/InfoPopover.tsx`. (2026-09-20-17-18-05)
+- Dropped the dead `--chart-1..5` theme tokens and the vestigial `mantine` CSS layer left over from the Mantine build. (2026-09-20-17-18-05)
+
 ## 2026-09-20-17-07-12 — Larger text in the Allocation targets table
 - The Allocation / Equity allocation targets table (Breakdown > Overview) now renders at 15px instead of 12px, 25% larger. (2026-09-20-17-07-12 · c2bca67)
 - Dialed that back to 13.5px after a follow-up request to reduce it 10%. (2026-09-20-17-07-36 · 930458e)
