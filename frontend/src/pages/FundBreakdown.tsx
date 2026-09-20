@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Landmark, Check, ChevronsUpDown } from 'lucide-react'
 import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
@@ -33,6 +33,26 @@ const industryPath = (h: SchemeHolding) =>
   h.type === 'Equity'
     ? [h.macro_sector, h.sector, h.industry, h.basic_industry].filter(Boolean).join(' → ')
     : ''
+
+// The holdings table is read asset class by asset class. Anything outside these
+// four falls into a trailing "Other" group so no holding is silently dropped.
+const HOLDING_GROUPS: { label: string; categories: string[] }[] = [
+  { label: 'Equity', categories: ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign', 'Equity - Arbitrage', 'Real Estate Trust'] },
+  { label: 'Debt', categories: ['Debt'] },
+  { label: 'Precious Metals', categories: ['Gold', 'Silver'] },
+  { label: 'Cash', categories: ['Cash'] },
+]
+
+function groupHoldings(holdings: SchemeHolding[]) {
+  const grouped = HOLDING_GROUPS.map((g) => ({
+    label: g.label,
+    rows: holdings.filter((h) => g.categories.includes(h.category)),
+  }))
+  const claimed = new Set(HOLDING_GROUPS.flatMap((g) => g.categories))
+  const rest = holdings.filter((h) => !claimed.has(h.category))
+  if (rest.length > 0) grouped.push({ label: 'Other', rows: rest })
+  return grouped.filter((g) => g.rows.length > 0)
+}
 
 function CategoryCell({ category }: { category: string }) {
   const cap = CAP_CHIP[category]
@@ -157,14 +177,23 @@ export function FundBreakdown() {
                 </tr>
               </thead>
               <tbody>
-                {breakdown.holdings.map((h, i) => (
-                  <tr key={i} className="even:bg-row-stripe hover:bg-row-hover">
-                    <td className="px-2 py-1.5">{h.name}</td>
-                    <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
-                    <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>
-                    <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
-                    <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
-                  </tr>
+                {groupHoldings(breakdown.holdings).map((group) => (
+                  <Fragment key={group.label}>
+                    <tr>
+                      <td colSpan={5} className="border-y bg-muted px-2 py-1.5 text-[0.9rem] font-bold">
+                        {group.label}
+                      </td>
+                    </tr>
+                    {group.rows.map((h, i) => (
+                      <tr key={`${group.label}-${i}`} className={cn(i % 2 === 1 && 'bg-row-stripe', 'hover:bg-row-hover')}>
+                        <td className="px-2 py-1.5">{h.name}</td>
+                        <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
+                        <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>
+                        <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
+                        <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
