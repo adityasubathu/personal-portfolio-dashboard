@@ -122,14 +122,18 @@ function NumQty({ value }: { value: number }) {
 const NUM_LG = 'text-[13.8px]'
 
 // Direction lives in the arrow, so the number itself is printed unsigned.
+// Fixed width so the pill's edges land at the same x in every row, regardless
+// of how many digits the percentage has — otherwise the column looks ragged.
+const GAIN_CHIP_WIDTH = 'w-16'
 function GainChip({ value }: { value: number | null | undefined }) {
-  if (value == null) return null
+  if (value == null) return <span className={cn('inline-block shrink-0', GAIN_CHIP_WIDTH)} />
   const up = value >= 0
   const Arrow = up ? ArrowUp : ArrowDown
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-medium',
+        'inline-flex shrink-0 items-center justify-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-medium',
+        GAIN_CHIP_WIDTH,
         up ? CHIP_CLASS.green : CHIP_CLASS.red,
       )}
     >

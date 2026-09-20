@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-16-52-48 — Gain chips align in a straight column
+- Gain % chips in the holdings table now have a fixed width, so the pills line up vertically instead of shifting left or right based on how many digits the percentage has. (2026-09-20-16-52-48 · <pending>)
+
 ## 2026-09-20-16-50-44 — Holdings table section and totals rows made visually distinct
 - Section headers now use the darker row-hover tone with bold uppercase text instead of a border alone; the totals row gets a light blue tint and a primary-coloured top border so both stand out clearly from the striped rows. (2026-09-20-16-50-44 · 602c3cd)
 
