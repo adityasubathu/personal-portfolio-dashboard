@@ -9,6 +9,7 @@ import { Select, SelectContent as ShadSelectContent, SelectItem as ShadSelectIte
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -150,9 +151,39 @@ function TargetsTableHead({ firstColumn }: { firstColumn: string }) {
         <th className="h-8 px-2 text-right font-medium text-muted-foreground">Diff</th>
         <th className="h-8 px-2 text-right font-medium text-muted-foreground">Shortfall / Surplus</th>
         <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
-        <th className="h-8 px-2 text-right font-medium text-muted-foreground">New target</th>
       </tr>
     </thead>
+  )
+}
+
+/** Shared body for the "Edit targets" popup: one labelled input per row, defaulting
+ *  to the row's current target and falling back to any in-progress edit. */
+function EditTargetsFields({
+  rows,
+  targets,
+  onChange,
+}: {
+  rows: Array<{ key: string; label: string; defaultValue: number; step?: number }>
+  targets: Record<string, number>
+  onChange: (key: string, value: number) => void
+}) {
+  return (
+    <div className="max-h-[60vh] space-y-3 overflow-y-auto py-2">
+      {rows.map((row) => (
+        <div key={row.key} className="flex items-center justify-between gap-4">
+          <Label className="text-sm font-normal">{row.label}</Label>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step={row.step ?? 1}
+            value={targets[row.key] ?? row.defaultValue}
+            onChange={(e) => onChange(row.key, Number(e.target.value))}
+            className="h-8 w-24"
+          />
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -181,6 +212,7 @@ function AssetClassTargetsSection({
   const { data: ac, refetch } = useAssetClassComparison()
   const saveMut = useSaveAssetClassTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
+  const [editOpen, setEditOpen] = useState(false)
   const [cashInput, setCashInput] = useState<number | ''>('')
   const [debouncedCash] = useDebouncedValue(cashInput, 500)
   const { data: plan } = useRebalancePlan('anchored', debouncedCash === '' ? undefined : debouncedCash)
@@ -196,10 +228,16 @@ function AssetClassTargetsSection({
       await saveMut.mutateAsync(updated)
       notify.success('Asset class targets saved.')
       refetch()
+      setEditOpen(false)
     } catch (e) {
       notify.error(String(e))
     }
   }
+
+  const editRows = [
+    ...ac.rows.map((r) => ({ key: r.asset_class, label: r.asset_class, defaultValue: r.target_pct })),
+    { key: 'Equity - Foreign', label: 'Equity - Foreign (% of total equity)', defaultValue: ac.foreign_equity_target },
+  ]
 
   const { emergency_fund, cash } = ac.excluded
 
@@ -252,17 +290,6 @@ function AssetClassTargetsSection({
                   <MoneyText value={r.shortfall} compact showSign className={diffColor(r.current_diff)} />
                 </td>
                 <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={r.current_value} compact /></td>
-                <td data-numeric className="px-2 py-1.5 text-right">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={targets[r.asset_class] ?? r.target_pct}
-                    onChange={(e) => setTargets((p) => ({ ...p, [r.asset_class]: Number(e.target.value) }))}
-                    className="h-7 w-20"
-                  />
-                </td>
               </tr>
             ))}
             {!rebalanceView && (
@@ -275,17 +302,6 @@ function AssetClassTargetsSection({
                   </div>
                 </td>
                 <td colSpan={5} />
-                <td data-numeric className="px-2 py-1.5 text-right">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={targets['Equity - Foreign'] ?? ac.foreign_equity_target}
-                    onChange={(e) => setTargets((p) => ({ ...p, 'Equity - Foreign': Number(e.target.value) }))}
-                    className="h-7 w-20"
-                  />
-                </td>
               </tr>
             )}
           </tbody>
@@ -293,9 +309,21 @@ function AssetClassTargetsSection({
       </div>
       {!rebalanceView && (
         <div className="mt-2 flex items-center gap-4">
-          <ShadButton size="xs" disabled={saveMut.isPending} onClick={handleSave}>
-            Save targets
-          </ShadButton>
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogTrigger asChild>
+              <ShadButton size="xs" variant="outline">Edit targets</ShadButton>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit asset class targets</DialogTitle>
+              </DialogHeader>
+              <EditTargetsFields rows={editRows} targets={targets} onChange={(key, value) => setTargets((p) => ({ ...p, [key]: value }))} />
+              <DialogFooter>
+                <ShadButton variant="outline" onClick={() => setEditOpen(false)}>Cancel</ShadButton>
+                <ShadButton disabled={saveMut.isPending} onClick={handleSave}>Save targets</ShadButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <p className="text-xs text-muted-foreground">
             Excludes:{' '}
             {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
@@ -314,6 +342,7 @@ function OverviewTab() {
   const { data: comparison, refetch: refetchComp } = useAllocationComparison(mode)
   const saveMut = useSaveAllocationTargetsMutation()
   const [targets, setTargets] = useState<Record<string, number>>({})
+  const [editOpen, setEditOpen] = useState(false)
   const [rebalanceView, setRebalanceView] = usePersistentState('rebalanceView', false)
   const [cashInput, setCashInput] = useState<number | ''>('')
   const [debouncedCash] = useDebouncedValue(cashInput, 500)
@@ -339,6 +368,7 @@ function OverviewTab() {
       await saveMut.mutateAsync({ targets: allTargets, mode })
       notify.success('Targets saved.')
       refetchComp()
+      setEditOpen(false)
     } catch (e) {
       notify.error(String(e))
     }
@@ -450,11 +480,8 @@ function OverviewTab() {
                 {rebalanceView && plan ? (
                   <RebalanceRows buckets={plan.buckets} />
                 ) : comparison.rows.map((r) => {
-                  const isForeign = r.category === 'Equity - Foreign'
                   const isAnchor = isAnchored && r.category === 'Large Cap'
                   const showShortfall = !isAnchor
-                  const showTargetInput = !(isAnchored && isForeign)
-                  const inputVal = targets[r.category] ?? (isAnchored && isForeign ? comparison.foreign.target_pct : r.target_pct)
                   return (
                     <tr key={r.category} className="hover:bg-muted/50">
                       <td className="px-2 py-1.5">
@@ -476,21 +503,6 @@ function OverviewTab() {
                         )}
                       </td>
                       <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={r.current_value} compact /></td>
-                      <td data-numeric className="px-2 py-1.5 text-right">
-                        {showTargetInput ? (
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.1}
-                            value={inputVal}
-                            onChange={(e) => setTargets((p) => ({ ...p, [r.category]: Number(e.target.value) }))}
-                            className="h-7 w-20"
-                          />
-                        ) : (
-                          <span className="text-xs">50% of LC</span>
-                        )}
-                      </td>
                     </tr>
                   )
                 })}
@@ -498,9 +510,27 @@ function OverviewTab() {
             </table>
           </div>
           {!rebalanceView && (
-            <ShadButton size="xs" className="mt-2" disabled={saveMut.isPending} onClick={handleSaveTargets}>
-              Save targets
-            </ShadButton>
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+              <DialogTrigger asChild>
+                <ShadButton size="xs" variant="outline" className="mt-2">Edit targets</ShadButton>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{isAnchored ? 'Edit equity allocation targets' : 'Edit allocation targets'}</DialogTitle>
+                </DialogHeader>
+                <EditTargetsFields
+                  rows={comparison.rows
+                    .filter((r) => !(isAnchored && r.category === 'Equity - Foreign'))
+                    .map((r) => ({ key: r.category, label: r.category, defaultValue: r.target_pct, step: 0.1 }))}
+                  targets={targets}
+                  onChange={(key, value) => setTargets((p) => ({ ...p, [key]: value }))}
+                />
+                <DialogFooter>
+                  <ShadButton variant="outline" onClick={() => setEditOpen(false)}>Cancel</ShadButton>
+                  <ShadButton disabled={saveMut.isPending} onClick={handleSaveTargets}>Save targets</ShadButton>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
         </Section>
       )}
@@ -1060,7 +1090,7 @@ export function Breakdown() {
   const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-12 md:px-48">
       <PageHeader title="Portfolio Breakdown" actions={
         <ShadButton size="xs" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
           <RefreshCw className="size-3.5" />
