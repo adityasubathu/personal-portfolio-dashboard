@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Square, RefreshCw, Upload } from 'lucide-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
@@ -25,6 +25,10 @@ function navPriceFormatter(price: number): string {
   if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(2)}L`
   if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(2)}K`
   return `${sign}₹${abs.toFixed(2)}`
+}
+
+function unitNavFormatter(value: number): string {
+  return value.toFixed(2)
 }
 
 function HaltSyncButton() {
@@ -77,25 +81,44 @@ export function NavHistory() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
 
-  const instrOptions = instruments?.map((i) => ({
-    value: String(i.id),
-    label: `${i.symbol ?? '?'}${i.isin ? ` (${i.isin})` : ''} — ${i.n_prices} rows`,
-  })) ?? []
+  const instrOptions = useMemo(
+    () =>
+      instruments?.map((i) => ({
+        value: String(i.id),
+        label: `${i.symbol ?? '?'}${i.isin ? ` (${i.isin})` : ''} — ${i.n_prices} rows`,
+      })) ?? [],
+    [instruments],
+  )
 
-  const valueData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
-    time: p.date,
-    value: p.value,
-  }))
-  const investedData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
-    time: p.date,
-    value: p.invested,
-  }))
-  const unitNavData: NavPoint[] = (navSeries ?? [])
-    .filter((p: NavSeriesPoint) => p.unit_nav != null)
-    .map((p: NavSeriesPoint) => ({
-      time: p.date,
-      value: p.unit_nav as number,
-    }))
+  const valueData = useMemo<NavPoint[]>(
+    () => (navSeries ?? []).map((p: NavSeriesPoint) => ({ time: p.date, value: p.value })),
+    [navSeries],
+  )
+  const investedData = useMemo<NavPoint[]>(
+    () => (navSeries ?? []).map((p: NavSeriesPoint) => ({ time: p.date, value: p.invested })),
+    [navSeries],
+  )
+  const unitNavData = useMemo<NavPoint[]>(
+    () =>
+      (navSeries ?? [])
+        .filter((p: NavSeriesPoint) => p.unit_nav != null)
+        .map((p: NavSeriesPoint) => ({ time: p.date, value: p.unit_nav as number })),
+    [navSeries],
+  )
+
+  // Stable identities — LwChart's compare-series effect keys off these, and a
+  // fresh array on every render tears down and re-adds ~4800 points of series.
+  const portfolioCompareLines = useMemo(
+    () => [
+      { data: valueData, label: 'Value', color: '#3b82f6' },
+      { data: investedData, label: 'Invested', color: '#f59e0b' },
+    ],
+    [valueData, investedData],
+  )
+  const unitNavCompareLines = useMemo(
+    () => [{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }],
+    [unitNavData],
+  )
 
   async function handleUploadOhlc() {
     if (!uploadInstrId || !uploadFile) return
@@ -121,10 +144,7 @@ export function NavHistory() {
               persistKey="portfolio_nav_h"
               defaultHeight={400}
               priceFormatter={navPriceFormatter}
-              compareLines={[
-                { data: valueData, label: 'Value', color: '#3b82f6' },
-                { data: investedData, label: 'Invested', color: '#f59e0b' },
-              ]}
+              compareLines={portfolioCompareLines}
             />
           </Section>
         )}
@@ -135,8 +155,8 @@ export function NavHistory() {
               seriesType="line"
               persistKey="portfolio_unit_nav_h"
               defaultHeight={300}
-              priceFormatter={(v: number) => v.toFixed(2)}
-              compareLines={[{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }]}
+              priceFormatter={unitNavFormatter}
+              compareLines={unitNavCompareLines}
               maskInPrivacy={false}
             />
           </Section>
