@@ -410,8 +410,8 @@ function HoldingsTable() {
               return groups.map((g) => (
                 <React.Fragment key={g.label ?? '__ungrouped'}>
                   {g.label && sections === 'on' && (
-                    <tr>
-                      <td colSpan={10} className="border-y-2 border-border bg-muted px-2 py-1.5 text-xs font-semibold">
+                    <tr className="bg-row-hover">
+                      <td colSpan={10} className="border-y-2 border-foreground/25 px-2 py-1.5 text-xs font-bold tracking-wide uppercase">
                         {g.label}
                       </td>
                     </tr>
@@ -422,7 +422,7 @@ function HoldingsTable() {
             })()}
           </tbody>
           <tfoot>
-            <tr className={cn('sticky bottom-0 z-20 border-t-2 border-border bg-card font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
+            <tr className={cn('sticky bottom-0 z-20 border-t-2 border-primary/50 bg-primary/10 font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
               <td colSpan={3} className="px-2 py-1.5 text-foreground">Total</td>
               <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_cost} /></td>
               <td data-numeric className="px-2 py-1.5 text-right">
