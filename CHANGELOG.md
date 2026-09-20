@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-16-59-01 — Holdings table column dividers and a wider Symbol column
+- Vertical dividers now separate every column in the holdings table. Symbol widened to 300px to show longer instrument names; the other columns were given fixed, tighter widths to make room. (2026-09-20-16-59-01 · <pending>)
+
 ## 2026-09-20-16-57-09 — Day change gets the gain-chip treatment
 - Day ₹ now shows a neutral number plus an arrow/% chip carrying the day's percentage change, matching how Gain ₹ works; the separate heat-tinted Day % column is gone, and `Day %` is dropped from the sort list. (2026-09-20-16-57-09 · 072ba8c)
 

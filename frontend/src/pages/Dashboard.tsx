@@ -249,8 +249,8 @@ function HoldingsTable() {
   function row(r: HoldingRow, idx: number) {
     const striped = idx % 2 === 1
     return (
-      <tr key={r.instrument_id} className={cn('group hover:bg-row-hover', striped && 'bg-row-stripe')}>
-        <td className={cn('sticky left-0 z-10 max-w-[230px] px-2 py-1.5 font-medium group-hover:bg-row-hover', striped ? 'bg-row-stripe' : 'bg-card')}>
+      <tr key={r.instrument_id} className={cn('group divide-x divide-border hover:bg-row-hover', striped && 'bg-row-stripe')}>
+        <td className={cn('sticky left-0 z-10 px-2 py-1.5 font-medium group-hover:bg-row-hover', striped ? 'bg-row-stripe' : 'bg-card')}>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="block truncate">{r.symbol}</span>
@@ -395,9 +395,20 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full text-[13.2px]" style={{ minWidth: 1050 }}>
+        <table className="w-full table-fixed text-[13.2px]" style={{ minWidth: 1160 }}>
+          <colgroup>
+            <col style={{ width: 300 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 100 }} />
+            <col style={{ width: 170 }} />
+            <col style={{ width: 100 }} />
+            <col style={{ width: 170 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 110 }} />
+          </colgroup>
           <thead>
-            <tr className="sticky top-0 z-20 bg-card">
+            <tr className="sticky top-0 z-20 divide-x divide-border bg-card">
               {header('Symbol', 'symbol')}
               <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
@@ -424,7 +435,7 @@ function HoldingsTable() {
             })()}
           </tbody>
           <tfoot>
-            <tr className="sticky bottom-0 z-20 border-t-2 border-primary/50 bg-primary/10 font-semibold">
+            <tr className="sticky bottom-0 z-20 divide-x divide-border border-t-2 border-primary/50 bg-primary/10 font-semibold">
               <td colSpan={3} className="px-2 py-1.5 text-foreground">Total</td>
               <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_cost} /></td>
               <td data-numeric className="px-2 py-1.5 text-right text-foreground">
