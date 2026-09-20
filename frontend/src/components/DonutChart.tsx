@@ -35,7 +35,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
 
   return (
     <div className="@container w-full">
-      <div className="flex flex-col items-center gap-4 @lg:flex-row @lg:items-start">
+      <div className="flex flex-col items-center gap-4 @lg:flex-row">
         <div className="relative aspect-square w-full max-w-(--size) shrink-0 @lg:w-(--size)" style={{ '--size': `${size}px` } as React.CSSProperties}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
