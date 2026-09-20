@@ -740,7 +740,7 @@ function SectorTab({
             </ToggleGroup>
           }
         >
-          {labels.length > 0 && <DonutChart labels={labels} values={values} colorMode="sector" legendSide="left" />}
+          {labels.length > 0 && <DonutChart labels={labels} values={values} colorMode="sector" />}
         </Section>
 
         <Section title="Sector" bodyClassName="p-0">
