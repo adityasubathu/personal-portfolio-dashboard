@@ -27,7 +27,7 @@
 - Fund Detail: holdings rows are numbered within their group and the group name is centred over them. (2026-09-20-16-16-58 · 1cc2c38)
 - Fund Detail: foreign equity holdings get an indigo "Foreign" chip matching their donut slice. (2026-09-20-16-17-34 · cb68e3c)
 - Fund Detail: the catch-all holdings group is named "Others". (2026-09-20-16-19-15 · 97d152b)
-- Fund Detail: REIT holdings moved out of Equity and into Others. (2026-09-20-16-20-16 · PENDING)
+- Fund Detail: REIT holdings moved out of Equity and into Others. (2026-09-20-16-20-16 · a9c04a8)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
