@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-16-45-51 — Holdings table non-price font bump
+- The holdings table's Symbol, Type, Qty, Day %, Day ₹, Gain ₹, XIRR and Updated columns now render 10% larger; Cost and Value keep their existing, larger size. (2026-09-20-16-45-51 · <pending>)
+
 ## 2026-09-20-16-42-55 — Holdings table density
 - Avg, Prev Close and LTP moved out of the holdings table into an info popover; the new rightmost column shows just the date the LTP was last updated. (2026-09-20-16-42-55 · d5bedbb)
 - Cost and Value now render 15% larger than the other numbers, and Gain % gave up its column for a green-up/red-down chip beside the gain amount. (2026-09-20-16-46-30 · 5a6be51)

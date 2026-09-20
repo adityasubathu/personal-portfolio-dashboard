@@ -392,7 +392,7 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full text-xs" style={{ minWidth: 1130 }}>
+        <table className="w-full text-[13.2px]" style={{ minWidth: 1130 }}>
           <thead>
             <tr className="sticky top-0 z-20 bg-card">
               {header('Symbol', 'symbol')}
