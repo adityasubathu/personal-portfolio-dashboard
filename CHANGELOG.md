@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-20-16-49-27 — Holdings table section and totals borders
-- Section group headers (Equity, Bonds, Mutual Funds, ...) and the totals row now carry a stronger border so they stand out from the striped rows around them. (2026-09-20-16-49-27 · <pending>)
+- Section group headers (Equity, Bonds, Mutual Funds, ...) and the totals row now carry a stronger border so they stand out from the striped rows around them. (2026-09-20-16-49-27 · c41ab86)
 
 ## 2026-09-20-16-48-14 — Holdings table row striping
 - Holdings table rows now alternate a subtle background tint so row boundaries are easier to track across the wide table. (2026-09-20-16-48-14 · 76e975b)
