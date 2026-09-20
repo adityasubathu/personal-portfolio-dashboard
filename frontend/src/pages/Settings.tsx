@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import { Alert, Box, Button, Group, Modal, Stack, Text, Title } from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { IconFlask } from '@tabler/icons-react'
+import { FlaskConical } from 'lucide-react'
 import {
   useDeleteTradesMutation,
   useDeletePriceHistoryMutation,
@@ -12,6 +10,11 @@ import {
 } from '../api/settings'
 import { useAppStatus, useResetDemoMutation } from '../api/status'
 import type { DeleteResult } from '../types/charts'
+import { ConfirmActionButton } from '../components/ConfirmActionButton'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { notify } from '@/lib/notify'
 
 interface DangerButtonProps {
   label: string
@@ -20,40 +23,31 @@ interface DangerButtonProps {
 }
 
 function DangerButton({ label, description, mutate }: DangerButtonProps) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-
   async function confirm() {
-    setLoading(true)
     try {
       const r = await mutate()
-      notifications.show({ color: 'green', message: r.message })
-      setOpen(false)
+      notify.success(r.message)
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
-    } finally {
-      setLoading(false)
+      notify.error(String(e))
     }
   }
 
   return (
-    <>
-      <Group justify="space-between" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-        <div>
-          <Text size="sm" fw={500}>{label}</Text>
-          <Text size="xs" c="dimmed">{description}</Text>
-        </div>
-        <Button color="red" variant="light" size="xs" onClick={() => setOpen(true)}>Delete</Button>
-      </Group>
-
-      <Modal opened={open} onClose={() => setOpen(false)} title={`Confirm: ${label}`} size="sm">
-        <Text size="sm" mb="md">{description} This cannot be undone.</Text>
-        <Group justify="flex-end">
-          <Button variant="default" size="xs" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button color="red" size="xs" loading={loading} onClick={confirm}>Delete</Button>
-        </Group>
-      </Modal>
-    </>
+    <div className="flex items-center justify-between gap-4 border-b py-3 last:border-b-0">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <ConfirmActionButton
+        variant="destructive"
+        size="xs"
+        confirmTitle={`Confirm: ${label}`}
+        confirmDescription={`${description} This cannot be undone.`}
+        onConfirm={confirm}
+      >
+        Delete
+      </ConfirmActionButton>
+    </div>
   )
 }
 
@@ -73,39 +67,42 @@ export function Settings() {
     setResetLoading(true)
     try {
       await resetDemoMut.mutateAsync()
-      notifications.show({ color: 'green', message: 'Demo data reset successfully' })
+      notify.success('Demo data reset successfully')
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     } finally {
       setResetLoading(false)
     }
   }
 
   return (
-    <Stack gap="lg" maw={600}>
-      <Title order={3}>Settings</Title>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <PageHeader title="Settings" />
 
       {db && (
-        <Alert title="Database" color="blue" variant="light">
-          <Text size="xs">Host: {db.host}:{db.port} / Database: {db.name}</Text>
-        </Alert>
+        <Section title="Database">
+          <p className="text-xs">Host: {db.host}:{db.port} / Database: {db.name}</p>
+        </Section>
       )}
 
       {demoMode && (
-        <Box>
-          <Text fw={600} mb="xs">Demo Mode</Text>
-          <Group justify="space-between" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+        <Section title="Demo Mode">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <Text size="sm" fw={500}><IconFlask size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Reset demo data</Text>
-              <Text size="xs" c="dimmed">Wipes all data and re-seeds the demo portfolio from scratch. No restart needed.</Text>
+              <p className="flex items-center gap-1 text-sm font-medium">
+                <FlaskConical className="size-3.5" />
+                Reset demo data
+              </p>
+              <p className="text-xs text-muted-foreground">Wipes all data and re-seeds the demo portfolio from scratch. No restart needed.</p>
             </div>
-            <Button color="violet" variant="light" size="xs" loading={resetLoading} onClick={handleResetDemo}>Reset</Button>
-          </Group>
-        </Box>
+            <Button variant="outline" size="xs" disabled={resetLoading} onClick={handleResetDemo}>
+              Reset
+            </Button>
+          </div>
+        </Section>
       )}
 
-      <Box>
-        <Text fw={600} mb="xs">Danger Zone</Text>
+      <Section title={<span className="text-destructive">Danger Zone</span>} className="border-destructive/40" bodyClassName="p-4 pt-0">
         <DangerButton
           label="Delete all trades"
           description="Removes all trades, holdings, import logs, and orphan instruments."
@@ -131,7 +128,7 @@ export function Settings() {
           description="Removes all FD, PPF, NPS, and cash entries."
           mutate={() => deleteManualAssetsMut.mutateAsync()}
         />
-      </Box>
-    </Stack>
+      </Section>
+    </div>
   )
 }

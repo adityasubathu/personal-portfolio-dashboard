@@ -1,7 +1,12 @@
-import { Select, Stack, Text, Title } from '@mantine/core'
+import { CandlestickChart } from 'lucide-react'
 import { useChartInstruments, usePriceChart } from '../api/charts'
 import { LwChart } from '../components/LwChart'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function PriceChart() {
   const { data: instruments } = useChartInstruments()
@@ -14,32 +19,46 @@ export function PriceChart() {
   })) ?? []
 
   return (
-    <Stack gap="md">
-      <Title order={3}>Price Chart</Title>
-
-      <Select
-        placeholder="Select instrument…"
-        data={options}
-        value={selectedId != null ? String(selectedId) : null}
-        onChange={(v) => setSelectedId(v != null ? Number(v) : null)}
-        searchable
-        clearable
-        w={320}
-        size="sm"
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Price Chart"
+        actions={
+          <Select
+            value={selectedId != null ? String(selectedId) : undefined}
+            onValueChange={(v) => setSelectedId(v ? Number(v) : null)}
+          >
+            <SelectTrigger className="w-72">
+              <SelectValue placeholder="Select instrument…" />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
       />
 
-      {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
+      {selectedId == null && (
+        <EmptyState icon={<CandlestickChart className="size-5" />} title="Select an instrument" description="Choose an instrument to view its price history." />
+      )}
+
+      {selectedId != null && isLoading && <Skeleton className="h-[520px] w-full" />}
 
       {chartData && selectedId != null && (
-        <LwChart
-          seriesType="candlestick"
-          candles={chartData.candles}
-          markers={chartData.markers}
-          persistKey="price_chart_h"
-          defaultHeight={520}
-          maskInPrivacy={false}
-        />
+        <Section bodyClassName="p-2">
+          <LwChart
+            seriesType="candlestick"
+            candles={chartData.candles}
+            markers={chartData.markers}
+            persistKey="price_chart_h"
+            defaultHeight={520}
+            maskInPrivacy={false}
+          />
+        </Section>
       )}
-    </Stack>
+    </div>
   )
 }

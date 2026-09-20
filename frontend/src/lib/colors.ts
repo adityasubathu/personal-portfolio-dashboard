@@ -26,3 +26,22 @@ export function sectorColor(index: number, total: number, label?: string): strin
 export function categoryColor(label: string): string {
   return CATEGORY_COLORS[label] ?? '#616161'
 }
+
+export type ChipColor = 'green' | 'teal' | 'blue' | 'indigo' | 'violet' | 'yellow' | 'orange' | 'red' | 'gray'
+
+// Badge/chip colours, carried over from the Mantine build's light-variant badges.
+export const CHIP_CLASS: Record<ChipColor, string> = {
+  green: 'bg-chip-green text-chip-green-fg',
+  teal: 'bg-chip-teal text-chip-teal-fg',
+  blue: 'bg-chip-blue text-chip-blue-fg',
+  indigo: 'bg-chip-indigo text-chip-indigo-fg',
+  violet: 'bg-chip-violet text-chip-violet-fg',
+  yellow: 'bg-chip-yellow text-chip-yellow-fg',
+  orange: 'bg-chip-orange text-chip-orange-fg',
+  red: 'bg-chip-red text-chip-red-fg',
+  gray: 'bg-chip-gray text-chip-gray-fg',
+}
+
+export function chipClass(color: string): string {
+  return CHIP_CLASS[color as ChipColor] ?? CHIP_CLASS.gray
+}

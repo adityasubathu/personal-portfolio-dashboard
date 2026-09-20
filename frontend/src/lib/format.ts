@@ -29,38 +29,28 @@ export function heatmapBg(
   if (value == null || value === 0) return undefined
   if (value > 0 && max != null && max > 0) {
     const intensity = Math.min(value / max, 1)
-    const color = mode === 'rb' ? '59, 130, 246' : '34, 197, 94'
-    return `rgba(${color}, ${0.20 + intensity * 0.45})`
+    const color = mode === 'rb' ? 'var(--info)' : 'var(--positive)'
+    return `color-mix(in oklab, ${color} ${Math.round(7 + intensity * 11)}%, var(--card))`
   }
   if (value < 0 && min != null && min < 0) {
     const intensity = Math.min(Math.abs(value) / Math.abs(min), 1)
-    return `rgba(239, 68, 68, ${0.20 + intensity * 0.45})`
+    return `color-mix(in oklab, var(--negative) ${Math.round(7 + intensity * 11)}%, var(--card))`
   }
   return undefined
 }
 
-// Returns '#000000' or '#ffffff' for readable text on a heatmapBg cell (blended against white).
 export function heatmapTextColor(
   value: number | null | undefined,
   min: number | null | undefined,
   max: number | null | undefined,
   mode: 'rg' | 'rb' = 'rg',
 ): string | undefined {
-  const bg = heatmapBg(value, min, max, mode)
-  if (!bg) return undefined
-  const m = bg.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)
-  if (!m) return undefined
-  const [r, g, b, a] = [+m[1], +m[2], +m[3], +m[4]]
-  const er = r * a + 255 * (1 - a)
-  const eg = g * a + 255 * (1 - a)
-  const eb = b * a + 255 * (1 - a)
-  const brightness = 0.299 * er + 0.587 * eg + 0.114 * eb
-  return brightness > 160 ? '#000000' : '#ffffff'
+  return heatmapBg(value, min, max, mode) ? 'var(--foreground)' : undefined
 }
 
 export function gainColor(value: number | null | undefined): string {
   if (value == null || value === 0) return 'inherit'
-  return value > 0 ? 'var(--mantine-color-green-8)' : 'var(--mantine-color-red-8)'
+  return value > 0 ? 'var(--positive)' : 'var(--negative)'
 }
 
 export function shortDate(iso: string): string {

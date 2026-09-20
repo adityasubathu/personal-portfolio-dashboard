@@ -1,5 +1,86 @@
 # Changelog
 
+## 2026-09-20-15-44-06 — Donut chart layout fix
+- Fixed donut charts rendering at full column width with their legend pushed off screen, and started each donut at 12 o'clock going clockwise. (2026-09-20-15-44-06 · a5f7a50)
+- Donut legends now stack under the chart when their card is narrow, so the Sector Allocation legend no longer spills over the sector table. (2026-09-20-15-45-57 · 8d36244)
+- Widened the Sector Allocation card to 560px, narrowing the sector table beside it, so the donut and its legend fit side by side. (2026-09-20-15-46-38 · 8139c48)
+- Donut legends now actually sit beside the chart once their card is wide enough, centred in their column; the sector legend is back on the right. (2026-09-20-15-48-07 · 5aac1cf)
+- NAV History: the sync, fetch and upload sections below the charts now sit in a centred, narrower column instead of spanning the full page. (2026-09-20-15-50-06 · 7e94c9c)
+- Capital Gains: the per-bucket tax estimate cards now centre themselves, so a short row sits in the middle instead of hugging the left edge. (2026-09-20-15-51-23 · 2838fd9)
+- Market Sentiment: charts are one per row at every width, and each chart's name is centred above it in a larger font. (2026-09-20-15-52-51 · 5501d74)
+- Market Sentiment: the period selector moved from the page header to the price chart's own control row, and that chart is now titled "Index Price and Trends". (2026-09-20-15-54-49 · 41d3fde)
+- Market Sentiment: RSI and MACD now share a row on wide screens; every other chart stays one per row. (2026-09-20-15-55-47 · 343881d)
+- Badges across the app use the Mantine build's light-variant palette again — saturated tints and deep text instead of the washed-out 10% overlays. (2026-09-20-15-58-31 · 0e6486e)
+- The selected option in every segmented toggle (index, period, sector level, NAV source) is now blue with white text instead of a faint grey. (2026-09-20-16-00-21 · e15bf72)
+- Capital Gains sits in from the window edges with its own horizontal padding. (2026-09-20-16-02-51 · c954c0e)
+- Capital Gains' horizontal padding widened six-fold, to 48px on mobile and 192px on desktop. (2026-09-20-16-03-22 · 97b5f36)
+- Fund Detail: a long fund name is now truncated inside the selector button instead of spilling out of it. (2026-09-20-16-04-37 · cba4d17)
+- Fund Detail holdings table: new Industry column with NSE's macro → sector → industry → basic path, equity rows show "Equity" plus a Large/Mid/Small chip, and the header is bolder, larger and ruled off from the rows. (2026-09-20-16-08-56 · af30ad2)
+- Fund Detail: the Industry column is blank for non-equity holdings instead of repeating a placeholder taxonomy. (2026-09-20-16-09-52 · a020191)
+- Fund Detail holdings table: the Industry header spells out the Macro → Sector → Industry → Basic order, and the rows are 20% larger. (2026-09-20-16-11-32 · e40c586)
+- Fund Detail holdings table: fonts trimmed 10% and alternating rows shaded. (2026-09-20-16-12-04 · f26a2f2)
+- Fund Detail: the alternating row shading is now actually visible, with a matching darker hover. (2026-09-20-16-12-43 · 088dbaa)
+- Fund Detail is inset horizontally to match Capital Gains. (2026-09-20-16-13-20 · cbba2b5)
+- Page titles are twice the size on every route. (2026-09-20-16-13-55 · 86d62d9)
+- Fund Detail holdings are grouped under Equity / Debt / Precious Metals / Cash headings, with empty groups omitted. (2026-09-20-16-15-17 · 807c745)
+- Fund Detail group headings carry their % and value totals, and stand apart from the rows they head. (2026-09-20-16-16-11 · 54d49b8)
+- Fund Detail: holdings rows are numbered within their group and the group name is centred over them. (2026-09-20-16-16-58 · 1cc2c38)
+- Fund Detail: foreign equity holdings get an indigo "Foreign" chip matching their donut slice. (2026-09-20-16-17-34 · cb68e3c)
+- Fund Detail: the catch-all holdings group is named "Others". (2026-09-20-16-19-15 · 97d152b)
+- Fund Detail: REIT holdings moved out of Equity and into Others. (2026-09-20-16-20-16 · a9c04a8)
+
+## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
+- Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
+- Installed the shadcn/ui primitives and defined the flat white/bordered surface tokens; the colour scheme now follows the OS via a `dark` class. (2026-09-19-00-05-00 · 1fb334d)
+- Rebuilt the app shell (navigation, top bar) on the shadcn sidebar block. (2026-09-19-00-10-00 · e5254d3)
+- Rebuilt Section/PageHeader/MetricCard/EmptyState/MoneyText on Tailwind; Panel becomes a temporary compatibility shim. (2026-09-19-00-15-00 · a1c291a)
+- Rebuilt ConfirmActionButton on Dialog and SsePanel on Section; added the notify() toast helper over sonner. (2026-09-19-00-20-00 · c3af86b)
+- Rebuilt DataTable on plain Tailwind table markup, keeping its sort/section/heatmap contract unchanged. (2026-09-19-00-25-00 · 5bdbc3f)
+- Rebuilt DonutChart on recharts; chart.js and react-chartjs-2 are gone. (2026-09-19-00-30-00 · a955deb)
+- Dropped Mantine from the lightweight-charts wrapper markup. (2026-09-19-00-35-00 · 99680f8)
+- Rebuilt Price Chart, Fund NAV Chart and Fund Detail on the shared layout grammar. (2026-09-19-00-40-00 · 22a98cf)
+- Rebuilt Settings and Kite pages on Tailwind. (2026-09-19-00-45-00 · b7d07a2)
+- Rebuilt the Import page on a two-column Tailwind grid. (2026-09-19-00-50-00 · 0b4a12f)
+- Rebuilt the Trades page with a dense table, search/pagination and a mobile card list. (2026-09-19-00-55-00 · 7e286ed)
+- Rebuilt the Policy Tracker on Section + Collapsible detail rows. (2026-09-19-01-00-00 · ddb8d6e)
+- Rebuilt the NAV History page on Tailwind sections. (2026-09-19-01-05-00 · e76ecb5)
+- Rebuilt the Capital Gains page on Tailwind. (2026-09-19-01-10-00 · 9ded8ea)
+- Rebuilt the Dashboard summary cards and holdings table on Tailwind. (2026-09-19-01-15-00 · 913121e)
+- Rebuilt Dashboard manual assets as four focused Sections; Dashboard.tsx is Mantine-free. (2026-09-19-01-20-00 · e0b887a)
+- Rebuilt the Breakdown page shell and Overview tab on Tailwind. (2026-09-19-01-25-00 · f3dc2a4)
+- Rebuilt the Breakdown Sector tab and classify panels on Tailwind. (2026-09-19-01-30-00 · 365bce0)
+- Rebuilt the Breakdown Composition tab; Breakdown.tsx is Mantine-free. (2026-09-19-01-35-00 · 001e10f)
+- Rebuilt the Market Sentiment header, summary and price chart on Tailwind. (2026-09-19-01-40-00 · c2b3703)
+- Rebuilt the Market Sentiment oscillator, volatility and breadth panels on Tailwind. (2026-09-19-01-45-00 · 5fe2e6a)
+- Rebuilt the Market Sentiment sector trends table; MarketSentiment.tsx is Mantine-free. (2026-09-19-01-50-00 · ed5fbea)
+
+## 2026-09-18-23-37-05 — Neutral surfaces, blue navigation, system colour scheme
+
+- Retuned the design tokens: every surface, border and text colour in both themes is now neutral grey, with the blue tinge confined to the left navigation (`--nav-bg`, `--nav-hover`, `--nav-active`) and the Mantine primary swapped from `portfolioTeal` to `portfolioBlue`.
+- Replaced Mantine's grey NavLink hover, which was unreadable against the dark navigation panel, with a navigation-scoped blue hover.
+- Moved the shell to `layout="alt"` so the navigation panel reaches the top of the page and the top bar spans only the content column; added an in-panel burger since the open mobile panel now covers the header.
+- Cut the page gutters (`px` 32px → 10px) and dropped the 1600px content cap so tables use the full width.
+- Removed the ambient green from the dashboard: positive heat fills are blue (losses stay red), fill intensity softened to 7–18%, and the metric card tone moved from a coloured top stripe onto the value text. Gain/loss figures stay green/red.
+- The colour scheme now follows the operating system with no manual toggle; a pre-paint script in `index.html` sets the scheme attribute and a non-persisting colour scheme manager keeps `auto` from being overridden by a previously stored choice.
+
+---
+
+## 2026-09-18-22-25-37 — Professional portfolio tracker UI redesign
+
+- Established the semantic light/dark design foundation and local system typography. (2026-09-18-22-38-36 · 3324d8f)
+- Added reusable headers, panels, metric, empty, and confirmation action primitives. (2026-09-18-22-40-05 · 699ec06)
+- Rebuilt navigation and deferred route code until each page is visited. (2026-09-18-22-45-37 · 3fe0cf9)
+- Standardized shared table, currency, SSE, and heatmap presentation. (2026-09-18-22-48-39 · 06eee83)
+- Improved responsive chart rendering and resolved shared chart lint issues. (2026-09-18-22-51-53 · fa2f72b)
+- Redesigned the dashboard with responsive holdings, persisted sorting, and safer manual asset actions. (2026-09-18-22-57-51 · 36b5d8b)
+- Redesigned allocation analysis with responsive panels, table scrolling, and lint-safe state handling. (2026-09-18-23-03-02 · 9b0ddab)
+- Redesigned Market Sentiment surfaces for responsive chart and analysis presentation. (2026-09-18-23-05-28 · efd3544)
+- Redesigned portfolio exploration routes with shared panels and selection empty states. (2026-09-18-23-08-24 · pending)
+- Redesigned tax and policy views with shared decision surfaces. (2026-09-18-23-11-03 · pending)
+- Redesigned trade and import workflows with safer operational actions. (2026-09-18-23-13-19 · pending)
+- Redesigned Kite and Settings administration surfaces with shared confirmations. (2026-09-18-23-17-11 · pending)
+- Documented the responsive frontend and completed final build/lint validation. (2026-09-18-23-20-00 · pending)
+
 ---
 
 ## 2026-09-18-18-37-35 — Dead-code audit: unreachable endpoints, dead metadata, duplicated logic

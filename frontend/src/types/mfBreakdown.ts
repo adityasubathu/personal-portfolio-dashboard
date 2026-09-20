@@ -89,6 +89,10 @@ export interface SchemeHolding {
   name: string
   type: string
   category: string
+  macro_sector: string | null
+  sector: string | null
+  industry: string | null
+  basic_industry: string | null
   pct: number
   value: number
 }

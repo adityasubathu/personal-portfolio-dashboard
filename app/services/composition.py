@@ -142,6 +142,10 @@ async def get_scheme_breakdown(db: AsyncSession, scheme_isin: str) -> dict:
             "name": r.name,
             "type": r.holding_type,
             "category": r.category,
+            "macro_sector": r.macro_sector,
+            "sector": r.sector,
+            "industry": r.industry,
+            "basic_industry": r.basic_industry,
             "pct": round(pct, 4),
             "value": value,
         })

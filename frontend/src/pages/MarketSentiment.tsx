@@ -1,26 +1,19 @@
 import { useMemo, useState, useRef, useCallback } from 'react'
-import {
-  ActionIcon,
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Divider,
-  Group,
-  Loader,
-  Popover,
-  ScrollArea,
-  SegmentedControl,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { IconAlertCircle, IconInfoCircle, IconRefresh } from '@tabler/icons-react'
+import { AlertCircle, Info, RefreshCw } from 'lucide-react'
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { CHIP_CLASS, chipClass } from '@/lib/colors'
+import { notify } from '@/lib/notify'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
@@ -48,6 +41,8 @@ function toNavPoints(pts: IndicatorPoint[]): NavPoint[] {
   return pts.filter((p) => p.value !== null) as NavPoint[]
 }
 
+// Maps the Mantine colour-name vocabulary the sentiment data model speaks
+// (green/red/orange/...) to Tailwind tone classes for Badge.
 // Four-step gradient over the shared trend labels (3/2/1/0 signals passing).
 const TREND_COLORS: Record<string, string> = {
   'Bullish': 'green',
@@ -111,34 +106,21 @@ const EXPLANATIONS = {
   sectorTrends: `Trend labels use the same scoring as the summary card at the top of the page, so the two always agree for Nifty 50 and Nifty 500. Each horizon asks three yes/no questions — is the price above its moving average, is the trend still gaining strength, and has the price actually risen — and counts the yeses:\n\n• Short (weeks) — 20-day average, MACD, 1-month return\n• Mid (months) — 50-day average, +DI/−DI, 3-month return\n• Long (year+) — 200-day average, 200-day slope, 1-year return\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\nClick any badge to see which questions passed. ↘ means "losing steam" — the price is up, but the trend has stopped gaining strength.\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
 }
 
-/** Click-to-open explainer popover. `target` is rendered inside Popover.Target,
- *  so it receives the toggle handler from the caller. */
-function InfoPopover({ text, target }: { text: string; target: (toggle: () => void) => React.ReactNode }) {
-  const [opened, setOpened] = useState(false)
+/** Click-to-open explainer popover. `children` is the trigger element. */
+function InfoPopover({ text, children }: { text: string; children: React.ReactNode }) {
   return (
-    <Popover
-      opened={opened}
-      onChange={setOpened}
-      width={320}
-      position="bottom"
-      withArrow
-      shadow="md"
-      clickOutsideEvents={['mousedown', 'touchstart']}
-    >
-      <Popover.Target>
-        {target(() => setOpened((o) => !o))}
-      </Popover.Target>
-      <Popover.Dropdown maw={320}>
-        <Text size="xs" style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
-          {text}
-        </Text>
-      </Popover.Dropdown>
+    <Popover>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent className="w-80" align="start">
+        <p className="text-xs leading-relaxed whitespace-pre-line">{text}</p>
+      </PopoverContent>
     </Popover>
   )
 }
 
-/** One oscillator panel: centred caption + explainer, then a short chart that
- *  shares the price-scale width of every other chart on the page. */
+/** One oscillator panel: a Section titled with the indicator name, its
+ *  explainer in the header, and a short chart sharing the price-scale
+ *  width of every other chart on the page. */
 function OscillatorChart({
   caption,
   info,
@@ -156,11 +138,7 @@ function OscillatorChart({
   formatter: (v: number) => string
 } & React.ComponentProps<typeof LwChart>) {
   return (
-    <Box px={128}>
-      <Group justify="center" align="center" gap={6} mb={4}>
-        <Text fz="1.75rem" fw={500} c="dimmed">{caption}</Text>
-        <ChartInfo text={info} />
-      </Group>
+    <Section title={caption} action={<ChartInfo text={info} />} bodyClassName="p-2" centerTitle>
       <LwChart
         {...chart}
         priceScaleWidth={scaleWidth}
@@ -170,20 +148,17 @@ function OscillatorChart({
         hideControls
         maskInPrivacy={false}
       />
-    </Box>
+    </Section>
   )
 }
 
 function ChartInfo({ text }: { text: string }) {
   return (
-    <InfoPopover
-      text={text}
-      target={(toggle) => (
-        <ActionIcon variant="subtle" color="gray" size="sm" onClick={toggle} style={{ flexShrink: 0 }}>
-          <IconInfoCircle size={16} />
-        </ActionIcon>
-      )}
-    />
+    <InfoPopover text={text}>
+      <Button variant="ghost" size="icon-xs" className="shrink-0" aria-label="More info">
+        <Info className="size-4 text-muted-foreground" />
+      </Button>
+    </InfoPopover>
   )
 }
 
@@ -261,49 +236,51 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
   ]
 
   return (
-    <Box px={128}>
-      <Table withTableBorder withColumnBorders fz="md">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th w={120}>Horizon</Table.Th>
-            <Table.Th w={160}>Trend</Table.Th>
-            <Table.Th w={260}>Momentum</Table.Th>
-            <Table.Th w={160}>
-              <Group gap={4} align="center" wrap="nowrap">
-                Volatility (realized)
-                <ChartInfo text={EXPLANATIONS.tableVol} />
-              </Group>
-            </Table.Th>
-            <Table.Th w={220}>Volatility (implied)</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.map((r) => (
-            <Table.Tr key={r.horizon}>
-              <Table.Td fw={500}>{r.horizon}</Table.Td>
-              <Table.Td>
-                <TrendChip horizon={r.trend} info={r.trendInfo} size="md" />
-              </Table.Td>
-              <Table.Td c="dimmed" fz="sm">
-                <Group gap={4} align="center" wrap="nowrap">
-                  <span>{r.detail1} &nbsp;·&nbsp; {r.detail2}</span>
-                  <ChartInfo text={r.momentumInfo} />
-                </Group>
-              </Table.Td>
-              <Table.Td c="dimmed" fz="sm">
-                {r.vol}
-              </Table.Td>
-              <Table.Td c="dimmed" fz="sm">
-                <Group gap={4} align="center" wrap="nowrap">
-                  <span>{r.vixLabel}</span>
-                  <ChartInfo text={r.vixInfo} />
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Box>
+    <Section bodyClassName="p-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 w-28 px-2 text-left font-medium text-muted-foreground">Horizon</th>
+              <th className="h-8 w-36 px-2 text-left font-medium text-muted-foreground">Trend</th>
+              <th className="h-8 w-64 px-2 text-left font-medium text-muted-foreground">Momentum</th>
+              <th className="h-8 w-36 px-2 text-left font-medium text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Volatility (realized)
+                  <ChartInfo text={EXPLANATIONS.tableVol} />
+                </span>
+              </th>
+              <th className="h-8 w-52 px-2 text-left font-medium text-muted-foreground">Volatility (implied)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.horizon} className="hover:bg-muted/50">
+                <td className="px-2 py-1.5 font-medium">{r.horizon}</td>
+                <td className="px-2 py-1.5">
+                  <TrendChip horizon={r.trend} info={r.trendInfo} />
+                </td>
+                <td className="px-2 py-1.5 text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span>{r.detail1} &nbsp;·&nbsp; {r.detail2}</span>
+                    <ChartInfo text={r.momentumInfo} />
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 text-muted-foreground">
+                  {r.vol}
+                </td>
+                <td className="px-2 py-1.5 text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span>{r.vixLabel}</span>
+                    <ChartInfo text={r.vixInfo} />
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -311,14 +288,11 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
 
 function FlagChip({ label, color, info }: { label: string; color: string; info: string }) {
   return (
-    <InfoPopover
-      text={info}
-      target={(toggle) => (
-        <Badge color={color} variant="light" size="sm" fz="0.825rem" style={{ cursor: 'pointer' }} onClick={toggle}>
-          {label}
-        </Badge>
-      )}
-    />
+    <InfoPopover text={info}>
+      <Badge variant="outline" className={cn('cursor-pointer', chipClass(color))}>
+        {label}
+      </Badge>
+    </InfoPopover>
   )
 }
 
@@ -435,11 +409,11 @@ function FlagsBanner({ flags }: { flags: SentimentFlags }) {
   if (active.length === 0) return null
 
   return (
-    <Group gap="xs" wrap="wrap" align="center">
+    <div className="flex flex-wrap items-center gap-2">
       {active.map((item) => (
         <FlagChip key={item.label} label={item.label} color={item.color} info={item.info} />
       ))}
-    </Group>
+    </div>
   )
 }
 
@@ -467,69 +441,71 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
   const toneColor = tone === 'risk_on' ? 'green' : 'yellow'
 
   return (
-    <Box px={128}>
-      <Table withTableBorder withColumnBorders fz="md">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th w={120}>Horizon</Table.Th>
-            <Table.Th w={200}>Signal</Table.Th>
-            <Table.Th>Reading</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          <Table.Tr>
-            <Table.Td fw={500}>Short-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Breadth Regime
-                <ChartInfo text={EXPLANATIONS.breadthRegime} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <Badge color={regimeColor(data.regime.label)} variant="light" size="sm" fz="0.825rem">
-                {data.regime.label}
-              </Badge>
-            </Table.Td>
-          </Table.Tr>
-          <Table.Tr>
-            <Table.Td fw={500}>Mid-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Relative Strength
-                <ChartInfo text={EXPLANATIONS.relativeStrength} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <Group gap={8} align="center" wrap="nowrap">
-                <Text fz="sm" c="dimmed">{data.relative_strength.order}</Text>
-                <Badge color={toneColor} variant="light" size="xs" fz="0.825rem">
-                  {toneLabel}
+    <Section bodyClassName="p-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 w-28 px-2 text-left font-medium text-muted-foreground">Horizon</th>
+              <th className="h-8 w-48 px-2 text-left font-medium text-muted-foreground">Signal</th>
+              <th className="h-8 px-2 text-left font-medium text-muted-foreground">Reading</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Short-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Breadth Regime
+                  <ChartInfo text={EXPLANATIONS.breadthRegime} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <Badge variant="outline" className={chipClass(regimeColor(data.regime.label))}>
+                  {data.regime.label}
                 </Badge>
-              </Group>
-            </Table.Td>
-          </Table.Tr>
-          <Table.Tr>
-            <Table.Td fw={500}>Long-term</Table.Td>
-            <Table.Td c="dimmed" fz="sm">
-              <Group gap={4} align="center" wrap="nowrap">
-                Segment Drawdown
-                <ChartInfo text={EXPLANATIONS.segmentDrawdown} />
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <Group gap={8} align="center" wrap="nowrap">
-                <Text fz="sm" c="dimmed">{ddStr}</Text>
-                {dd.stress_flag && (
-                  <Badge color="orange" variant="light" size="xs" fz="0.825rem">
-                    Smallcap drawdown disproportionate
+              </td>
+            </tr>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Mid-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Relative Strength
+                  <ChartInfo text={EXPLANATIONS.relativeStrength} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-muted-foreground">{data.relative_strength.order}</span>
+                  <Badge variant="outline" className={chipClass(toneColor)}>
+                    {toneLabel}
                   </Badge>
-                )}
-              </Group>
-            </Table.Td>
-          </Table.Tr>
-        </Table.Tbody>
-      </Table>
-    </Box>
+                </span>
+              </td>
+            </tr>
+            <tr className="hover:bg-muted/50">
+              <td className="px-2 py-1.5 font-medium">Long-term</td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  Segment Drawdown
+                  <ChartInfo text={EXPLANATIONS.segmentDrawdown} />
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-muted-foreground">{ddStr}</span>
+                  {dd.stress_flag && (
+                    <Badge variant="outline" className={CHIP_CLASS.orange}>
+                      Smallcap drawdown disproportionate
+                    </Badge>
+                  )}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -564,37 +540,30 @@ const SIGNAL_LABELS: Record<string, string> = {
   ret_1y:      '1-year return > 0',
 }
 
-function TrendChip({ horizon, info, size = 'xs' }: { horizon: TrendCell; info?: string; size?: string }) {
-  const [open, setOpen] = useState(false)
+function TrendChip({ horizon, info }: { horizon: TrendCell; info?: string }) {
   return (
-    <Popover opened={open} onChange={setOpen} withArrow shadow="md" width={260} position="bottom">
-      <Popover.Target>
-        <Badge
-          size={size}
-          color={trendColor(horizon.label)}
-          variant="light"
-          style={{ cursor: 'pointer' }}
-          onClick={() => setOpen(o => !o)}
-        >
+    <Popover>
+      <PopoverTrigger asChild>
+        <Badge variant="outline" className={cn('cursor-pointer', chipClass(trendColor(horizon.label)))}>
           {horizon.label}{horizon.fading ? ' ↘' : ''}
         </Badge>
-      </Popover.Target>
-      <Popover.Dropdown>
-        <Stack gap={4}>
+      </PopoverTrigger>
+      <PopoverContent className="w-64" align="start">
+        <div className="space-y-1">
           {Object.entries(horizon.signals).map(([key, passed]) => (
-            <Group key={key} gap={6} wrap="nowrap">
-              <Text size="xs" c={passed ? 'green' : 'red'} fw={600}>{passed ? '✓' : '✗'}</Text>
-              <Text size="xs" c={passed ? undefined : 'dimmed'}>{SIGNAL_LABELS[key] ?? key}</Text>
-            </Group>
+            <div key={key} className="flex items-center gap-1.5">
+              <span className={cn('text-xs font-semibold', passed ? 'text-positive' : 'text-negative')}>{passed ? '✓' : '✗'}</span>
+              <span className={cn('text-xs', !passed && 'text-muted-foreground')}>{SIGNAL_LABELS[key] ?? key}</span>
+            </div>
           ))}
           {horizon.fading && (
-            <Text size="xs" c="orange" mt={2}>
+            <p className="mt-0.5 text-xs text-warning">
               ↘ Losing steam — the price is up, but the trend has stopped gaining strength.
-            </Text>
+            </p>
           )}
-          {info && <Text size="xs" c="dimmed" mt={4} style={{ whiteSpace: 'pre-line' }}>{info}</Text>}
-        </Stack>
-      </Popover.Dropdown>
+          {info && <p className="mt-1 text-xs whitespace-pre-line text-muted-foreground">{info}</p>}
+        </div>
+      </PopoverContent>
     </Popover>
   )
 }
@@ -666,80 +635,71 @@ function SectorTrendsTable() {
 
   const benchLabel = bench === 'vs_n50' ? 'Nifty 50' : 'Nifty 500'
 
-  const thStyle: React.CSSProperties = { textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
-  const tdRight: React.CSSProperties = { textAlign: 'right' }
-  const groupDivider = '2px solid black'
-  const subHd: React.CSSProperties = { textAlign: 'center', color: 'var(--mantine-color-dimmed)', fontWeight: 400, fontSize: 'var(--mantine-font-size-xs)' }
-
   return (
-    <Box px={128}>
-      <Group justify="space-between" align="center" mb="xs" wrap="wrap" gap="xs">
-        <Group gap={6} align="center">
-          <Text fw={600}>Sector Trends</Text>
-          {data.as_of && <Text size="xs" c="dimmed">as of {data.as_of}</Text>}
+    <Section
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          Sector Trends
+          {data.as_of && <span className="text-xs font-normal text-muted-foreground">as of {data.as_of}</span>}
           <ChartInfo text={EXPLANATIONS.sectorTrends} />
-        </Group>
-        <SegmentedControl
-          size="xs"
-          value={bench}
-          onChange={v => { setBench(v as SectorBench); setSortKey(null) }}
-          data={[
-            { value: 'vs_n50',  label: 'vs Nifty 50' },
-            { value: 'vs_n500', label: 'vs Nifty 500' },
-          ]}
-        />
-      </Group>
-      <ScrollArea>
-        <Table withTableBorder withColumnBorders fz="sm" style={{ minWidth: 820 }}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Index</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Short</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Mid</Table.Th>
-              <Table.Th style={{ textAlign: 'center' }}>Long</Table.Th>
-              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</Table.Th>
-              <Table.Th style={{ ...thStyle, borderLeft: groupDivider }} onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</Table.Th>
-              <Table.Th style={thStyle} onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</Table.Th>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th colSpan={4} />
-              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Annualised CAGR</Table.Th>
-              <Table.Th colSpan={3} style={{ ...subHd, borderLeft: groupDivider }}>Excess CAGR vs {benchLabel} (pp)</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+        </span>
+      }
+      action={
+        <ToggleGroup type="single" variant="outline" size="sm" value={bench} onValueChange={(v) => { if (v) { setBench(v as SectorBench); setSortKey(null) } }}>
+          <ToggleGroupItem value="vs_n50">vs Nifty 50</ToggleGroupItem>
+          <ToggleGroupItem value="vs_n500">vs Nifty 500</ToggleGroupItem>
+        </ToggleGroup>
+      }
+      bodyClassName="p-0"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 820 }}>
+          <thead>
+            <tr className="sticky top-0 z-10 bg-card">
+              <th className="h-8 sticky left-0 z-20 bg-card px-2 text-left font-medium text-muted-foreground">Index</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Short</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Mid</th>
+              <th className="h-8 px-2 text-center font-medium text-muted-foreground">Long</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground border-l-2 border-foreground select-none" onClick={() => handleSort('cagr_2y')}>2Y{sortInd('cagr_2y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('cagr_5y')}>5Y{sortInd('cagr_5y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('cagr_10y')}>10Y{sortInd('cagr_10y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground border-l-2 border-foreground select-none" onClick={() => handleSort('vs_2y')}>2Y{sortInd('vs_2y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('vs_5y')}>5Y{sortInd('vs_5y')}</th>
+              <th className="h-8 cursor-pointer px-2 text-right font-medium whitespace-nowrap text-muted-foreground select-none" onClick={() => handleSort('vs_10y')}>10Y{sortInd('vs_10y')}</th>
+            </tr>
+            <tr className="sticky top-8 z-10 bg-card">
+              <th colSpan={4} className="sticky left-0 z-20 bg-card" />
+              <th colSpan={3} className="border-l-2 border-foreground text-center text-[11px] font-normal text-muted-foreground">Annualised CAGR</th>
+              <th colSpan={3} className="border-l-2 border-foreground text-center text-[11px] font-normal text-muted-foreground">Excess CAGR vs {benchLabel} (pp)</th>
+            </tr>
+          </thead>
+          <tbody>
             {allRows.map((row, idx) => {
               const isBench = row.is_benchmark
               const sepAfterBench = !isBench && idx > 0 && allRows[idx - 1].is_benchmark
               return (
-                <Table.Tr
+                <tr
                   key={row.symbol}
-                  style={{
-                    fontWeight: isBench ? 600 : undefined,
-                    borderTop: sepAfterBench ? '2px solid var(--mantine-color-gray-3)' : undefined,
-                  }}
+                  className={cn('hover:bg-muted/50', isBench && 'font-semibold', sepAfterBench && 'border-t-2 border-border')}
                 >
-                  <Table.Td>
-                    <Text size="sm" fw={isBench ? 600 : undefined}>{row.label}</Text>
-                  </Table.Td>
+                  <td className="sticky left-0 z-10 bg-card px-2 py-1.5">
+                    {row.label}
+                  </td>
                   {(['short', 'mid', 'long'] as const).map(h => (
-                    <Table.Td key={h} style={{ textAlign: 'center' }}>
+                    <td key={h} className="px-2 py-1.5 text-center">
                       {row.trend ? (
                         <TrendChip horizon={row.trend[h]} />
-                      ) : <Text c="dimmed" size="xs">—</Text>}
-                    </Table.Td>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
                   ))}
                   {horizons.map((h, ci) => {
                     const v = cagrVal(row, h)
                     const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci])
                     return (
-                      <Table.Td key={`cagr_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
-                        {v != null ? pct(v, 1) : <Text c="dimmed" size="xs" component="span">—</Text>}
-                      </Table.Td>
+                      <td key={`cagr_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
+                        {v != null ? pct(v, 1) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
                     )
                   })}
                   {horizons.map((h, ci) => {
@@ -747,18 +707,18 @@ function SectorTrendsTable() {
                     const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci])
                     const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci])
                     return (
-                      <Table.Td key={`vs_${h}`} style={{ ...tdRight, background: bg, color: fg, ...(ci === 0 ? { borderLeft: groupDivider } : {}) }}>
-                        {v != null ? pct(v, 1, true) : <Text c="dimmed" size="xs" component="span">—</Text>}
-                      </Table.Td>
+                      <td key={`vs_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
+                        {v != null ? pct(v, 1, true) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
                     )
                   })}
-                </Table.Tr>
+                </tr>
               )
             })}
-          </Table.Tbody>
-        </Table>
-      </ScrollArea>
-    </Box>
+          </tbody>
+        </table>
+      </div>
+    </Section>
   )
 }
 
@@ -802,7 +762,7 @@ export function MarketSentiment() {
       color: d.color,
       data: filterByDays(toNavPoints(series.overlays![d.key]), rangeDays),
     }))
-  }, [series?.overlays, enabledOverlays, rangeDays])
+  }, [series, enabledOverlays, rangeDays])
 
   const oscData = useMemo(() => {
     if (!series?.oscillators) return null
@@ -817,7 +777,7 @@ export function MarketSentiment() {
       rv20: toNavPoints(filterByDays(osc.realized_vol_20, d)),
       rv60: toNavPoints(filterByDays(osc.realized_vol_60, d)),
     }
-  }, [series?.oscillators, rangeDays])
+  }, [series, rangeDays])
 
   function toggleOverlay(key: OverlayKey) {
     const next = enabledOverlays.includes(key)
@@ -826,85 +786,66 @@ export function MarketSentiment() {
     setEnabledOverlays(next)
   }
 
-  if (summaryLoading) return <Loader size="sm" m="xl" />
+  if (summaryLoading) return <Skeleton className="m-8 h-8 w-32" />
   if (summary?.no_data) {
     return (
-      <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light" maw={480}>
-        No {indexLabel} price history found. Run a portfolio sync (Kite → Sync) to load index data.
+      <Alert>
+        <AlertCircle className="size-4" />
+        <AlertDescription>No {indexLabel} price history found. Run a portfolio sync (Kite → Sync) to load index data.</AlertDescription>
       </Alert>
     )
   }
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between" align="center">
-        <Box>
-          <Title order={3}>Market Sentiment — {indexLabel}</Title>
-          {summary?.as_of && (
-            <Text fz="xs" c="dimmed">
-              As of {summary.as_of} · Close: {summary.close?.toLocaleString('en-IN')}
-            </Text>
-          )}
-        </Box>
-        <Group gap="xs">
-          <SegmentedControl
-            size="xs"
-            value={index}
-            onChange={(v) => setIndex(v as SentimentIndex)}
-            data={[
-              { value: 'nifty50', label: 'Nifty 50' },
-              { value: 'nifty500', label: 'Nifty 500' },
-            ]}
-          />
-          <Button
-            size="xs"
-            variant="subtle"
-            leftSection={<IconRefresh size={14} />}
-            loading={refreshMutation.isPending}
-            onClick={() => {
-              refreshMutation.mutate(undefined, {
-                onSuccess: (data) => {
-                  if (!data.ok) {
-                    notifications.show({
-                      title: 'Index refresh failed',
-                      message: data.error ?? 'Unknown error',
-                      color: 'red',
-                    })
-                  } else if (data.rows_added === 0) {
-                    notifications.show({
-                      message: 'No new candles — market may not have opened yet or data is already current.',
-                      color: 'gray',
-                      autoClose: 3000,
-                    })
-                  }
-                },
-                onError: (err) => {
-                  notifications.show({
-                    title: 'Index refresh failed',
-                    message: err instanceof Error ? err.message : 'Request failed',
-                    color: 'red',
-                  })
-                },
-              })
-            }}
-          >
-            Refresh
-          </Button>
-        </Group>
-      </Group>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={`Market Sentiment — ${indexLabel}`}
+        meta={summary?.as_of && `As of ${summary.as_of} · Close: ${summary.close?.toLocaleString('en-IN')}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <ToggleGroup type="single" variant="outline" size="sm" value={index} onValueChange={(v) => v && setIndex(v as SentimentIndex)}>
+              <ToggleGroupItem value="nifty50">Nifty 50</ToggleGroupItem>
+              <ToggleGroupItem value="nifty500">Nifty 500</ToggleGroupItem>
+            </ToggleGroup>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={refreshMutation.isPending}
+              onClick={() => {
+                refreshMutation.mutate(undefined, {
+                  onSuccess: (data) => {
+                    if (!data.ok) {
+                      notify.error(data.error ?? 'Unknown error', 'Index refresh failed')
+                    } else if (data.rows_added === 0) {
+                      notify.info('No new candles — market may not have opened yet or data is already current.')
+                    }
+                  },
+                  onError: (err) => {
+                    notify.error(err instanceof Error ? err.message : 'Request failed', 'Index refresh failed')
+                  },
+                })
+              }}
+            >
+              <RefreshCw className="size-3.5" />
+              Refresh
+            </Button>
+          </div>
+        }
+      />
 
       {summary?.horizons && <SentimentSummaryCard data={summary} />}
-      {summary?.flags && <Box px={128}><FlagsBanner flags={summary.flags} /></Box>}
+      {summary?.flags && <Section><FlagsBanner flags={summary.flags} /></Section>}
 
       {/* Market breadth table + ratio chart */}
       {breadthData && !breadthData.no_data && (
         <>
           <MarketBreadthCard data={breadthData} />
-          <Box px={128}>
-            <Group justify="center" align="center" gap={6} mb={4}>
-              <Text fz="1.75rem" fw={500} c="dimmed">Mid-Cap & Small-Cap vs Large-Cap ({breadthData.ratios!.benchmark}, rebased, 1Y) ↓</Text>
-              <ChartInfo text={EXPLANATIONS.breadthRatioChart} />
-            </Group>
+          <Section
+            title={`Mid-Cap & Small-Cap vs Large-Cap (${breadthData.ratios!.benchmark}, rebased, 1Y)`}
+            action={<ChartInfo text={EXPLANATIONS.breadthRatioChart} />}
+            bodyClassName="p-2"
+            centerTitle
+          >
             <LwChart
               seriesType="line"
               line={toNavPoints(breadthData.ratios!.mid150)}
@@ -918,54 +859,45 @@ export function MarketSentiment() {
               hideControls
             maskInPrivacy={false}
             />
-          </Box>
+          </Section>
         </>
       )}
 
-      {/* Range selector */}
-      <Group justify="space-between" align="center" wrap="nowrap">
-        <SegmentedControl
-          size="xs"
-          value={rangeLabel}
-          onChange={setRangeLabel}
-          data={RANGE_OPTIONS.map((r) => r.label)}
-        />
-        <Group gap={14} wrap="wrap">
+      {/* Price chart controls: range on the left, overlay toggles on the right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup type="single" variant="outline" size="sm" value={rangeLabel} onValueChange={(v) => v && setRangeLabel(v)}>
+          {RANGE_OPTIONS.map((r) => <ToggleGroupItem key={r.label} value={r.label}>{r.label}</ToggleGroupItem>)}
+        </ToggleGroup>
+        <div className="flex flex-wrap items-center gap-3">
           {OVERLAY_DEFS.map((d) => {
             const enabled = enabledOverlays.includes(d.key)
             return (
-              <Group
+              <div
                 key={d.key}
-                gap={4}
-                align="center"
-                style={{ cursor: 'pointer', userSelect: 'none' }}
+                className="flex select-none items-center gap-1.5 cursor-pointer"
                 onClick={() => toggleOverlay(d.key)}
               >
-                <Box
-                  style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: 2,
-                    border: `2px solid ${d.color}`,
-                    backgroundColor: enabled ? d.color : 'transparent',
-                    flexShrink: 0,
-                  }}
+                <span
+                  className="inline-block size-3 shrink-0 rounded-sm"
+                  style={{ border: `2px solid ${d.color}`, backgroundColor: enabled ? d.color : 'transparent' }}
                 />
-                <Text fz="xs" c={enabled ? undefined : 'dimmed'}>{d.label}</Text>
-              </Group>
+                <span className={cn('text-xs', !enabled && 'text-muted-foreground')}>{d.label}</span>
+              </div>
             )
           })}
-        </Group>
-      </Group>
+        </div>
+      </div>
 
       {/* Price chart */}
       {seriesLoading ? (
-        <Loader size="sm" />
+        <Skeleton className="h-[440px] w-full" />
       ) : filteredCandles.length > 0 ? (
-        <>
-          <Group justify="flex-end" mb={2}>
-            <ChartInfo text={EXPLANATIONS.price} />
-          </Group>
+        <Section
+          title="Index Price and Trends"
+          bodyClassName="p-2"
+          action={<ChartInfo text={EXPLANATIONS.price} />}
+          centerTitle
+        >
           <LwChart
             seriesType="candlestick"
             candles={filteredCandles}
@@ -979,44 +911,46 @@ export function MarketSentiment() {
             hideMainTag
           maskInPrivacy={false}
           />
-        </>
+        </Section>
       ) : null}
 
       {/* Oscillator panels */}
       {oscData && (
         <>
-          <Divider mt="lg" mb="xs" label={<Title order={2} c="black">Oscillators</Title>} labelPosition="center" />
+          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Oscillators</h2>
 
-          <Stack gap="lg">
-            <OscillatorChart
-              caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
-              info={EXPLANATIONS.rsi}
-              scaleKey="rsi"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
-              formatter={oscFormatter}
-              seriesType="line"
-              line={oscData.rsi14}
-              label="Daily RSI"
-              compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
-              horizontalLines={[
-                { value: 70, color: '#dc2626', label: 'Overbought' },
-                { value: 30, color: '#2563eb', label: 'Oversold' },
-              ]}
-              persistKey="market-sentiment-rsi"
-            />
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 xl:grid-cols-2">
+              <OscillatorChart
+                caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
+                info={EXPLANATIONS.rsi}
+                scaleKey="rsi"
+                scaleWidth={chartPriceScaleWidth}
+                onScaleWidth={reportScaleWidth}
+                formatter={oscFormatter}
+                seriesType="line"
+                line={oscData.rsi14}
+                label="Daily RSI"
+                compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
+                horizontalLines={[
+                  { value: 70, color: '#dc2626', label: 'Overbought' },
+                  { value: 30, color: '#2563eb', label: 'Oversold' },
+                ]}
+                persistKey="market-sentiment-rsi"
+              />
 
-            <OscillatorChart
-              caption={<>MACD Histogram ↓</>}
-              info={EXPLANATIONS.macd}
-              scaleKey="macd"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
-              formatter={oscFormatter}
-              seriesType="histogram"
-              line={oscData.macd_hist}
-              persistKey="market-sentiment-macd"
-            />
+              <OscillatorChart
+                caption={<>MACD Histogram ↓</>}
+                info={EXPLANATIONS.macd}
+                scaleKey="macd"
+                scaleWidth={chartPriceScaleWidth}
+                onScaleWidth={reportScaleWidth}
+                formatter={oscFormatter}
+                seriesType="histogram"
+                line={oscData.macd_hist}
+                persistKey="market-sentiment-macd"
+              />
+            </div>
 
             <OscillatorChart
               caption={<>ADX — trend strength (&gt;25 = trending) ↓</>}
@@ -1029,11 +963,11 @@ export function MarketSentiment() {
               line={oscData.adx}
               persistKey="market-sentiment-adx"
             />
-          </Stack>
+          </div>
 
-          <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Volatility</Title>} labelPosition="center" />
+          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Volatility</h2>
 
-          <Stack gap="lg">
+          <div className="flex flex-col gap-4">
             <OscillatorChart
               caption={<>ATR % ↓</>}
               info={EXPLANATIONS.atr}
@@ -1059,12 +993,11 @@ export function MarketSentiment() {
               compareLines={[{ label: 'RV 60', color: '#8b5cf6', data: oscData.rv60 }]}
               persistKey="market-sentiment-vol"
             />
-          </Stack>
+          </div>
         </>
       )}
 
-      <Divider mt="xl" mb="xs" label={<Title order={2} c="black">Sector Trends</Title>} labelPosition="center" />
       <SectorTrendsTable />
-    </Stack>
+    </div>
   )
 }

@@ -1,0 +1,221 @@
+/* Layer order is load-bearing: Mantine must outrank Tailwind's preflight
+   (so its components keep their own resets) but lose to Tailwind utilities. */
+@layer theme, base, mantine, components, utilities;
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #2f5fd0;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #5a5c63;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --destructive: #c4473e;
+  --destructive-foreground: #ffffff;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #2f5fd0;
+
+  --positive: #16834a;
+  --negative: #c4473e;
+  --warning: #aa7419;
+  --info: #2563eb;
+
+  /* Chip palette — Mantine's light-variant badge colours (shade 1 bg / shade 9 text). */
+  --chip-green: #d3f9d8;   --chip-green-fg: #2b8a3e;
+  --chip-teal: #c3fae8;    --chip-teal-fg: #087f5b;
+  --chip-blue: #d0ebff;    --chip-blue-fg: #1864ab;
+  --chip-indigo: #dbe4ff;  --chip-indigo-fg: #364fc7;
+  --chip-violet: #e5dbff;  --chip-violet-fg: #5f3dc4;
+  --chip-yellow: #fff3bf;  --chip-yellow-fg: #e67700;
+  --chip-orange: #ffe8cc;  --chip-orange-fg: #d9480f;
+  --chip-red: #ffe3e3;     --chip-red-fg: #c92a2a;
+  --chip-gray: #f1f3f5;    --chip-gray-fg: #212529;
+
+  --toggle-on: #2f5fd0;
+  --toggle-on-fg: #ffffff;
+  --row-stripe: #e9ebef;
+  --row-hover: #dadde3;
+
+  --chart-1: #2f5fd0;
+  --chart-2: #16834a;
+  --chart-3: #aa7419;
+  --chart-4: #7b4fc9;
+  --chart-5: #0e7490;
+
+  --sidebar: #16223a;
+  --sidebar-foreground: #dce5f4;
+  --sidebar-primary: #2f5fd0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #23355a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #23355a;
+  --sidebar-ring: #2f5fd0;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #f0f0f2;
+  --card: #141414;
+  --card-foreground: #f0f0f2;
+  --popover: #141414;
+  --popover-foreground: #f0f0f2;
+  --primary: #5583dd;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #f0f0f2;
+  --muted: #1c1c1c;
+  --muted-foreground: #9698a0;
+  --accent: #1f1f1f;
+  --accent-foreground: #f0f0f2;
+  --destructive: #f0786f;
+  --destructive-foreground: #0a0a0a;
+  --border: #262626;
+  --input: #2b2b2b;
+  --ring: #5583dd;
+
+  --positive: #49bd78;
+  --negative: #f0786f;
+  --warning: #e1aa45;
+  --info: #6f9ef0;
+
+  /* Chip palette — Mantine's dark-scheme light-variant badge colours (shade 0 text). */
+  --chip-green: #16451f;   --chip-green-fg: #ebfbee;
+  --chip-teal: #04402e;    --chip-teal-fg: #e6fcf5;
+  --chip-blue: #0c3256;    --chip-blue-fg: #e7f5ff;
+  --chip-indigo: #1b2864;  --chip-indigo-fg: #edf2ff;
+  --chip-violet: #301f62;  --chip-violet-fg: #f3f0ff;
+  --chip-yellow: #733c00;  --chip-yellow-fg: #fff9db;
+  --chip-orange: #6d2408;  --chip-orange-fg: #fff4e6;
+  --chip-red: #651515;     --chip-red-fg: #fff5f5;
+  --chip-gray: #111315;    --chip-gray-fg: #f8f9fa;
+
+  --toggle-on: #3a68c2;
+  --toggle-on-fg: #ffffff;
+  --row-stripe: #212327;
+  --row-hover: #2e3238;
+
+  --chart-1: #6f9ef0;
+  --chart-2: #49bd78;
+  --chart-3: #e1aa45;
+  --chart-4: #a98ae6;
+  --chart-5: #3fb3c9;
+
+  --sidebar: #0c1320;
+  --sidebar-foreground: #dce5f4;
+  --sidebar-primary: #5583dd;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1a2740;
+  --sidebar-accent-foreground: #f0f0f2;
+  --sidebar-border: #1a2740;
+  --sidebar-ring: #5583dd;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  --color-chip-green: var(--chip-green);
+  --color-chip-green-fg: var(--chip-green-fg);
+  --color-chip-teal: var(--chip-teal);
+  --color-chip-teal-fg: var(--chip-teal-fg);
+  --color-chip-blue: var(--chip-blue);
+  --color-chip-blue-fg: var(--chip-blue-fg);
+  --color-chip-indigo: var(--chip-indigo);
+  --color-chip-indigo-fg: var(--chip-indigo-fg);
+  --color-chip-violet: var(--chip-violet);
+  --color-chip-violet-fg: var(--chip-violet-fg);
+  --color-chip-yellow: var(--chip-yellow);
+  --color-chip-yellow-fg: var(--chip-yellow-fg);
+  --color-chip-orange: var(--chip-orange);
+  --color-chip-orange-fg: var(--chip-orange-fg);
+  --color-chip-red: var(--chip-red);
+  --color-chip-red-fg: var(--chip-red-fg);
+  --color-chip-gray: var(--chip-gray);
+  --color-chip-gray-fg: var(--chip-gray-fg);
+
+  --color-row-stripe: var(--row-stripe);
+  --color-row-hover: var(--row-hover);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Selected toggle/segmented options. Unlayered so it outranks the primitive's
+   own data-[state=on] and hover: utilities without touching src/components/ui. */
+[data-slot='toggle-group-item'][data-state='on'],
+[data-slot='toggle-group-item'][data-state='on']:hover,
+[data-slot='toggle'][data-state='on'],
+[data-slot='toggle'][data-state='on']:hover {
+  background-color: var(--toggle-on);
+  color: var(--toggle-on-fg);
+  border-color: var(--toggle-on);
+}

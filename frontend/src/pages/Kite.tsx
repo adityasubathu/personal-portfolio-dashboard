@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  ActionIcon, Alert, Badge, Box, Button, Group, Paper, PasswordInput,
-  Stack, Table, Text, TextInput, Title,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { IconRefresh, IconLogin, IconTrash, IconX, IconFlask } from '@tabler/icons-react'
+import { Eye, EyeOff, FlaskConical, LogIn, RefreshCw, Trash2, X } from 'lucide-react'
 import {
   useKiteStatus,
   useSaveKiteConfigMutation,
@@ -13,6 +8,17 @@ import {
   useKiteSyncMutation,
 } from '../api/kite'
 import { useAppStatus } from '../api/status'
+import { ConfirmActionButton } from '../components/ConfirmActionButton'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { notify } from '@/lib/notify'
+import { CHIP_CLASS } from '@/lib/colors'
 
 export function Kite() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -25,34 +31,30 @@ export function Kite() {
 
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
 
-  // Show login result from OAuth callback
   useEffect(() => {
     const login = searchParams.get('login')
     const error = searchParams.get('error')
     if (login === 'success') {
-      notifications.show({ color: 'green', message: 'Kite login successful.' })
+      notify.success('Kite login successful.')
       setSearchParams({})
       refetch()
     } else if (error) {
-      notifications.show({ color: 'red', message: `Login failed: ${error}` })
+      notify.error(`Login failed: ${error}`)
       setSearchParams({})
     }
   }, [searchParams, setSearchParams, refetch])
 
-  // Pre-fill API key if configured
-  useEffect(() => {
-    if (status?.api_key) setApiKey(status.api_key)
-  }, [status?.api_key])
-
   async function handleSave() {
-    if (!apiKey || !apiSecret) return
+    const key = apiKey || status?.api_key
+    if (!key || !apiSecret) return
     try {
-      await saveMut.mutateAsync({ api_key: apiKey, api_secret: apiSecret })
+      await saveMut.mutateAsync({ api_key: key, api_secret: apiSecret })
       setApiSecret('')
-      notifications.show({ color: 'green', message: 'Config saved.' })
+      notify.success('Config saved.')
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
@@ -60,9 +62,9 @@ export function Kite() {
     try {
       await deleteMut.mutateAsync()
       setApiKey('')
-      notifications.show({ color: 'green', message: 'Config deleted.' })
+      notify.success('Config deleted.')
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
@@ -72,183 +74,185 @@ export function Kite() {
 
   if (demoMode) {
     return (
-      <Stack gap="lg" maw={560}>
-        <Title order={3}>Kite Integration</Title>
-        <Alert icon={<IconFlask size={14} />} color="violet" variant="light" title="Demo mode">
-          Kite integration is disabled in demo mode. The app is running with sample data — no live prices or sync available.
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <PageHeader title="Kite Integration" />
+        <Alert>
+          <FlaskConical className="size-4" />
+          <AlertTitle>Demo mode</AlertTitle>
+          <AlertDescription>Kite integration is disabled in demo mode. The app is running with sample data — no live prices or sync available.</AlertDescription>
         </Alert>
-      </Stack>
+      </div>
     )
   }
 
   return (
-    <Stack gap="lg" maw={560}>
-      <Title order={3}>Kite Integration</Title>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <PageHeader title="Kite Integration" />
 
-      {/* Status */}
       {status && (
-        <Box>
-          <Text fw={600} mb="xs">Status</Text>
-          <Group gap="xs">
-            <Badge color={status.configured ? 'blue' : 'gray'} variant="light">
+        <Section title="Status">
+          <div className="flex items-center gap-2">
+            <Badge variant={status.configured ? 'default' : 'secondary'}>
               {status.configured ? 'Configured' : 'Not configured'}
             </Badge>
             {status.configured && (
-              <Badge color={status.token_valid ? 'green' : 'red'} variant="light">
+              <Badge className={status.token_valid ? CHIP_CLASS.green : undefined} variant={status.token_valid ? 'outline' : 'destructive'}>
                 Token {status.token_valid ? 'valid' : 'expired'}
               </Badge>
             )}
-          </Group>
+          </div>
           {status.last_sync && (
-            <Text size="xs" c="dimmed" mt={4}>
+            <p className="mt-1 text-xs text-muted-foreground">
               Last sync: {new Date(status.last_sync.synced_at).toLocaleString('en-IN')}
               {' '}({status.last_sync.status})
               {status.last_sync.error_message && ` — ${status.last_sync.error_message}`}
-            </Text>
+            </p>
           )}
-        </Box>
+        </Section>
       )}
 
-      {/* Config form */}
-      <Box>
-        <Text fw={600} mb="xs">API Credentials</Text>
-        <Stack gap="xs">
-          <TextInput
-            label="API Key"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.currentTarget.value)}
-            size="xs"
-          />
-          <PasswordInput
-            label="API Secret"
-            placeholder={status?.configured ? '(leave blank to keep current)' : ''}
-            value={apiSecret}
-            onChange={(e) => setApiSecret(e.currentTarget.value)}
-            size="xs"
-          />
-          <Group>
-            <Button size="xs" loading={saveMut.isPending} onClick={handleSave}>
+      <Section title="API Credentials">
+        <div className="flex flex-col gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="kite-api-key">API Key</Label>
+            <Input id="kite-api-key" value={apiKey || status?.api_key || ''} onChange={(e) => setApiKey(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="kite-api-secret">API Secret</Label>
+            <div className="relative">
+              <Input
+                id="kite-api-secret"
+                type={showSecret ? 'text' : 'password'}
+                placeholder={status?.configured ? '(leave blank to keep current)' : ''}
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret((v) => !v)}
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground"
+                aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+              >
+                {showSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="xs" disabled={saveMut.isPending} onClick={handleSave}>
               Save
             </Button>
             {status?.configured && (
-              <Button
+              <ConfirmActionButton
                 size="xs"
-                variant="light"
-                color="red"
-                leftSection={<IconTrash size={12} />}
-                loading={deleteMut.isPending}
-                onClick={handleDelete}
+                variant="outline"
+                confirmTitle="Delete Kite configuration?"
+                confirmDescription="Saved Kite configuration will be removed."
+                onConfirm={handleDelete}
               >
+                <Trash2 className="size-3" />
                 Delete config
-              </Button>
+              </ConfirmActionButton>
             )}
-          </Group>
-        </Stack>
-      </Box>
+          </div>
+        </div>
+      </Section>
 
-      {/* Auth */}
       {status?.configured && (
-        <Box>
-          <Text fw={600} mb="xs">Authentication</Text>
+        <Section title="Authentication">
           {status.token_valid ? (
-            <Alert color="green" variant="light">
-              <Text size="xs">
+            <Alert className="border-positive/40 bg-positive/10">
+              <AlertDescription>
                 Token valid until {status.token_expiry ? new Date(status.token_expiry).toLocaleString('en-IN') : '—'}
-              </Text>
+              </AlertDescription>
             </Alert>
           ) : (
-            <Alert color="orange" variant="light">
-              <Text size="xs" mb="xs">Token expired or not set. Login with Kite to refresh.</Text>
-              <Button
-                size="xs"
-                leftSection={<IconLogin size={12} />}
-                component="a"
-                href={status.login_url ?? undefined}
-              >
-                Login with Kite
-              </Button>
+            <Alert className="border-warning/40 bg-warning/10">
+              <AlertDescription className="gap-2">
+                Token expired or not set. Login with Kite to refresh.
+                <Button size="xs" asChild>
+                  <a href={status.login_url ?? undefined}>
+                    <LogIn className="size-3" />
+                    Login with Kite
+                  </a>
+                </Button>
+              </AlertDescription>
             </Alert>
           )}
-        </Box>
+        </Section>
       )}
 
-      {/* Sync */}
       {status?.configured && status.token_valid && (
-        <Box>
-          <Text fw={600} mb="xs">Sync Holdings</Text>
-          <Button
-            size="sm"
-            leftSection={<IconRefresh size={14} />}
-            loading={syncMut.isPending}
-            onClick={handleSync}
-          >
+        <Section title="Sync Holdings">
+          <Button size="sm" disabled={syncMut.isPending} onClick={handleSync}>
+            <RefreshCw className="size-3.5" />
             Sync now
           </Button>
 
           {(syncMut.isSuccess || syncMut.isError) && (
-            <Paper withBorder p="sm" mt="sm">
-              <Group justify="space-between" mb="xs">
-                <Text fw={600} size="sm">
-                  {syncMut.isSuccess && syncMut.data.status === 'SUCCESS' ? 'Sync complete' : 'Sync failed'}
-                </Text>
-                <ActionIcon variant="subtle" size="sm" onClick={() => syncMut.reset()}>
-                  <IconX size={14} />
-                </ActionIcon>
-              </Group>
-
+            <Section
+              className="mt-2"
+              title={syncMut.isSuccess && syncMut.data.status === 'SUCCESS' ? 'Sync complete' : 'Sync failed'}
+              action={
+                <Button variant="ghost" size="icon-xs" onClick={() => syncMut.reset()} aria-label="Close">
+                  <X className="size-3.5" />
+                </Button>
+              }
+            >
               {syncMut.isSuccess && syncMut.data.status === 'SUCCESS' && (
-                <Alert color="green" variant="light">
-                  <Text size="sm">
+                <Alert className="border-positive/40 bg-positive/10">
+                  <AlertDescription>
                     Synced {syncMut.data.holdings_count} holdings, {syncMut.data.positions_count} positions.
-                  </Text>
+                  </AlertDescription>
                 </Alert>
               )}
 
               {syncMut.isSuccess && syncMut.data.status !== 'SUCCESS' && (
-                <Stack gap="xs">
-                  <Alert color="red" variant="filled">
-                    <Text size="sm">{syncMut.data.error_message ?? syncMut.data.status}</Text>
+                <div className="flex flex-col gap-2">
+                  <Alert variant="destructive">
+                    <AlertDescription>{syncMut.data.error_message ?? syncMut.data.status}</AlertDescription>
                   </Alert>
                   {syncMut.data.discrepancies && syncMut.data.discrepancies.length > 0 && (
-                    <Table fz="sm" withColumnBorders={false} withTableBorder>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Symbol</Table.Th>
-                          <Table.Th>ISIN</Table.Th>
-                          <Table.Th>Issue</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Kite qty</Table.Th>
-                          <Table.Th style={{ textAlign: 'right' }}>Local qty</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
+                    <Table className="text-xs">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Symbol</TableHead>
+                          <TableHead>ISIN</TableHead>
+                          <TableHead>Issue</TableHead>
+                          <TableHead className="text-right">Kite qty</TableHead>
+                          <TableHead className="text-right">Local qty</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {syncMut.data.discrepancies.map((d) => (
-                          <Table.Tr key={d.isin}>
-                            <Table.Td fw={500}>{d.symbol}</Table.Td>
-                            <Table.Td c="dimmed">{d.isin}</Table.Td>
-                            <Table.Td>
-                              <Badge size="sm" color={d.kind === 'new_on_kite' ? 'blue' : d.kind === 'missing_from_kite' ? 'orange' : 'red'} variant="light">
+                          <TableRow key={d.isin}>
+                            <TableCell className="font-medium">{d.symbol}</TableCell>
+                            <TableCell className="text-muted-foreground">{d.isin}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.kind === 'new_on_kite' ? 'default' : d.kind === 'missing_from_kite' ? 'outline' : 'destructive'}>
                                 {d.kind === 'new_on_kite' ? 'New on Kite' : d.kind === 'missing_from_kite' ? 'Missing from Kite' : 'Qty mismatch'}
                               </Badge>
-                            </Table.Td>
-                            <Table.Td style={{ textAlign: 'right' }}>{d.kite_qty ?? '—'}</Table.Td>
-                            <Table.Td style={{ textAlign: 'right' }}>{d.local_qty ?? '—'}</Table.Td>
-                          </Table.Tr>
+                            </TableCell>
+                            <TableCell data-numeric className="text-right">{d.kite_qty ?? '—'}</TableCell>
+                            <TableCell data-numeric className="text-right">{d.local_qty ?? '—'}</TableCell>
+                          </TableRow>
                         ))}
-                      </Table.Tbody>
+                      </TableBody>
                     </Table>
                   )}
-                </Stack>
+                </div>
               )}
 
               {syncMut.isError && (
-                <Alert color="red" variant="filled" title="Error">
-                  <Text size="sm">{String(syncMut.error)}</Text>
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{String(syncMut.error)}</AlertDescription>
                 </Alert>
               )}
-            </Paper>
+            </Section>
           )}
-        </Box>
+        </Section>
       )}
-    </Stack>
+    </div>
   )
 }

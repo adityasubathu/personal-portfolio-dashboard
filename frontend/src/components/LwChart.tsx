@@ -18,8 +18,9 @@ import {
   CrosshairMode,
   LineStyle,
 } from 'lightweight-charts'
-import { Box, Button, Group } from '@mantine/core'
-import { IconRefresh } from '@tabler/icons-react'
+import { RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { usePrivacy } from '../hooks/usePrivacy'
 import type { Candle, NavPoint, TradeMarker } from '../types/charts'
@@ -72,7 +73,6 @@ function formatTooltipDate(time: Time): string {
   return `${d} ${MONTHS[parseInt(m) - 1]} ${y}`
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractSeriesValue(data: unknown): number | null {
   if (data == null) return null
   if (typeof data === 'object') {
@@ -152,9 +152,7 @@ export function LwChart({
   const { privacyMode: privacyModeRaw } = usePrivacy()
   const privacyMode = privacyModeRaw && maskInPrivacy
   const privacyModeRef = useRef(privacyMode)
-  privacyModeRef.current = privacyMode
   const priceFormatterRef = useRef(priceFormatter)
-  priceFormatterRef.current = priceFormatter
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -171,10 +169,13 @@ export function LwChart({
 
   const [height, setHeight] = usePersistentState<number>(persistKey, defaultHeight)
   const heightRef = useRef(height)
-  heightRef.current = height
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
   const dragStartH = useRef(0)
+
+  useEffect(() => { privacyModeRef.current = privacyMode }, [privacyMode])
+  useEffect(() => { priceFormatterRef.current = priceFormatter }, [priceFormatter])
+  useEffect(() => { heightRef.current = height }, [height])
 
   // Build chart once
   useEffect(() => {
@@ -371,11 +372,12 @@ export function LwChart({
     })
     ro.observe(containerRef.current)
 
+    const seriesMeta = seriesMetaRef.current
     return () => {
       chart.unsubscribeCrosshairMove(onCrosshairMove)
       ro.disconnect()
       markersPluginRef.current = null
-      seriesMetaRef.current.clear()
+      seriesMeta.clear()
       tooltipRootRef.current = null
       dateElRef.current = null
       chart.remove()
@@ -470,15 +472,16 @@ export function LwChart({
       return s
     })
 
+    const seriesMeta = seriesMetaRef.current
     return () => {
       if (chartRef.current === chart) {
         series.forEach((s) => {
-          const meta = seriesMetaRef.current.get(s)
+          const meta = seriesMeta.get(s)
           if (meta && root) {
             root.removeChild(meta.tag.wrap)
             root.removeChild(meta.tag.connector)
           }
-          seriesMetaRef.current.delete(s)
+          seriesMeta.delete(s)
           chart.removeSeries(s)
         })
       }
@@ -522,42 +525,29 @@ export function LwChart({
   )
 
   return (
-    <Box>
+    <div>
       {!hideControls && (
-        <Group justify="flex-end" mb={4} gap="xs">
-          <Button size="xs" variant="subtle" leftSection={<IconRefresh size={12} />} onClick={() => setHeight(defaultHeight)}>
+        <div className="mb-1 flex justify-end">
+          <Button size="xs" variant="ghost" onClick={() => setHeight(defaultHeight)}>
+            <RefreshCw className="size-3" />
             Reset size
           </Button>
-        </Group>
+        </div>
       )}
-      <Box
+      <div
         ref={containerRef}
-        style={{
-          height,
-          borderRadius: '4px 4px 0 0',
-          overflow: 'hidden',
-          border: '1px solid var(--mantine-color-gray-3)',
-          borderBottom: 'none',
-          position: 'relative',
-        }}
+        className="relative overflow-hidden rounded-t-md border border-b-0"
+        style={{ height }}
       />
-      <Box
+      <div
         onMouseDown={onMouseDown}
-        style={{
-          height: 7,
-          cursor: 'ns-resize',
-          background: isDragging ? 'var(--mantine-color-blue-8)' : 'var(--mantine-color-gray-3)',
-          borderRadius: '0 0 4px 4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        className={cn('flex h-1.5 items-center justify-center rounded-b-md cursor-ns-resize', isDragging ? 'bg-primary' : 'bg-border')}
       >
         <svg width="24" height="4" viewBox="0 0 24 4" style={{ opacity: 0.5, pointerEvents: 'none' }}>
           <line x1="2" y1="1.5" x2="22" y2="1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           <line x1="2" y1="3.5" x2="22" y2="3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-      </Box>
-    </Box>
+      </div>
+    </div>
   )
 }

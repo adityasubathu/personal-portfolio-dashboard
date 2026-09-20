@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Table, Text, UnstyledButton } from '@mantine/core'
-import { IconChevronUp, IconChevronDown, IconSelector } from '@tabler/icons-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { heatmapBg } from '../lib/format'
 
 export interface Column<T> {
@@ -26,12 +26,18 @@ interface DataTableProps<T> {
   rowKey: (row: T) => string | number
   footer?: React.ReactNode
   striped?: boolean
+  minWidth?: number | string
+  stickyHeader?: boolean
+  stickyFirstColumn?: boolean
+  emptyMessage?: string
 }
 
+const alignClass = { left: 'text-left', right: 'text-right', center: 'text-center' } as const
+
 function SortIcon({ dir }: { dir: 'asc' | 'desc' | null }) {
-  if (dir === 'asc') return <IconChevronUp size={13} />
-  if (dir === 'desc') return <IconChevronDown size={13} />
-  return <IconSelector size={13} style={{ opacity: 0.4 }} />
+  if (dir === 'asc') return <ChevronUp className="size-3.5" />
+  if (dir === 'desc') return <ChevronDown className="size-3.5" />
+  return <ChevronsUpDown className="size-3.5 opacity-40" />
 }
 
 export function DataTable<T>({
@@ -43,6 +49,10 @@ export function DataTable<T>({
   rowKey,
   footer,
   striped,
+  minWidth = 'max-content',
+  stickyHeader = true,
+  stickyFirstColumn = false,
+  emptyMessage = 'No data available.',
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(defaultSort ?? '')
   const [dir, setDir] = useState<'asc' | 'desc'>(defaultDir)
@@ -75,41 +85,58 @@ export function DataTable<T>({
   }
 
   const headerRow = (
-    <Table.Tr>
-      {columns.map((col) => (
-        <Table.Th
+    <tr>
+      {columns.map((col, i) => (
+        <th
           key={col.key}
-          style={{ textAlign: col.align ?? 'left', whiteSpace: 'nowrap' }}
+          className={cn(
+            'h-8 px-2 font-medium text-muted-foreground whitespace-nowrap',
+            alignClass[col.align ?? 'left'],
+            stickyHeader && 'sticky top-0 z-10 bg-card',
+            stickyFirstColumn && i === 0 && 'sticky left-0 z-20 bg-card',
+          )}
         >
           {col.sortable ? (
-            <UnstyledButton onClick={() => handleSort(col.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-              <Text size="xs" fw={600}>{col.label}</Text>
+            <button
+              type="button"
+              onClick={() => handleSort(col.key)}
+              aria-sort={sort === col.key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+              className="inline-flex items-center gap-1"
+            >
+              <span className="text-xs font-semibold">{col.label}</span>
               <SortIcon dir={sort === col.key ? dir : null} />
-            </UnstyledButton>
+            </button>
           ) : (
-            <Text size="xs" fw={600}>{col.label}</Text>
+            <span className="text-xs font-semibold">{col.label}</span>
           )}
-        </Table.Th>
+        </th>
       ))}
-    </Table.Tr>
+    </tr>
   )
 
   function renderRow(row: T, i: number) {
     return (
-      <Table.Tr key={rowKey(row)} style={striped && i % 2 === 1 ? { background: 'var(--mantine-color-gray-1)' } : {}}>
-        {columns.map((col) => {
+      <tr key={rowKey(row)} className={cn('hover:bg-muted/50', striped && i % 2 === 1 && 'bg-muted/30')}>
+        {columns.map((col, colIndex) => {
           const heat = col.heatmap?.(row)
           const bg = heat ? heatmapBg(heat.value, heat.min, heat.max) : undefined
+          const sticky = stickyFirstColumn && colIndex === 0
           return (
-            <Table.Td
+            <td
               key={col.key}
-              style={{ textAlign: col.align ?? 'left', background: bg, whiteSpace: 'nowrap' }}
+              data-numeric={col.align === 'right' || undefined}
+              className={cn(
+                'px-2 py-1.5 whitespace-nowrap',
+                alignClass[col.align ?? 'left'],
+                sticky && 'sticky left-0 z-10',
+              )}
+              style={{ background: bg ?? (sticky ? 'var(--card)' : undefined) }}
             >
               {col.render(row)}
-            </Table.Td>
+            </td>
           )
         })}
-      </Table.Tr>
+      </tr>
     )
   }
 
@@ -117,33 +144,35 @@ export function DataTable<T>({
   const flatSorted = sortRows(allRows)
 
   return (
-    <Table fz="xs" withColumnBorders={false} highlightOnHover>
-      <Table.Thead>{headerRow}</Table.Thead>
-      <Table.Tbody>
-        {sections && !sort
-          ? sections.map((sec) => (
-              <React.Fragment key={sec.label ?? '__ungrouped'}>
-                {sec.label && (
-                  <Table.Tr>
-                    <Table.Td
-                      colSpan={columns.length}
-                      style={{
-                        background: 'var(--mantine-color-gray-1)',
-                        fontWeight: 600,
-                        fontSize: '0.75rem',
-                        padding: '4px 8px',
-                      }}
-                    >
-                      {sec.label}
-                    </Table.Td>
-                  </Table.Tr>
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs" style={{ minWidth }}>
+        <thead>{headerRow}</thead>
+        <tbody>
+          {sections && !sort
+            ? sections.map((sec) => (
+                <React.Fragment key={sec.label ?? '__ungrouped'}>
+                  {sec.label && (
+                    <tr>
+                      <td colSpan={columns.length} className="bg-muted px-2 py-1 text-[11px] font-semibold">
+                        {sec.label}
+                      </td>
+                    </tr>
+                  )}
+                  {sec.rows.map((row, i) => renderRow(row, i))}
+                </React.Fragment>
+              ))
+            : flatSorted.length
+              ? flatSorted.map((row, i) => renderRow(row, i))
+              : (
+                  <tr>
+                    <td colSpan={columns.length} className="py-4 text-center text-muted-foreground">
+                      {emptyMessage}
+                    </td>
+                  </tr>
                 )}
-                {sec.rows.map((row, i) => renderRow(row, i))}
-              </React.Fragment>
-            ))
-          : flatSorted.map((row, i) => renderRow(row, i))}
-      </Table.Tbody>
-      {footer && <Table.Tfoot>{footer}</Table.Tfoot>}
-    </Table>
+        </tbody>
+        {footer && <tfoot>{footer}</tfoot>}
+      </table>
+    </div>
   )
 }

@@ -1,13 +1,28 @@
-import { useState } from 'react'
-import { Anchor, Badge, Group, Pagination, Stack, Table, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
-import { useDebouncedValue } from '@mantine/hooks'
-import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useTrades } from '../api/trades'
 import { MoneyText } from '../components/MoneyText'
 import { usePrivacy } from '../hooks/usePrivacy'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { inr } from '../lib/format'
 import { apiUrl } from '../api/client'
 import type { TradeOrderRow, TradeRow } from '../types/trades'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { CHIP_CLASS } from '@/lib/colors'
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
 
 function QtyText({ value }: { value: number }) {
   const { privacyMode } = usePrivacy()
@@ -16,7 +31,7 @@ function QtyText({ value }: { value: number }) {
 
 function TradeTypeBadge({ type }: { type: string }) {
   return (
-    <Badge color={type === 'BUY' ? 'green' : 'red'} variant="light" size="xs">
+    <Badge className={type === 'BUY' ? CHIP_CLASS.green : CHIP_CLASS.red} variant="outline">
       {type}
     </Badge>
   )
@@ -24,19 +39,19 @@ function TradeTypeBadge({ type }: { type: string }) {
 
 function OrderDetailRow({ trade }: { trade: TradeRow }) {
   return (
-    <Table.Tr style={{ background: 'var(--mantine-color-gray-0)' }}>
-      <Table.Td />
-      <Table.Td>{trade.trade_date}</Table.Td>
-      <Table.Td><TradeTypeBadge type={trade.trade_type} /></Table.Td>
-      <Table.Td><Text size="xs">{trade.symbol ?? '—'}</Text></Table.Td>
-      <Table.Td><Text size="xs" c="dimmed">{trade.isin ?? '—'}</Text></Table.Td>
-      <Table.Td style={{ textAlign: 'right' }}><QtyText value={trade.quantity} /></Table.Td>
-      <Table.Td style={{ textAlign: 'right' }}>{inr(trade.price)}</Table.Td>
-      <Table.Td style={{ textAlign: 'right' }}><MoneyText value={trade.amount ?? trade.price * trade.quantity} /></Table.Td>
-      <Table.Td>{trade.exchange ?? '—'}</Table.Td>
-      <Table.Td><Text size="xs" c="dimmed">{trade.source}</Text></Table.Td>
-      <Table.Td><Text size="xs" c="dimmed">{trade.notes ?? ''}</Text></Table.Td>
-    </Table.Tr>
+    <tr className="bg-muted/40">
+      <td />
+      <td className="px-2 py-1.5">{trade.trade_date}</td>
+      <td className="px-2 py-1.5"><TradeTypeBadge type={trade.trade_type} /></td>
+      <td className="px-2 py-1.5 text-xs">{trade.symbol ?? '—'}</td>
+      <td className="px-2 py-1.5 text-xs text-muted-foreground">{trade.isin ?? '—'}</td>
+      <td data-numeric className="px-2 py-1.5 text-right"><QtyText value={trade.quantity} /></td>
+      <td data-numeric className="px-2 py-1.5 text-right">{inr(trade.price)}</td>
+      <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={trade.amount ?? trade.price * trade.quantity} /></td>
+      <td className="px-2 py-1.5">{trade.exchange ?? '—'}</td>
+      <td className="px-2 py-1.5 text-xs text-muted-foreground">{trade.source}</td>
+      <td className="px-2 py-1.5 text-xs text-muted-foreground">{trade.notes ?? ''}</td>
+    </tr>
   )
 }
 
@@ -45,40 +60,59 @@ function OrderRow({ order, expanded, onToggle }: { order: TradeOrderRow; expande
 
   return (
     <>
-      <Table.Tr
-        onClick={hasMultiple ? onToggle : undefined}
-        style={{ cursor: hasMultiple ? 'pointer' : undefined }}
-      >
-        <Table.Td>
+      <tr className={cn('hover:bg-muted/50', hasMultiple && 'cursor-pointer')} onClick={hasMultiple ? onToggle : undefined}>
+        <td className="px-2 py-1.5">
           {hasMultiple && (
-            <UnstyledButton onClick={onToggle} style={{ display: 'flex' }}>
-              {expanded ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
-            </UnstyledButton>
+            <button type="button" onClick={onToggle} className="flex">
+              {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            </button>
           )}
-        </Table.Td>
-        <Table.Td>{order.trade_date}</Table.Td>
-        <Table.Td><TradeTypeBadge type={order.trade_type} /></Table.Td>
-        <Table.Td><Text size="xs" fw={500}>{order.symbol ?? '—'}</Text></Table.Td>
-        <Table.Td><Text size="xs" c="dimmed">{order.isin ?? '—'}</Text></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><QtyText value={order.quantity} /></Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}>{inr(order.price)}</Table.Td>
-        <Table.Td style={{ textAlign: 'right' }}><MoneyText value={order.amount} /></Table.Td>
-        <Table.Td>{order.exchange ?? '—'}</Table.Td>
-        <Table.Td><Text size="xs" c="dimmed">{order.source}</Text></Table.Td>
-        <Table.Td>
-          {hasMultiple && <Text size="xs" c="dimmed">{order.trades.length} trades</Text>}
-        </Table.Td>
-      </Table.Tr>
+        </td>
+        <td className="px-2 py-1.5">{order.trade_date}</td>
+        <td className="px-2 py-1.5"><TradeTypeBadge type={order.trade_type} /></td>
+        <td className="px-2 py-1.5 text-xs font-medium">{order.symbol ?? '—'}</td>
+        <td className="px-2 py-1.5 text-xs text-muted-foreground">{order.isin ?? '—'}</td>
+        <td data-numeric className="px-2 py-1.5 text-right"><QtyText value={order.quantity} /></td>
+        <td data-numeric className="px-2 py-1.5 text-right">{inr(order.price)}</td>
+        <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={order.amount} /></td>
+        <td className="px-2 py-1.5">{order.exchange ?? '—'}</td>
+        <td className="px-2 py-1.5 text-xs text-muted-foreground">{order.source}</td>
+        <td className="px-2 py-1.5 text-xs text-muted-foreground">
+          {hasMultiple && `${order.trades.length} trades`}
+        </td>
+      </tr>
       {hasMultiple && expanded && order.trades.map((t) => <OrderDetailRow key={t.id} trade={t} />)}
     </>
+  )
+}
+
+function MobileOrderCard({ order }: { order: TradeOrderRow }) {
+  return (
+    <div className="p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{order.symbol ?? '—'}</span>
+        <TradeTypeBadge type={order.trade_type} />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{order.trade_date}</span>
+        <span data-numeric>
+          <QtyText value={order.quantity} /> @ {inr(order.price)}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{order.exchange ?? '—'}</span>
+        <MoneyText value={order.amount} className="font-medium" />
+      </div>
+    </div>
   )
 }
 
 export function Trades() {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [debounced] = useDebouncedValue(q, 300)
+  const debounced = useDebouncedValue(q, 300)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   const { data, isLoading } = useTrades(page, debounced)
 
@@ -97,64 +131,85 @@ export function Trades() {
   }
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={3}>Trades</Title>
-        <Anchor href={apiUrl('/api/v1/trades/template')} size="xs" download>
-          Download CSV template
-        </Anchor>
-      </Group>
-
-      <TextInput
-        placeholder="Search symbol or ISIN…"
-        leftSection={<IconSearch size={14} />}
-        value={q}
-        onChange={(e) => handleSearch(e.currentTarget.value)}
-        w={280}
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Trades"
+        actions={
+          <a href={apiUrl('/api/v1/trades/template')} download className="text-xs text-primary underline-offset-4 hover:underline">
+            Download CSV template
+          </a>
+        }
       />
 
-      {isLoading && <Text size="sm" c="dimmed">Loading…</Text>}
+      <Section
+        bodyClassName="p-0"
+        title={
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search symbol or ISIN…"
+                value={q}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="h-8 w-64 pl-7 text-xs"
+              />
+            </div>
+            {data && <span className="text-xs text-muted-foreground">{data.total} orders</span>}
+          </div>
+        }
+      >
+        {isLoading && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
 
-      {data && (
-        <>
-          <Text size="xs" c="dimmed">{data.total} orders</Text>
-          <Table fz="xs" withColumnBorders={false} highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th />
-                <Table.Th><Text size="xs" fw={600}>Date</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>Type</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>Symbol</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>ISIN</Text></Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}><Text size="xs" fw={600}>Qty</Text></Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}><Text size="xs" fw={600}>Price</Text></Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}><Text size="xs" fw={600}>Amount</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>Exchange</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>Source</Text></Table.Th>
-                <Table.Th><Text size="xs" fw={600}>Notes</Text></Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {data.rows.map((order) => (
-                <OrderRow
-                  key={order.order_id}
-                  order={order}
-                  expanded={expandedIds.has(order.order_id)}
-                  onToggle={() => toggleExpanded(order.order_id)}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-          {data.total_pages > 1 && (
-            <Pagination
-              total={data.total_pages}
-              value={page}
-              onChange={setPage}
-              size="sm"
-            />
-          )}
-        </>
-      )}
-    </Stack>
+        {data && !isMobile && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ minWidth: 1050 }}>
+              <thead>
+                <tr className="sticky top-0 z-10 bg-card">
+                  <th className="h-8 px-2" />
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Date</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Symbol</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">ISIN</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Price</th>
+                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Amount</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Exchange</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Source</th>
+                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((order) => (
+                  <OrderRow
+                    key={order.order_id}
+                    order={order}
+                    expanded={expandedIds.has(order.order_id)}
+                    onToggle={() => toggleExpanded(order.order_id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {data && isMobile && <div className="divide-y">{data.rows.map((order) => <MobileOrderCard key={order.order_id} order={order} />)}</div>}
+
+        {data && data.total_pages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-2">
+            <Button variant="outline" size="xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <ChevronLeft className="size-3.5" />
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Page {page} of {data.total_pages}
+            </span>
+            <Button variant="outline" size="xs" disabled={page >= data.total_pages} onClick={() => setPage((p) => p + 1)}>
+              Next
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </Section>
+    </div>
   )
 }

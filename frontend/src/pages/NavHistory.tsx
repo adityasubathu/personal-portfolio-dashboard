@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Group, Select, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
-import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconPlayerStop, IconRefresh, IconUpload } from '@tabler/icons-react'
+import { Square, RefreshCw, Upload } from 'lucide-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
 import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, useSyncNavMutation } from '../api/mf'
 import { LwChart } from '../components/LwChart'
@@ -12,6 +10,14 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { apiUrl } from '../api/client'
 import type { NavPoint as NavSeriesPoint } from '../types/portfolio'
 import type { NavPoint } from '../types/charts'
+import { PageHeader } from '../components/PageHeader'
+import { Section } from '@/components/Section'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { notify } from '@/lib/notify'
 
 function navPriceFormatter(price: number): string {
   const abs = Math.abs(price)
@@ -36,14 +42,8 @@ function HaltSyncButton() {
   }
 
   return (
-    <Button
-      size="xs"
-      color="red"
-      variant="light"
-      leftSection={<IconPlayerStop size={12} />}
-      loading={halting}
-      onClick={halt}
-    >
+    <Button size="xs" variant="destructive" disabled={halting} onClick={halt}>
+      <Square className="size-3" />
       Halt
     </Button>
   )
@@ -65,17 +65,15 @@ export function NavHistory() {
     if (priceSyncSse.result) {
       qc.invalidateQueries({ queryKey: ['market-sentiment'] })
     }
-  }, [priceSyncSse.result])
+  }, [priceSyncSse.result, qc])
 
-  // OHLC fetch SSE — url built from form state
   const [fetchTicker, setFetchTicker] = useState('')
   const [fetchStart, setFetchStart] = useState('')
   const [fetchEnd, setFetchEnd] = useState('')
   const ohlcUrl = `${apiUrl('/api/v1/portfolio/fetch-ohlc/stream')}?ticker=${encodeURIComponent(fetchTicker)}&start_date=${fetchStart}&end_date=${fetchEnd}`
   const ohlcFetchSse = useSse(ohlcUrl)
 
-  // Upload OHLC form
-  const [uploadInstrId, setUploadInstrId] = useState<string | null>(null)
+  const [uploadInstrId, setUploadInstrId] = useState<string>('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
 
@@ -84,7 +82,6 @@ export function NavHistory() {
     label: `${i.symbol ?? '?'}${i.isin ? ` (${i.isin})` : ''} — ${i.n_prices} rows`,
   })) ?? []
 
-  // Convert nav series to chart format
   const valueData: NavPoint[] = (navSeries ?? []).map((p: NavSeriesPoint) => ({
     time: p.date,
     value: p.value,
@@ -106,20 +103,19 @@ export function NavHistory() {
       const r = await uploadOhlc(Number(uploadInstrId), uploadFile)
       setUploadResult(JSON.stringify(r))
     } catch (e) {
-      notifications.show({ color: 'red', message: String(e) })
+      notify.error(String(e))
     }
   }
 
   return (
-    <Stack gap="lg">
-      <Title order={3}>Portfolio NAV History</Title>
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Portfolio NAV History" />
 
-      {navLoading && <Text size="sm" c="dimmed">Loading NAV history…</Text>}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        {/* Portfolio value chart */}
+      {navLoading && <p className="text-sm text-muted-foreground">Loading NAV history…</p>}
+
+      <div className="grid gap-4 md:grid-cols-2">
         {valueData.length > 0 && (
-          <Box>
-            <Text size="xs" c="dimmed" mb={4}>Blue = market value · Orange = invested cost</Text>
+          <Section title="Portfolio value" description="Blue = market value · Orange = invested cost" bodyClassName="p-2">
             <LwChart
               seriesType="line"
               persistKey="portfolio_nav_h"
@@ -130,15 +126,11 @@ export function NavHistory() {
                 { data: investedData, label: 'Invested', color: '#f59e0b' },
               ]}
             />
-          </Box>
+          </Section>
         )}
 
-        {/* Unit NAV chart */}
         {unitNavData.length > 0 && (
-          <Box>
-            <Text size="xs" c="dimmed" mb={4}>
-              Unit NAV — performance excluding cash flows (base = 100 on 5 Nov 2022)
-            </Text>
+          <Section title="Unit NAV" description="Performance excluding cash flows (base = 100 on 5 Nov 2022)" bodyClassName="p-2">
             <LwChart
               seriesType="line"
               persistKey="portfolio_unit_nav_h"
@@ -147,168 +139,152 @@ export function NavHistory() {
               compareLines={[{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }]}
               maskInPrivacy={false}
             />
-          </Box>
+          </Section>
         )}
-      </SimpleGrid>
+      </div>
 
-      {/* MF NAV sync */}
-      <Box>
-        <Text fw={600} mb="xs">Sync MF NAV</Text>
-        <Group gap="xs" mb={4}>
-          <Button
-            size="xs"
-            leftSection={<IconRefresh size={12} />}
-            loading={syncHistoryMut.isPending}
-            onClick={() =>
-              syncHistoryMut.mutate(navSource, {
-                onError: (e) => notifications.show({ color: 'red', message: String(e) }),
-              })
-            }
-          >
-            Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
-          </Button>
-          <SegmentedControl
-            size="xs"
-            value={navSource}
-            onChange={(v) => setNavSource(v as 'mfapi' | 'finapi')}
-            data={[
-              { label: 'mfapi.in', value: 'mfapi' },
-              { label: 'FinAPI', value: 'finapi' },
-            ]}
-          />
-          <Button
-            size="xs"
-            variant="default"
-            loading={syncNavMut.isPending}
-            onClick={() =>
-              syncNavMut.mutate(undefined, {
-                onError: (e) => notifications.show({ color: 'red', message: String(e) }),
-              })
-            }
-          >
-            Latest-only (AMFI fallback)
-          </Button>
-        </Group>
-        {navSource === 'finapi' && (
-          <Text size="xs" c="dimmed" mb="xs">Free tier — 30 req/min, no API key needed</Text>
-        )}
-        {syncHistoryMut.data && !syncHistoryMut.data.error && (
-          <Text size="xs">
-            History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
-            {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
-            latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
-            {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
-              <Text span size="xs" c="orange"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</Text>
-            )}
-          </Text>
-        )}
-        {syncHistoryMut.data?.error && <Text size="xs" c="red">{syncHistoryMut.data.error}</Text>}
-        {syncNavMut.data && !syncNavMut.data.error && (
-          <Text size="xs">
-            AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
-            {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
-              <Text span size="xs" c="orange"> · {(syncNavMut.data.missing as unknown[]).length} missing</Text>
-            )}
-          </Text>
-        )}
-        {syncNavMut.data?.error && <Text size="xs" c="red">{syncNavMut.data.error}</Text>}
-      </Box>
-
-      {/* Price sync SSE */}
-      <Box>
-        <Group mb="xs">
-          <Text fw={600}>Sync Price History (Kite)</Text>
-          <Button
-            size="xs"
-            leftSection={<IconRefresh size={12} />}
-            onClick={priceSyncSse.start}
-            loading={priceSyncSse.status === 'running'}
-            disabled={priceSyncSse.status === 'running'}
-          >
-            Sync now
-          </Button>
-          {priceSyncSse.status === 'running' && (
-            <HaltSyncButton />
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        <Section title="Sync MF NAV">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="xs"
+              disabled={syncHistoryMut.isPending}
+              onClick={() =>
+                syncHistoryMut.mutate(navSource, {
+                  onError: (e) => notify.error(String(e)),
+                })
+              }
+            >
+              <RefreshCw className="size-3.5" />
+              Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
+            </Button>
+            <ToggleGroup type="single" variant="outline" size="sm" value={navSource} onValueChange={(v) => v && setNavSource(v as 'mfapi' | 'finapi')}>
+              <ToggleGroupItem value="mfapi">mfapi.in</ToggleGroupItem>
+              <ToggleGroupItem value="finapi">FinAPI</ToggleGroupItem>
+            </ToggleGroup>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={syncNavMut.isPending}
+              onClick={() =>
+                syncNavMut.mutate(undefined, {
+                  onError: (e) => notify.error(String(e)),
+                })
+              }
+            >
+              Latest-only (AMFI fallback)
+            </Button>
+          </div>
+          {navSource === 'finapi' && (
+            <p className="mt-1 text-xs text-muted-foreground">Free tier — 30 req/min, no API key needed</p>
           )}
-        </Group>
-        <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" maw={560} />
-      </Box>
+          {syncHistoryMut.data && !syncHistoryMut.data.error && (
+            <p className="mt-1 text-xs">
+              History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
+              {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
+              latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
+              {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
+                <span className="text-warning"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</span>
+              )}
+            </p>
+          )}
+          {syncHistoryMut.data?.error && <p className="mt-1 text-xs text-negative">{syncHistoryMut.data.error}</p>}
+          {syncNavMut.data && !syncNavMut.data.error && (
+            <p className="mt-1 text-xs">
+              AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
+              {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
+                <span className="text-warning"> · {(syncNavMut.data.missing as unknown[]).length} missing</span>
+              )}
+            </p>
+          )}
+          {syncNavMut.data?.error && <p className="mt-1 text-xs text-negative">{syncNavMut.data.error}</p>}
+        </Section>
 
-      {/* OHLC fetch SSE */}
-      <Box>
-        <Text fw={600} mb="xs">Fetch OHLC from Kite</Text>
-        <Group align="flex-end" wrap="wrap">
-          <TextInput label="Ticker (e.g. NSE:NIFTY50)" value={fetchTicker} onChange={(e) => setFetchTicker(e.currentTarget.value)} size="xs" w={200} />
-          <TextInput label="Start date" type="date" value={fetchStart} onChange={(e) => setFetchStart(e.currentTarget.value)} size="xs" w={140} />
-          <TextInput label="End date (optional)" type="date" value={fetchEnd} onChange={(e) => setFetchEnd(e.currentTarget.value)} size="xs" w={140} />
-          <Button
-            size="xs"
-            onClick={ohlcFetchSse.start}
-            loading={ohlcFetchSse.status === 'running'}
-            disabled={!fetchTicker || !fetchStart || ohlcFetchSse.status === 'running'}
-          >
-            Fetch
-          </Button>
-        </Group>
-        <SsePanel sse={ohlcFetchSse} heading="Fetching OHLC data…" />
-      </Box>
+        <Section
+          title="Sync Price History (Kite)"
+          action={
+            <div className="flex items-center gap-2">
+              <Button size="xs" onClick={priceSyncSse.start} disabled={priceSyncSse.status === 'running'}>
+                <RefreshCw className="size-3.5" />
+                Sync now
+              </Button>
+              {priceSyncSse.status === 'running' && <HaltSyncButton />}
+            </div>
+          }
+        >
+          <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" className="max-w-xl" />
+        </Section>
 
-      {/* Manual OHLC upload */}
-      <Box>
-        <Text fw={600} mb="xs">Upload OHLC CSV</Text>
-        <Group align="flex-end">
-          <Select
-            label="Instrument"
-            placeholder="Select…"
-            data={instrOptions}
-            value={uploadInstrId}
-            onChange={setUploadInstrId}
-            searchable
-            size="xs"
-            w={280}
-          />
-          <Box>
-            <Text size="xs" mb={4}>CSV file</Text>
-            <input
-              type="file"
-              accept=".csv"
-              style={{ fontSize: '0.8rem' }}
-              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-            />
-          </Box>
-          <Button
-            size="xs"
-            leftSection={<IconUpload size={12} />}
-            disabled={!uploadInstrId || !uploadFile}
-            onClick={handleUploadOhlc}
-          >
-            Upload
-          </Button>
-        </Group>
-        {uploadResult && <Text size="xs" c="dimmed" mt="xs">{uploadResult}</Text>}
-      </Box>
+        <Section title="Fetch OHLC from Kite">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-52 space-y-1">
+              <Label htmlFor="ohlc-ticker">Ticker (e.g. NSE:NIFTY50)</Label>
+              <Input id="ohlc-ticker" value={fetchTicker} onChange={(e) => setFetchTicker(e.target.value)} />
+            </div>
+            <div className="w-36 space-y-1">
+              <Label htmlFor="ohlc-start">Start date</Label>
+              <Input id="ohlc-start" type="date" value={fetchStart} onChange={(e) => setFetchStart(e.target.value)} />
+            </div>
+            <div className="w-36 space-y-1">
+              <Label htmlFor="ohlc-end">End date (optional)</Label>
+              <Input id="ohlc-end" type="date" value={fetchEnd} onChange={(e) => setFetchEnd(e.target.value)} />
+            </div>
+            <Button size="xs" onClick={ohlcFetchSse.start} disabled={!fetchTicker || !fetchStart || ohlcFetchSse.status === 'running'}>
+              Fetch
+            </Button>
+          </div>
+          <SsePanel sse={ohlcFetchSse} heading="Fetching OHLC data…" />
+        </Section>
 
-      {/* Tracked funds */}
-      {tracked && tracked.length > 0 && (
-        <Box>
-          <Text fw={600} mb="xs">Manually Tracked NAV Funds</Text>
-          <Stack gap={4}>
-            {tracked.map((t) => (
-              <Group key={t.instrument_id} justify="space-between">
-                <Text size="xs">{t.name ?? '—'} <Text span size="xs" c="dimmed">({t.isin ?? '—'})</Text></Text>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="red"
-                  onClick={() => removeTrackedMut.mutate(t.instrument_id)}
-                >
-                  Remove
-                </Button>
-              </Group>
-            ))}
-          </Stack>
-        </Box>
-      )}
-    </Stack>
+        <Section title="Upload OHLC CSV">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-72 space-y-1">
+              <Label>Instrument</Label>
+              <Select value={uploadInstrId} onValueChange={setUploadInstrId}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instrOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>CSV file</Label>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-medium"
+              />
+            </div>
+            <Button size="xs" disabled={!uploadInstrId || !uploadFile} onClick={handleUploadOhlc}>
+              <Upload className="size-3.5" />
+              Upload
+            </Button>
+          </div>
+          {uploadResult && <p className="mt-2 text-xs text-muted-foreground">{uploadResult}</p>}
+        </Section>
+
+        {tracked && tracked.length > 0 && (
+          <Section title="Manually Tracked NAV Funds">
+            <div className="space-y-1">
+              {tracked.map((t) => (
+                <div key={t.instrument_id} className="flex items-center justify-between">
+                  <p className="text-xs">
+                    {t.name ?? '—'} <span className="text-muted-foreground">({t.isin ?? '—'})</span>
+                  </p>
+                  <Button size="xs" variant="ghost" className="text-negative" onClick={() => removeTrackedMut.mutate(t.instrument_id)}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+      </div>
+    </div>
   )
 }
