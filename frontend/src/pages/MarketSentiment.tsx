@@ -148,7 +148,7 @@ function OscillatorChart({
   formatter: (v: number) => string
 } & React.ComponentProps<typeof LwChart>) {
   return (
-    <Section title={caption} action={<ChartInfo text={info} />} bodyClassName="p-2">
+    <Section title={caption} action={<ChartInfo text={info} />} bodyClassName="p-2" centerTitle>
       <LwChart
         {...chart}
         priceScaleWidth={scaleWidth}
@@ -857,6 +857,7 @@ export function MarketSentiment() {
             title={`Mid-Cap & Small-Cap vs Large-Cap (${breadthData.ratios!.benchmark}, rebased, 1Y)`}
             action={<ChartInfo text={EXPLANATIONS.breadthRatioChart} />}
             bodyClassName="p-2"
+            centerTitle
           >
             <LwChart
               seriesType="line"
@@ -924,7 +925,7 @@ export function MarketSentiment() {
         <>
           <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Oscillators</h2>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="flex flex-col gap-4">
             <OscillatorChart
               caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
               info={EXPLANATIONS.rsi}
@@ -970,7 +971,7 @@ export function MarketSentiment() {
 
           <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Volatility</h2>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="flex flex-col gap-4">
             <OscillatorChart
               caption={<>ATR % ↓</>}
               info={EXPLANATIONS.atr}
