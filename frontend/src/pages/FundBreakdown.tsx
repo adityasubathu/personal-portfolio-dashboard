@@ -141,12 +141,17 @@ export function FundBreakdown() {
       {breakdown && breakdown.holdings.length > 0 && (
         <Section title="Holdings" bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-[0.9rem]">
               <thead>
-                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-sm font-bold text-foreground">
+                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-base font-bold text-foreground">
                   <th className="h-9 px-2 text-left">Name</th>
                   <th className="h-9 px-2 text-left">Category</th>
-                  <th className="h-9 px-2 text-left">Industry</th>
+                  <th className="h-9 px-2 text-left">
+                    Industry{' '}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      (Macro → Sector → Industry → Basic)
+                    </span>
+                  </th>
                   <th className="h-9 px-2 text-right">%</th>
                   <th className="h-9 px-2 text-right">Value</th>
                 </tr>

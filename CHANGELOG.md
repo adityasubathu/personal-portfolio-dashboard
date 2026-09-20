@@ -17,6 +17,7 @@
 - Fund Detail: a long fund name is now truncated inside the selector button instead of spilling out of it. (2026-09-20-16-04-37 · cba4d17)
 - Fund Detail holdings table: new Industry column with NSE's macro → sector → industry → basic path, equity rows show "Equity" plus a Large/Mid/Small chip, and the header is bolder, larger and ruled off from the rows. (2026-09-20-16-08-56 · af30ad2)
 - Fund Detail: the Industry column is blank for non-equity holdings instead of repeating a placeholder taxonomy. (2026-09-20-16-09-52 · a020191)
+- Fund Detail holdings table: the Industry header spells out the Macro → Sector → Industry → Basic order, and the rows are 20% larger. (2026-09-20-16-11-32 · PENDING)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
