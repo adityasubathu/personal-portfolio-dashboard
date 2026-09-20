@@ -442,7 +442,19 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 `Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
 
 ### NAV History Chart
-Walk trades first-to-today → track qty + cost per instrument → look up daily close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) → forward-fill gaps → output `{date, value, invested}` timeseries.
+Walk trades first-to-today → track qty + cost per instrument → look up daily
+close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) →
+forward-fill gaps → output `{date, value, invested, unit_nav}` timeseries.
+
+Only rows that the walk can use are loaded: instruments that were actually
+traded, on dates from the first trade onwards, grouped as
+`{date -> [(instrument_id, close)]}` so each day touches only the rows that
+exist. NAV rows are applied after price rows, so an MF holding both on the
+same day marks at its NAV. The day walk itself is the pure
+`build_nav_series()`; `compute_nav_series()` is the thin DB wrapper around it.
+The frontend caches the result for 5 minutes (`staleTime` in
+`src/api/portfolio.ts`); every sync that writes price or NAV rows invalidates
+the `['portfolio']` query key.
 
 ---
 

@@ -15,6 +15,10 @@ export const portfolioKeys = {
   instruments: ['portfolio', 'instruments'] as const,
 }
 
+// The NAV series only changes when a sync writes price/NAV rows, and every
+// one of those paths invalidates ['portfolio'] explicitly.
+const NAV_STALE_TIME = 5 * 60 * 1000
+
 export function useSummaryCards() {
   return useQuery({
     queryKey: portfolioKeys.summaryCards,
@@ -42,6 +46,7 @@ export function useNavHistory() {
   return useQuery({
     queryKey: portfolioKeys.navHistory,
     queryFn: () => request<NavPoint[]>('/api/v1/portfolio/nav-history'),
+    staleTime: NAV_STALE_TIME,
   })
 }
 
@@ -49,6 +54,7 @@ export function useTradedInstruments() {
   return useQuery({
     queryKey: portfolioKeys.instruments,
     queryFn: () => request<InstrumentListItem[]>('/api/v1/portfolio/instruments'),
+    staleTime: NAV_STALE_TIME,
   })
 }
 

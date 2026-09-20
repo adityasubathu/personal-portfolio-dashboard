@@ -68,6 +68,7 @@ export function NavHistory() {
   useEffect(() => {
     if (priceSyncSse.result) {
       qc.invalidateQueries({ queryKey: ['market-sentiment'] })
+      qc.invalidateQueries({ queryKey: ['portfolio'] })
     }
   }, [priceSyncSse.result, qc])
 
@@ -76,6 +77,12 @@ export function NavHistory() {
   const [fetchEnd, setFetchEnd] = useState('')
   const ohlcUrl = `${apiUrl('/api/v1/portfolio/fetch-ohlc/stream')}?ticker=${encodeURIComponent(fetchTicker)}&start_date=${fetchStart}&end_date=${fetchEnd}`
   const ohlcFetchSse = useSse(ohlcUrl)
+
+  useEffect(() => {
+    if (ohlcFetchSse.result) {
+      qc.invalidateQueries({ queryKey: ['portfolio'] })
+    }
+  }, [ohlcFetchSse.result, qc])
 
   const [uploadInstrId, setUploadInstrId] = useState<string>('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -125,6 +132,7 @@ export function NavHistory() {
     try {
       const r = await uploadOhlc(Number(uploadInstrId), uploadFile)
       setUploadResult(JSON.stringify(r))
+      qc.invalidateQueries({ queryKey: ['portfolio'] })
     } catch (e) {
       notify.error(String(e))
     }
