@@ -158,7 +158,7 @@ export function FundBreakdown() {
               </thead>
               <tbody>
                 {breakdown.holdings.map((h, i) => (
-                  <tr key={i} className="even:bg-muted/30 hover:bg-muted/50">
+                  <tr key={i} className="even:bg-row-stripe hover:bg-row-hover">
                     <td className="px-2 py-1.5">{h.name}</td>
                     <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
                     <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>

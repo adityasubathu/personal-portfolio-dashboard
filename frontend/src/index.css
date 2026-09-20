@@ -47,6 +47,8 @@
 
   --toggle-on: #2f5fd0;
   --toggle-on-fg: #ffffff;
+  --row-stripe: #e9ebef;
+  --row-hover: #dadde3;
 
   --chart-1: #2f5fd0;
   --chart-2: #16834a;
@@ -102,6 +104,8 @@
 
   --toggle-on: #3a68c2;
   --toggle-on-fg: #ffffff;
+  --row-stripe: #212327;
+  --row-hover: #2e3238;
 
   --chart-1: #6f9ef0;
   --chart-2: #49bd78;
@@ -166,6 +170,9 @@
   --color-chip-red-fg: var(--chip-red-fg);
   --color-chip-gray: var(--chip-gray);
   --color-chip-gray-fg: var(--chip-gray-fg);
+
+  --color-row-stripe: var(--row-stripe);
+  --color-row-hover: var(--row-hover);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
