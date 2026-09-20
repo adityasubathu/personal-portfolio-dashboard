@@ -143,146 +143,148 @@ export function NavHistory() {
         )}
       </div>
 
-      <Section title="Sync MF NAV">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="xs"
-            disabled={syncHistoryMut.isPending}
-            onClick={() =>
-              syncHistoryMut.mutate(navSource, {
-                onError: (e) => notify.error(String(e)),
-              })
-            }
-          >
-            <RefreshCw className="size-3.5" />
-            Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
-          </Button>
-          <ToggleGroup type="single" variant="outline" size="sm" value={navSource} onValueChange={(v) => v && setNavSource(v as 'mfapi' | 'finapi')}>
-            <ToggleGroupItem value="mfapi">mfapi.in</ToggleGroupItem>
-            <ToggleGroupItem value="finapi">FinAPI</ToggleGroupItem>
-          </ToggleGroup>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={syncNavMut.isPending}
-            onClick={() =>
-              syncNavMut.mutate(undefined, {
-                onError: (e) => notify.error(String(e)),
-              })
-            }
-          >
-            Latest-only (AMFI fallback)
-          </Button>
-        </div>
-        {navSource === 'finapi' && (
-          <p className="mt-1 text-xs text-muted-foreground">Free tier — 30 req/min, no API key needed</p>
-        )}
-        {syncHistoryMut.data && !syncHistoryMut.data.error && (
-          <p className="mt-1 text-xs">
-            History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
-            {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
-            latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
-            {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
-              <span className="text-warning"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</span>
-            )}
-          </p>
-        )}
-        {syncHistoryMut.data?.error && <p className="mt-1 text-xs text-negative">{syncHistoryMut.data.error}</p>}
-        {syncNavMut.data && !syncNavMut.data.error && (
-          <p className="mt-1 text-xs">
-            AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
-            {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
-              <span className="text-warning"> · {(syncNavMut.data.missing as unknown[]).length} missing</span>
-            )}
-          </p>
-        )}
-        {syncNavMut.data?.error && <p className="mt-1 text-xs text-negative">{syncNavMut.data.error}</p>}
-      </Section>
-
-      <Section
-        title="Sync Price History (Kite)"
-        action={
-          <div className="flex items-center gap-2">
-            <Button size="xs" onClick={priceSyncSse.start} disabled={priceSyncSse.status === 'running'}>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        <Section title="Sync MF NAV">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="xs"
+              disabled={syncHistoryMut.isPending}
+              onClick={() =>
+                syncHistoryMut.mutate(navSource, {
+                  onError: (e) => notify.error(String(e)),
+                })
+              }
+            >
               <RefreshCw className="size-3.5" />
-              Sync now
+              Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
             </Button>
-            {priceSyncSse.status === 'running' && <HaltSyncButton />}
+            <ToggleGroup type="single" variant="outline" size="sm" value={navSource} onValueChange={(v) => v && setNavSource(v as 'mfapi' | 'finapi')}>
+              <ToggleGroupItem value="mfapi">mfapi.in</ToggleGroupItem>
+              <ToggleGroupItem value="finapi">FinAPI</ToggleGroupItem>
+            </ToggleGroup>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={syncNavMut.isPending}
+              onClick={() =>
+                syncNavMut.mutate(undefined, {
+                  onError: (e) => notify.error(String(e)),
+                })
+              }
+            >
+              Latest-only (AMFI fallback)
+            </Button>
           </div>
-        }
-      >
-        <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" className="max-w-xl" />
-      </Section>
-
-      <Section title="Fetch OHLC from Kite">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-52 space-y-1">
-            <Label htmlFor="ohlc-ticker">Ticker (e.g. NSE:NIFTY50)</Label>
-            <Input id="ohlc-ticker" value={fetchTicker} onChange={(e) => setFetchTicker(e.target.value)} />
-          </div>
-          <div className="w-36 space-y-1">
-            <Label htmlFor="ohlc-start">Start date</Label>
-            <Input id="ohlc-start" type="date" value={fetchStart} onChange={(e) => setFetchStart(e.target.value)} />
-          </div>
-          <div className="w-36 space-y-1">
-            <Label htmlFor="ohlc-end">End date (optional)</Label>
-            <Input id="ohlc-end" type="date" value={fetchEnd} onChange={(e) => setFetchEnd(e.target.value)} />
-          </div>
-          <Button size="xs" onClick={ohlcFetchSse.start} disabled={!fetchTicker || !fetchStart || ohlcFetchSse.status === 'running'}>
-            Fetch
-          </Button>
-        </div>
-        <SsePanel sse={ohlcFetchSse} heading="Fetching OHLC data…" />
-      </Section>
-
-      <Section title="Upload OHLC CSV">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-72 space-y-1">
-            <Label>Instrument</Label>
-            <Select value={uploadInstrId} onValueChange={setUploadInstrId}>
-              <SelectTrigger size="sm" className="w-full">
-                <SelectValue placeholder="Select…" />
-              </SelectTrigger>
-              <SelectContent>
-                {instrOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>CSV file</Label>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-medium"
-            />
-          </div>
-          <Button size="xs" disabled={!uploadInstrId || !uploadFile} onClick={handleUploadOhlc}>
-            <Upload className="size-3.5" />
-            Upload
-          </Button>
-        </div>
-        {uploadResult && <p className="mt-2 text-xs text-muted-foreground">{uploadResult}</p>}
-      </Section>
-
-      {tracked && tracked.length > 0 && (
-        <Section title="Manually Tracked NAV Funds">
-          <div className="space-y-1">
-            {tracked.map((t) => (
-              <div key={t.instrument_id} className="flex items-center justify-between">
-                <p className="text-xs">
-                  {t.name ?? '—'} <span className="text-muted-foreground">({t.isin ?? '—'})</span>
-                </p>
-                <Button size="xs" variant="ghost" className="text-negative" onClick={() => removeTrackedMut.mutate(t.instrument_id)}>
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
+          {navSource === 'finapi' && (
+            <p className="mt-1 text-xs text-muted-foreground">Free tier — 30 req/min, no API key needed</p>
+          )}
+          {syncHistoryMut.data && !syncHistoryMut.data.error && (
+            <p className="mt-1 text-xs">
+              History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
+              {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
+              latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
+              {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
+                <span className="text-warning"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</span>
+              )}
+            </p>
+          )}
+          {syncHistoryMut.data?.error && <p className="mt-1 text-xs text-negative">{syncHistoryMut.data.error}</p>}
+          {syncNavMut.data && !syncNavMut.data.error && (
+            <p className="mt-1 text-xs">
+              AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
+              {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
+                <span className="text-warning"> · {(syncNavMut.data.missing as unknown[]).length} missing</span>
+              )}
+            </p>
+          )}
+          {syncNavMut.data?.error && <p className="mt-1 text-xs text-negative">{syncNavMut.data.error}</p>}
         </Section>
-      )}
+
+        <Section
+          title="Sync Price History (Kite)"
+          action={
+            <div className="flex items-center gap-2">
+              <Button size="xs" onClick={priceSyncSse.start} disabled={priceSyncSse.status === 'running'}>
+                <RefreshCw className="size-3.5" />
+                Sync now
+              </Button>
+              {priceSyncSse.status === 'running' && <HaltSyncButton />}
+            </div>
+          }
+        >
+          <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" className="max-w-xl" />
+        </Section>
+
+        <Section title="Fetch OHLC from Kite">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-52 space-y-1">
+              <Label htmlFor="ohlc-ticker">Ticker (e.g. NSE:NIFTY50)</Label>
+              <Input id="ohlc-ticker" value={fetchTicker} onChange={(e) => setFetchTicker(e.target.value)} />
+            </div>
+            <div className="w-36 space-y-1">
+              <Label htmlFor="ohlc-start">Start date</Label>
+              <Input id="ohlc-start" type="date" value={fetchStart} onChange={(e) => setFetchStart(e.target.value)} />
+            </div>
+            <div className="w-36 space-y-1">
+              <Label htmlFor="ohlc-end">End date (optional)</Label>
+              <Input id="ohlc-end" type="date" value={fetchEnd} onChange={(e) => setFetchEnd(e.target.value)} />
+            </div>
+            <Button size="xs" onClick={ohlcFetchSse.start} disabled={!fetchTicker || !fetchStart || ohlcFetchSse.status === 'running'}>
+              Fetch
+            </Button>
+          </div>
+          <SsePanel sse={ohlcFetchSse} heading="Fetching OHLC data…" />
+        </Section>
+
+        <Section title="Upload OHLC CSV">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-72 space-y-1">
+              <Label>Instrument</Label>
+              <Select value={uploadInstrId} onValueChange={setUploadInstrId}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instrOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>CSV file</Label>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-medium"
+              />
+            </div>
+            <Button size="xs" disabled={!uploadInstrId || !uploadFile} onClick={handleUploadOhlc}>
+              <Upload className="size-3.5" />
+              Upload
+            </Button>
+          </div>
+          {uploadResult && <p className="mt-2 text-xs text-muted-foreground">{uploadResult}</p>}
+        </Section>
+
+        {tracked && tracked.length > 0 && (
+          <Section title="Manually Tracked NAV Funds">
+            <div className="space-y-1">
+              {tracked.map((t) => (
+                <div key={t.instrument_id} className="flex items-center justify-between">
+                  <p className="text-xs">
+                    {t.name ?? '—'} <span className="text-muted-foreground">({t.isin ?? '—'})</span>
+                  </p>
+                  <Button size="xs" variant="ghost" className="text-negative" onClick={() => removeTrackedMut.mutate(t.instrument_id)}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+      </div>
     </div>
   )
 }
