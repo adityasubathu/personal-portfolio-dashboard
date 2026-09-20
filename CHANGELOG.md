@@ -1,8 +1,8 @@
 # Changelog
 
 ## 2026-09-20-17-06-11 — Breakdown page padding and a targets-edit popup
-- Portfolio Breakdown now has the same left/right page padding as Capital Gains and Fund Breakdown, across all three tabs. (2026-09-20-17-06-11 · <pending>)
-- The inline "New target" input column and its Save button are gone from both targets tables; an Edit targets button now opens a popup with the same inputs and its own Save button. (2026-09-20-17-06-11 · <pending>)
+- Portfolio Breakdown now has the same left/right page padding as Capital Gains and Fund Breakdown, across all three tabs. (2026-09-20-17-06-11 · b642eb8)
+- The inline "New target" input column and its Save button are gone from both targets tables; an Edit targets button now opens a popup with the same inputs and its own Save button. (2026-09-20-17-06-11 · b642eb8)
 
 ## 2026-09-20-17-00-29 — Right-align the Type column
 - The Type column header and its cells now right-align like every other non-Symbol column instead of sitting flush left. (2026-09-20-17-00-29 · cf82c24)
