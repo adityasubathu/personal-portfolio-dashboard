@@ -184,7 +184,7 @@ portfolio-mac-arm/
 │       │   └── PrivacyProvider.tsx # Privacy-mode provider
 │       └── lib/
 │           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor
-│           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor()
+│           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
 │           ├── utils.ts         # cn() — clsx + tailwind-merge, used by every component
 │           └── notify.ts        # notify.success/error/info/warning — thin wrapper over sonner's toast
 ├── alembic/

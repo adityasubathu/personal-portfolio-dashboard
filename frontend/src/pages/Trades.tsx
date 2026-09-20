@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS } from '@/lib/colors'
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -30,7 +31,7 @@ function QtyText({ value }: { value: number }) {
 
 function TradeTypeBadge({ type }: { type: string }) {
   return (
-    <Badge className={type === 'BUY' ? 'bg-positive/10 text-positive' : 'bg-negative/10 text-negative'} variant="outline">
+    <Badge className={type === 'BUY' ? CHIP_CLASS.green : CHIP_CLASS.red} variant="outline">
       {type}
     </Badge>
   )

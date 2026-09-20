@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { notify } from '@/lib/notify'
+import { CHIP_CLASS } from '@/lib/colors'
 
 export function Kite() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -95,7 +96,7 @@ export function Kite() {
               {status.configured ? 'Configured' : 'Not configured'}
             </Badge>
             {status.configured && (
-              <Badge className={status.token_valid ? 'bg-positive/10 text-positive' : undefined} variant={status.token_valid ? 'outline' : 'destructive'}>
+              <Badge className={status.token_valid ? CHIP_CLASS.green : undefined} variant={status.token_valid ? 'outline' : 'destructive'}>
                 Token {status.token_valid ? 'valid' : 'expired'}
               </Badge>
             )}

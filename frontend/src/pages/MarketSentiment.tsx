@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS, chipClass } from '@/lib/colors'
 import { notify } from '@/lib/notify'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
@@ -42,17 +43,6 @@ function toNavPoints(pts: IndicatorPoint[]): NavPoint[] {
 
 // Maps the Mantine colour-name vocabulary the sentiment data model speaks
 // (green/red/orange/...) to Tailwind tone classes for Badge.
-const COLOR_CLASS: Record<string, string> = {
-  green: 'bg-positive/10 text-positive',
-  red: 'bg-negative/10 text-negative',
-  orange: 'bg-warning/10 text-warning',
-  yellow: 'bg-warning/10 text-warning',
-  blue: 'bg-info/10 text-info',
-  teal: 'bg-info/10 text-info',
-  violet: 'bg-primary/10 text-primary',
-  gray: 'bg-muted text-muted-foreground',
-}
-
 // Four-step gradient over the shared trend labels (3/2/1/0 signals passing).
 const TREND_COLORS: Record<string, string> = {
   'Bullish': 'green',
@@ -299,7 +289,7 @@ function SentimentSummaryCard({ data }: { data: SentimentSummary }) {
 function FlagChip({ label, color, info }: { label: string; color: string; info: string }) {
   return (
     <InfoPopover text={info}>
-      <Badge variant="outline" className={cn('cursor-pointer', COLOR_CLASS[color])}>
+      <Badge variant="outline" className={cn('cursor-pointer', chipClass(color))}>
         {label}
       </Badge>
     </InfoPopover>
@@ -471,7 +461,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
                 </span>
               </td>
               <td className="px-2 py-1.5">
-                <Badge variant="outline" className={COLOR_CLASS[regimeColor(data.regime.label)]}>
+                <Badge variant="outline" className={chipClass(regimeColor(data.regime.label))}>
                   {data.regime.label}
                 </Badge>
               </td>
@@ -487,7 +477,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
               <td className="px-2 py-1.5">
                 <span className="inline-flex items-center gap-2">
                   <span className="text-muted-foreground">{data.relative_strength.order}</span>
-                  <Badge variant="outline" className={COLOR_CLASS[toneColor]}>
+                  <Badge variant="outline" className={chipClass(toneColor)}>
                     {toneLabel}
                   </Badge>
                 </span>
@@ -505,7 +495,7 @@ function MarketBreadthCard({ data }: { data: MarketBreadth }) {
                 <span className="inline-flex items-center gap-2">
                   <span className="text-muted-foreground">{ddStr}</span>
                   {dd.stress_flag && (
-                    <Badge variant="outline" className={COLOR_CLASS.orange}>
+                    <Badge variant="outline" className={CHIP_CLASS.orange}>
                       Smallcap drawdown disproportionate
                     </Badge>
                   )}
@@ -554,7 +544,7 @@ function TrendChip({ horizon, info }: { horizon: TrendCell; info?: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Badge variant="outline" className={cn('cursor-pointer', COLOR_CLASS[trendColor(horizon.label)])}>
+        <Badge variant="outline" className={cn('cursor-pointer', chipClass(trendColor(horizon.label)))}>
           {horizon.label}{horizon.fading ? ' ↘' : ''}
         </Badge>
       </PopoverTrigger>

@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Table as ShadTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS } from '@/lib/colors'
 import { notify } from '@/lib/notify'
 
 // ── Summary cards ──────────────────────────────────────────────────────────────
@@ -522,7 +523,7 @@ function ManualAssets() {
                     <TableRow key={fd.id}>
                       <TableCell>
                         {fd.label}
-                        {fd.is_emergency_fund && <Badge className="ml-1 bg-warning/10 text-warning">EF</Badge>}
+                        {fd.is_emergency_fund && <Badge className={cn('ml-1', CHIP_CLASS.orange)}>EF</Badge>}
                       </TableCell>
                       <TableCell><MoneyText value={fd.principal} /></TableCell>
                       <TableCell>{fd.interest_rate}%</TableCell>

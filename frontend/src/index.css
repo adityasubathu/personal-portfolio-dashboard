@@ -35,6 +35,16 @@
   --warning: #aa7419;
   --info: #2563eb;
 
+  /* Chip palette — Mantine's light-variant badge colours (shade 1 bg / shade 9 text). */
+  --chip-green: #d3f9d8;   --chip-green-fg: #2b8a3e;
+  --chip-teal: #c3fae8;    --chip-teal-fg: #087f5b;
+  --chip-blue: #d0ebff;    --chip-blue-fg: #1864ab;
+  --chip-violet: #e5dbff;  --chip-violet-fg: #5f3dc4;
+  --chip-yellow: #fff3bf;  --chip-yellow-fg: #e67700;
+  --chip-orange: #ffe8cc;  --chip-orange-fg: #d9480f;
+  --chip-red: #ffe3e3;     --chip-red-fg: #c92a2a;
+  --chip-gray: #f1f3f5;    --chip-gray-fg: #212529;
+
   --chart-1: #2f5fd0;
   --chart-2: #16834a;
   --chart-3: #aa7419;
@@ -76,6 +86,16 @@
   --negative: #f0786f;
   --warning: #e1aa45;
   --info: #6f9ef0;
+
+  /* Chip palette — Mantine's dark-scheme light-variant badge colours (shade 0 text). */
+  --chip-green: #16451f;   --chip-green-fg: #ebfbee;
+  --chip-teal: #04402e;    --chip-teal-fg: #e6fcf5;
+  --chip-blue: #0c3256;    --chip-blue-fg: #e7f5ff;
+  --chip-violet: #301f62;  --chip-violet-fg: #f3f0ff;
+  --chip-yellow: #733c00;  --chip-yellow-fg: #fff9db;
+  --chip-orange: #6d2408;  --chip-orange-fg: #fff4e6;
+  --chip-red: #651515;     --chip-red-fg: #fff5f5;
+  --chip-gray: #111315;    --chip-gray-fg: #f8f9fa;
 
   --chart-1: #6f9ef0;
   --chart-2: #49bd78;
@@ -123,6 +143,23 @@
   --color-negative: var(--negative);
   --color-warning: var(--warning);
   --color-info: var(--info);
+
+  --color-chip-green: var(--chip-green);
+  --color-chip-green-fg: var(--chip-green-fg);
+  --color-chip-teal: var(--chip-teal);
+  --color-chip-teal-fg: var(--chip-teal-fg);
+  --color-chip-blue: var(--chip-blue);
+  --color-chip-blue-fg: var(--chip-blue-fg);
+  --color-chip-violet: var(--chip-violet);
+  --color-chip-violet-fg: var(--chip-violet-fg);
+  --color-chip-yellow: var(--chip-yellow);
+  --color-chip-yellow-fg: var(--chip-yellow-fg);
+  --color-chip-orange: var(--chip-orange);
+  --color-chip-orange-fg: var(--chip-orange-fg);
+  --color-chip-red: var(--chip-red);
+  --color-chip-red-fg: var(--chip-red-fg);
+  --color-chip-gray: var(--chip-gray);
+  --color-chip-gray-fg: var(--chip-gray-fg);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

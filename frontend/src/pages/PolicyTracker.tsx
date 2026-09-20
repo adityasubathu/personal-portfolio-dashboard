@@ -11,14 +11,15 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS } from '@/lib/colors'
 import { notify } from '@/lib/notify'
 
 const STATUS_CLASS: Record<TriggerStatus, string> = {
-  ok: 'bg-positive/10 text-positive',
-  watch: 'bg-info/10 text-info',
-  action: 'bg-warning/10 text-warning',
+  ok: CHIP_CLASS.green,
+  watch: CHIP_CLASS.blue,
+  action: CHIP_CLASS.orange,
   breach: 'bg-destructive text-white',
-  manual: 'bg-muted text-muted-foreground',
+  manual: CHIP_CLASS.gray,
 }
 
 const ROW_ACCENT: Partial<Record<TriggerStatus, string>> = {

@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS } from '@/lib/colors'
 import { gainColor, inr } from '../lib/format'
 
 const MASK = '₹•••'
@@ -29,19 +30,19 @@ const LT_BUCKETS = new Set([
 function isLongTerm(taxBucket: string) { return LT_BUCKETS.has(taxBucket) }
 
 const ASSET_CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
-  equity: { label: 'Equity', className: 'bg-positive/10 text-positive' },
-  debt_mf: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
-  bond: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
-  unknown_mf: { label: 'Debt/Non-Equity', className: 'bg-info/10 text-info' },
-  intl_fund: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
-  gold_mf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
-  intl_etf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
-  gold_etf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
-  hybrid_mf: { label: 'Hybrid', className: 'bg-warning/10 text-warning' },
+  equity: { label: 'Equity', className: CHIP_CLASS.green },
+  debt_mf: { label: 'Debt/Non-Equity', className: CHIP_CLASS.blue },
+  bond: { label: 'Debt/Non-Equity', className: CHIP_CLASS.blue },
+  unknown_mf: { label: 'Debt/Non-Equity', className: CHIP_CLASS.blue },
+  intl_fund: { label: 'Hybrid', className: CHIP_CLASS.orange },
+  gold_mf: { label: 'Hybrid', className: CHIP_CLASS.orange },
+  intl_etf: { label: 'Hybrid', className: CHIP_CLASS.orange },
+  gold_etf: { label: 'Hybrid', className: CHIP_CLASS.orange },
+  hybrid_mf: { label: 'Hybrid', className: CHIP_CLASS.orange },
 }
 
 function AssetCategoryBadge({ assetCategory }: { assetCategory: string }) {
-  const meta = ASSET_CATEGORY_BADGE[assetCategory] ?? { label: assetCategory, className: 'bg-muted text-muted-foreground' }
+  const meta = ASSET_CATEGORY_BADGE[assetCategory] ?? { label: assetCategory, className: CHIP_CLASS.gray }
   return (
     <Badge variant="outline" className={meta.className}>
       {meta.label}
@@ -52,7 +53,7 @@ function AssetCategoryBadge({ assetCategory }: { assetCategory: string }) {
 function TermBadge({ taxBucket }: { taxBucket: string }) {
   const lt = isLongTerm(taxBucket)
   return (
-    <Badge variant="outline" className={lt ? 'bg-info/10 text-info' : 'bg-warning/10 text-warning'}>
+    <Badge variant="outline" className={lt ? CHIP_CLASS.blue : CHIP_CLASS.orange}>
       {lt ? 'LT' : 'ST'}
     </Badge>
   )
@@ -121,7 +122,7 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
         </p>
       )}
       {!isLoss && bucket.rate == null && effectiveRate == null && (
-        <Badge variant="secondary" className="mt-1.5">Slab rate</Badge>
+        <Badge variant="outline" className={cn('mt-1.5', CHIP_CLASS.gray)}>Slab rate</Badge>
       )}
     </div>
   )
@@ -180,10 +181,10 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
           <div className="flex items-center gap-1">
             <TermBadge taxBucket={lot.tax_bucket} />
             {lot.flags.includes('grandfathered') && (
-              <Badge variant="outline" className="bg-info/10 text-info">GF</Badge>
+              <Badge variant="outline" className={CHIP_CLASS.blue}>GF</Badge>
             )}
             {lot.flags.includes('grandfathering_fmv_unavailable') && (
-              <Badge variant="outline" className="bg-warning/10 text-warning">GF?</Badge>
+              <Badge variant="outline" className={CHIP_CLASS.orange}>GF?</Badge>
             )}
           </div>
         </td>
@@ -448,14 +449,14 @@ export function CapitalGains() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-warning/10 text-warning">ST</Badge>
+                    <Badge variant="outline" className={CHIP_CLASS.orange}>ST</Badge>
                     <span className="text-sm text-muted-foreground">Short-term gains</span>
                   </div>
                   <MoneyText value={totalStcg} colorize className="text-sm font-semibold" />
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-info/10 text-info">LT</Badge>
+                    <Badge variant="outline" className={CHIP_CLASS.blue}>LT</Badge>
                     <span className="text-sm text-muted-foreground">Long-term gains</span>
                   </div>
                   <MoneyText value={totalLtcg} colorize className="text-sm font-semibold" />
