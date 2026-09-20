@@ -38,7 +38,7 @@ const industryPath = (h: SchemeHolding) =>
 // The holdings table is read asset class by asset class. Anything outside these
 // four falls into a trailing "Others" group so no holding is silently dropped.
 const HOLDING_GROUPS: { label: string; categories: string[] }[] = [
-  { label: 'Equity', categories: ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign', 'Equity - Arbitrage', 'Real Estate Trust'] },
+  { label: 'Equity', categories: ['Large Cap', 'Mid Cap', 'Small Cap', 'Unclassified Equity', 'Equity - Foreign', 'Equity - Arbitrage'] },
   { label: 'Debt', categories: ['Debt'] },
   { label: 'Precious Metals', categories: ['Gold', 'Silver'] },
   { label: 'Cash', categories: ['Cash'] },
