@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { RefreshCw, ChevronDown, ChevronUp, Trash2, Info } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, Trash2, Info, ArrowUp, ArrowDown } from 'lucide-react'
 import { useSummaryCards, useHoldings, useUpdateLtpMutation } from '../api/portfolio'
 import {
   useManualAssets,
@@ -118,6 +118,27 @@ function NumQty({ value }: { value: number }) {
   return <DecNum text={text} decWidth="4ch" />
 }
 
+// Cost and Value carry the most weight on this table: 15% above the 12px base.
+const NUM_LG = 'text-[13.8px]'
+
+// Direction lives in the arrow, so the number itself is printed unsigned.
+function GainChip({ value }: { value: number | null | undefined }) {
+  if (value == null) return null
+  const up = value >= 0
+  const Arrow = up ? ArrowUp : ArrowDown
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-medium',
+        up ? CHIP_CLASS.green : CHIP_CLASS.red,
+      )}
+    >
+      <Arrow className="size-2.5" />
+      {pct(Math.abs(value), 2, false)}
+    </span>
+  )
+}
+
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-0.5"><p className="text-xs text-muted-foreground">{label}</p><p className="text-sm" data-numeric>{children}</p></div>
 }
@@ -162,7 +183,6 @@ const SORT_OPTIONS = [
   { value: 'symbol', label: 'Symbol' },
   { value: 'value', label: 'Value' },
   { value: 'pnl', label: 'P&L ₹' },
-  { value: 'pnl_pct', label: 'P&L %' },
   { value: 'xirr', label: 'XIRR' },
   { value: 'day_chg_abs', label: 'Day ₹' },
   { value: 'day_chg_pct', label: 'Day %' },
@@ -171,7 +191,8 @@ const SORT_OPTIONS = [
 
 function HoldingsTable() {
   const mobile = useMediaQuery('(max-width: 767px)')
-  const [sort, setSort] = usePersistentState('dashboard.sort', 'symbol')
+  const [storedSort, setSort] = usePersistentState('dashboard.sort', 'symbol')
+  const sort = SORT_OPTIONS.some((o) => o.value === storedSort) ? storedSort : 'pnl'
   const [dir, setDir] = usePersistentState<'asc' | 'desc'>('dashboard.dir', 'asc')
   const [sections, setSections] = usePersistentState<'on' | 'off'>('dashboard.sections', 'on')
   const [compare, setCompare] = usePersistentState<'prev_close' | 'open'>('dashboard.compare', 'prev_close')
@@ -220,11 +241,10 @@ function HoldingsTable() {
   }
   if (!data) return null
 
-  const { groups, pnl_pct_min, pnl_pct_max, day_chg_pct_min, day_chg_pct_max } = data
+  const { groups, day_chg_pct_min, day_chg_pct_max } = data
 
   function row(r: HoldingRow) {
     const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb')
-    const pnlPctBg = heatmapBg(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb')
     return (
       <tr key={r.instrument_id} className="hover:bg-muted/50">
         <td className="sticky left-0 z-10 max-w-[230px] bg-card px-2 py-1.5 font-medium">
@@ -237,19 +257,19 @@ function HoldingsTable() {
         </td>
         <td className="px-2 py-1.5 text-muted-foreground">{r.type}</td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumQty value={r.qty} /></td>
-        <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.cost} /></td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right', NUM_LG)}><NumMoney value={r.cost} /></td>
         <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
           <NumPct value={r.day_chg_pct} />
         </td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', (r.day_chg_abs ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumMoney value={r.day_chg_abs} showSign />
         </td>
-        <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.value} /></td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right', r.pnl >= 0 ? 'text-positive' : 'text-negative')}>
-          <NumMoney value={r.pnl} showSign />
-        </td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: pnlPctBg, color: heatmapTextColor(r.pnl_pct, pnl_pct_min, pnl_pct_max, 'rb') }}>
-          <NumPct value={r.pnl_pct} />
+        <td data-numeric className={cn('px-2 py-1.5 text-right', NUM_LG)}><NumMoney value={r.value} /></td>
+        <td data-numeric className="px-2 py-1.5 text-right text-foreground">
+          <div className="flex items-center justify-end gap-1.5">
+            <NumMoney value={r.pnl} showSign />
+            <GainChip value={r.pnl_pct} />
+          </div>
         </td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', (r.xirr ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumPct value={r.xirr} />
@@ -372,14 +392,14 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full text-xs" style={{ minWidth: 1200 }}>
+        <table className="w-full text-xs" style={{ minWidth: 1130 }}>
           <thead>
             <tr className="sticky top-0 z-20 bg-card">
               {header('Symbol', 'symbol')}
               <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
               {header('Cost', 'cost')}{header('Day %', 'day_chg_pct')}{header('Day ₹', 'day_chg_abs')}
-              {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('Gain %', 'pnl_pct')}{header('XIRR', 'xirr')}
+              {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('XIRR', 'xirr')}
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Updated</th>
             </tr>
           </thead>
@@ -388,7 +408,7 @@ function HoldingsTable() {
               <React.Fragment key={g.label ?? '__ungrouped'}>
                 {g.label && sections === 'on' && (
                   <tr>
-                    <td colSpan={11} className="bg-muted px-2 py-1.5 text-xs font-semibold">
+                    <td colSpan={10} className="bg-muted px-2 py-1.5 text-xs font-semibold">
                       {g.label}
                     </td>
                   </tr>
@@ -400,18 +420,21 @@ function HoldingsTable() {
           <tfoot>
             <tr className={cn('sticky bottom-0 z-20 bg-card font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
               <td colSpan={3} className="px-2 py-1.5 text-foreground">Total</td>
-              <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_cost} /></td>
+              <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_cost} /></td>
               <td data-numeric className="px-2 py-1.5 text-right">
                 <NumPct value={data.total_day_chg_pct} />
               </td>
               <td data-numeric className="px-2 py-1.5 text-right">
                 <NumMoney value={data.total_day_chg} showSign />
               </td>
-              <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_value} /></td>
+              <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_value} /></td>
               <td data-numeric className="px-2 py-1.5 text-right text-foreground">
-                <NumMoney value={data.total_value - data.total_cost} showSign />
+                <div className="flex items-center justify-end gap-1.5">
+                  <NumMoney value={data.total_value - data.total_cost} showSign />
+                  <GainChip value={data.total_cost > 0 ? ((data.total_value - data.total_cost) / data.total_cost) * 100 : null} />
+                </div>
               </td>
-              <td colSpan={3} />
+              <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
