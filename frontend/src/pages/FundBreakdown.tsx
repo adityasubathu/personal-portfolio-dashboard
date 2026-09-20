@@ -5,7 +5,7 @@ import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { shortDate, shortDateTime } from '../lib/format'
-import type { SchemeListItem } from '../types/mfBreakdown'
+import type { SchemeHolding, SchemeListItem } from '../types/mfBreakdown'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
@@ -13,8 +13,34 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
+import { CHIP_CLASS, type ChipColor } from '@/lib/colors'
+import { Badge } from '@/components/ui/badge'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
+
+// Equity holdings show the asset class with a market-cap chip rather than the
+// combined category, using the Breakdown page's cap colours.
+const CAP_CHIP: Record<string, { label: string; color: ChipColor }> = {
+  'Large Cap': { label: 'Large', color: 'green' },
+  'Mid Cap': { label: 'Mid', color: 'blue' },
+  'Small Cap': { label: 'Small', color: 'orange' },
+  'Unclassified Equity': { label: 'Unclassified', color: 'gray' },
+}
+
+// NSE's four-level taxonomy, most general first; missing levels drop out.
+const industryPath = (h: SchemeHolding) =>
+  [h.macro_sector, h.sector, h.industry, h.basic_industry].filter(Boolean).join(' → ')
+
+function CategoryCell({ category }: { category: string }) {
+  const cap = CAP_CHIP[category]
+  if (!cap) return <>{category}</>
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      Equity
+      <Badge variant="outline" className={CHIP_CLASS[cap.color]}>{cap.label}</Badge>
+    </span>
+  )
+}
 
 export function FundBreakdown() {
   const { data: schemes } = useAvailableSchemes()
@@ -114,18 +140,20 @@ export function FundBreakdown() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="sticky top-0 z-10 bg-card">
-                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Name</th>
-                  <th className="h-8 px-2 text-left font-medium text-muted-foreground">Category</th>
-                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">%</th>
-                  <th className="h-8 px-2 text-right font-medium text-muted-foreground">Value</th>
+                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-sm font-bold text-foreground">
+                  <th className="h-9 px-2 text-left">Name</th>
+                  <th className="h-9 px-2 text-left">Category</th>
+                  <th className="h-9 px-2 text-left">Industry</th>
+                  <th className="h-9 px-2 text-right">%</th>
+                  <th className="h-9 px-2 text-right">Value</th>
                 </tr>
               </thead>
               <tbody>
                 {breakdown.holdings.map((h, i) => (
                   <tr key={i} className="hover:bg-muted/50">
                     <td className="px-2 py-1.5">{h.name}</td>
-                    <td className="px-2 py-1.5">{h.category}</td>
+                    <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h) || '—'}</td>
                     <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
                     <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
                   </tr>

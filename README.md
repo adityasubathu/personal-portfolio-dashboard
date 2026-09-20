@@ -352,7 +352,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 | `GET /sector-list` | Selectable values at a taxonomy level (`?level=` as above), unioning what's currently held with NSE's full classified taxonomy |
 | `PATCH /sector-classify-batch` | Manual taxonomy fix, `[{name, level, value}]` → `{updated, rows_updated}`; the chosen value cascades up NSE's hierarchy and merges into `equity_sector_override` |
 | `GET /schemes` | Schemes with breakdown data |
-| `GET /scheme/{scheme_isin}` | Per-fund holding list + market-cap/asset-class and sector summaries |
+| `GET /scheme/{scheme_isin}` | Per-fund holding list (with each holding’s NSE macro/sector/industry/basic levels) + market-cap/asset-class and sector summaries |
 
 The per-fund sector view collapses debt, cash, commodities and arbitrage/derivative holdings into a single `Non-Equity` slice, which is why an arbitrage fund's sector donut renders as almost entirely grey.
 

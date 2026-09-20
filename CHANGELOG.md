@@ -15,6 +15,7 @@
 - Capital Gains sits in from the window edges with its own horizontal padding. (2026-09-20-16-02-51 · c954c0e)
 - Capital Gains' horizontal padding widened six-fold, to 48px on mobile and 192px on desktop. (2026-09-20-16-03-22 · 97b5f36)
 - Fund Detail: a long fund name is now truncated inside the selector button instead of spilling out of it. (2026-09-20-16-04-37 · cba4d17)
+- Fund Detail holdings table: new Industry column with NSE's macro → sector → industry → basic path, equity rows show "Equity" plus a Large/Mid/Small chip, and the header is bolder, larger and ruled off from the rows. (2026-09-20-16-08-56 · PENDING)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
