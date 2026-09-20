@@ -170,6 +170,7 @@ export function FundBreakdown() {
             <table className="w-full text-[0.81rem]">
               <thead>
                 <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-[0.9rem] font-bold text-foreground">
+                  <th className="h-9 w-10 px-2 text-right">#</th>
                   <th className="h-9 px-2 text-left">Name</th>
                   <th className="h-9 px-2 text-left">Category</th>
                   <th className="h-9 px-2 text-left">
@@ -187,11 +188,11 @@ export function FundBreakdown() {
                   <Fragment key={group.label}>
                     {gi > 0 && (
                       <tr aria-hidden>
-                        <td colSpan={5} className="h-4" />
+                        <td colSpan={6} className="h-4" />
                       </tr>
                     )}
                     <tr className="bg-row-hover text-[0.9rem] font-bold">
-                      <td colSpan={3} className="border-y-2 border-foreground/25 px-2 py-2 uppercase tracking-wide">
+                      <td colSpan={4} className="border-y-2 border-foreground/25 px-2 py-2 text-center uppercase tracking-wide">
                         {group.label}
                       </td>
                       <td data-numeric className="border-y-2 border-foreground/25 px-2 py-2 text-right">
@@ -203,6 +204,7 @@ export function FundBreakdown() {
                     </tr>
                     {group.rows.map((h, i) => (
                       <tr key={`${group.label}-${i}`} className={cn(i % 2 === 1 && 'bg-row-stripe', 'hover:bg-row-hover')}>
+                        <td data-numeric className="px-2 py-1.5 text-right text-muted-foreground">{i + 1}</td>
                         <td className="px-2 py-1.5">{h.name}</td>
                         <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
                         <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>
