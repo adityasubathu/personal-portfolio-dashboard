@@ -3,7 +3,7 @@
 ## 2026-09-20-15-44-06 — Donut chart layout fix
 - Fixed donut charts rendering at full column width with their legend pushed off screen, and started each donut at 12 o'clock going clockwise. (2026-09-20-15-44-06 · a5f7a50)
 - Donut legends now stack under the chart when their card is narrow, so the Sector Allocation legend no longer spills over the sector table. (2026-09-20-15-45-57 · 8d36244)
-- Donut legends now actually sit beside the chart once their card is wide enough, centred in their column; the sector legend is back on the right. (2026-09-20-15-48-07 · PENDING)
+- Donut legends now actually sit beside the chart once their card is wide enough, centred in their column; the sector legend is back on the right. (2026-09-20-15-48-07 · 5aac1cf)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
