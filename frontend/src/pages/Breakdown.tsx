@@ -731,7 +731,7 @@ function SectorTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,380px)_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,560px)_1fr]">
         <Section
           title="Sector Allocation"
           action={
@@ -740,7 +740,7 @@ function SectorTab({
             </ToggleGroup>
           }
         >
-          {labels.length > 0 && <DonutChart labels={labels} values={values} colorMode="sector" />}
+          {labels.length > 0 && <DonutChart labels={labels} values={values} colorMode="sector" legendSide="left" />}
         </Section>
 
         <Section title="Sector" bodyClassName="p-0">

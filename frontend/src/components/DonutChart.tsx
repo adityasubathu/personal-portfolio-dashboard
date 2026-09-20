@@ -3,6 +3,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
+import { cn } from '@/lib/utils'
 
 interface DonutChartProps {
   labels: string[]
@@ -10,9 +11,10 @@ interface DonutChartProps {
   total?: number
   colorMode?: 'category' | 'sector'
   size?: number
+  legendSide?: 'left' | 'right'
 }
 
-export function DonutChart({ labels, values, total, colorMode = 'category', size = 220 }: DonutChartProps) {
+export function DonutChart({ labels, values, total, colorMode = 'category', size = 220, legendSide = 'right' }: DonutChartProps) {
   const { privacyMode } = usePrivacy()
   const [hovered, setHovered] = useState<number | null>(null)
   const colors = useMemo(
@@ -34,7 +36,12 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   const data = labels.map((label, i) => ({ label, value: values[i] }))
 
   return (
-    <div className="@container flex w-full flex-col items-center gap-4 @lg:flex-row @lg:items-start">
+    <div
+      className={cn(
+        '@container flex w-full flex-col items-center gap-4 @lg:items-start',
+        legendSide === 'left' ? '@lg:flex-row-reverse' : '@lg:flex-row',
+      )}
+    >
       <div className="relative aspect-square w-full max-w-(--size) shrink-0 @lg:w-(--size)" style={{ '--size': `${size}px` } as React.CSSProperties}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
