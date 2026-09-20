@@ -34,8 +34,8 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
   const data = labels.map((label, i) => ({ label, value: values[i] }))
 
   return (
-    <div className="flex w-full flex-col items-center gap-4 md:flex-row md:items-start">
-      <div className="relative aspect-square w-full max-w-(--size) shrink-0 md:w-(--size)" style={{ '--size': `${size}px` } as React.CSSProperties}>
+    <div className="@container flex w-full flex-col items-center gap-4 @lg:flex-row @lg:items-start">
+      <div className="relative aspect-square w-full max-w-(--size) shrink-0 @lg:w-(--size)" style={{ '--size': `${size}px` } as React.CSSProperties}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -74,7 +74,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
         </div>
       </div>
 
-      <div className="w-full flex-1 space-y-1 md:max-w-[280px]">
+      <div className="w-full min-w-0 flex-1 space-y-1 @lg:max-w-[280px]">
         {labels.map((label, i) => (
           <div key={label} className="flex items-center gap-2">
             <span className="size-2.5 shrink-0 rounded-sm" style={{ background: colors[i] }} />
