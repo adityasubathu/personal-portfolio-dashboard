@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-20-16-42-55 — Holdings table density
+- Avg, Prev Close and LTP moved out of the holdings table into an info popover; the new rightmost column shows just the date the LTP was last updated. (2026-09-20-16-42-55 · d5bedbb)
+- Cost and Value now render 15% larger than the other numbers, and Gain % gave up its column for a green-up/red-down chip beside the gain amount. (2026-09-20-16-46-30 · 5a6be51)
+
 ## 2026-09-20-15-44-06 — Donut chart layout fix
 - Fixed donut charts rendering at full column width with their legend pushed off screen, and started each donut at 12 o'clock going clockwise. (2026-09-20-15-44-06 · a5f7a50)
 - Donut legends now stack under the chart when their card is narrow, so the Sector Allocation legend no longer spills over the sector table. (2026-09-20-15-45-57 · 8d36244)
