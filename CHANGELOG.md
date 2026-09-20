@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-16-48-14 — Holdings table row striping
+- Holdings table rows now alternate a subtle background tint so row boundaries are easier to track across the wide table. (2026-09-20-16-48-14 · <pending>)
+
 ## 2026-09-20-16-45-51 — Holdings table non-price font bump
 - The holdings table's Symbol, Type, Qty, Day %, Day ₹, Gain ₹, XIRR and Updated columns now render 10% larger; Cost and Value keep their existing, larger size. (2026-09-20-16-45-51 · fdb3be9)
 

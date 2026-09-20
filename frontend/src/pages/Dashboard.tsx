@@ -243,11 +243,12 @@ function HoldingsTable() {
 
   const { groups, day_chg_pct_min, day_chg_pct_max } = data
 
-  function row(r: HoldingRow) {
+  function row(r: HoldingRow, idx: number) {
     const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb')
+    const striped = idx % 2 === 1
     return (
-      <tr key={r.instrument_id} className="hover:bg-muted/50">
-        <td className="sticky left-0 z-10 max-w-[230px] bg-card px-2 py-1.5 font-medium">
+      <tr key={r.instrument_id} className={cn('group hover:bg-row-hover', striped && 'bg-row-stripe')}>
+        <td className={cn('sticky left-0 z-10 max-w-[230px] px-2 py-1.5 font-medium group-hover:bg-row-hover', striped ? 'bg-row-stripe' : 'bg-card')}>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="block truncate">{r.symbol}</span>
@@ -404,18 +405,21 @@ function HoldingsTable() {
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => (
-              <React.Fragment key={g.label ?? '__ungrouped'}>
-                {g.label && sections === 'on' && (
-                  <tr>
-                    <td colSpan={10} className="bg-muted px-2 py-1.5 text-xs font-semibold">
-                      {g.label}
-                    </td>
-                  </tr>
-                )}
-                {g.rows.map((r) => row(r))}
-              </React.Fragment>
-            ))}
+            {(() => {
+              let rowIndex = 0
+              return groups.map((g) => (
+                <React.Fragment key={g.label ?? '__ungrouped'}>
+                  {g.label && sections === 'on' && (
+                    <tr>
+                      <td colSpan={10} className="bg-muted px-2 py-1.5 text-xs font-semibold">
+                        {g.label}
+                      </td>
+                    </tr>
+                  )}
+                  {g.rows.map((r) => row(r, rowIndex++))}
+                </React.Fragment>
+              ))
+            })()}
           </tbody>
           <tfoot>
             <tr className={cn('sticky bottom-0 z-20 bg-card font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
