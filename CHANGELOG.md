@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-20-16-57-09 — Day change gets the gain-chip treatment
-- Day ₹ now shows a neutral number plus an arrow/% chip carrying the day's percentage change, matching how Gain ₹ works; the separate heat-tinted Day % column is gone, and `Day %` is dropped from the sort list. (2026-09-20-16-57-09 · <pending>)
+- Day ₹ now shows a neutral number plus an arrow/% chip carrying the day's percentage change, matching how Gain ₹ works; the separate heat-tinted Day % column is gone, and `Day %` is dropped from the sort list. (2026-09-20-16-57-09 · 072ba8c)
 
 ## 2026-09-20-16-54-29 — Fix gain chip arrow disappearing on double-digit gains
 - The chip's arrow icon could shrink to invisible when the gain percentage needed two digits before the decimal; the icon no longer shrinks and the pill is wide enough for three-digit percentages. (2026-09-20-16-54-29 · 18aa63e)
