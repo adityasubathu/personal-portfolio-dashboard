@@ -32,6 +32,70 @@ UNIT_NAV_BASE = 100.0
 
 async def compute_nav_series(db: AsyncSession) -> list[dict]:
     """Return [{date, value, invested, unit_nav}] from the earliest trade to today.
+
+    See build_nav_series for the reconstruction rules. This function only loads
+    the inputs: trades, and the closing prices the walk can actually use —
+    instruments that were traded, on dates from the first trade onwards. Rows
+    outside that window are never read by the walk, so fetching them is pure
+    transfer cost (it was ~3.3x the rows on a real portfolio).
+    """
+    trades = list(
+        (await db.execute(select(Trade).order_by(Trade.trade_date, Trade.id))).scalars().all()
+    )
+    if not trades:
+        return []
+
+    traded_ids = {t.instrument_id for t in trades}
+    start = trades[0].trade_date
+
+    instr_rows = (
+        await db.execute(
+            select(Instrument.id, Instrument.instrument_type).where(Instrument.id.in_(traded_ids))
+        )
+    ).all()
+    mf_ids = {iid for iid, itype in instr_rows if itype in MF_TYPES}
+
+    price_rows = (
+        await db.execute(
+            select(PriceHistory.instrument_id, PriceHistory.price_date, PriceHistory.close).where(
+                PriceHistory.instrument_id.in_(traded_ids),
+                PriceHistory.price_date >= start,
+            )
+        )
+    ).all()
+    nav_rows = (
+        (
+            await db.execute(
+                select(NavHistory.instrument_id, NavHistory.nav_date, NavHistory.nav).where(
+                    NavHistory.instrument_id.in_(mf_ids),
+                    NavHistory.nav_date >= start,
+                )
+            )
+        ).all()
+        if mf_ids
+        else []
+    )
+
+    # {date -> [(instrument_id, close)]}, so each day of the walk touches only
+    # the instruments that actually have a row that day. NAV rows are appended
+    # after price rows so that for an MF holding both, the NAV is applied last
+    # and wins.
+    closes_by_date: dict[date, list[tuple[int, float]]] = defaultdict(list)
+    for iid, d, close in price_rows:
+        closes_by_date[d].append((iid, float(close)))
+    for iid, d, nav in nav_rows:
+        closes_by_date[d].append((iid, float(nav)))
+
+    return build_nav_series(trades, closes_by_date, date.today())
+
+
+def build_nav_series(
+    trades: list[Trade],
+    closes_by_date: dict[date, list[tuple[int, float]]],
+    end: date,
+) -> list[dict]:
+    """Walk one day at a time from the first trade to `end`.
+
     Forward-fills missing prices; falls back to trade price when no close
     is known yet for a newly-bought instrument.
 
@@ -47,47 +111,8 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
     See plans/2026-08-19-unit-nav-chart.md and
     plans/2026-09-04-21-55-nav-base-date-and-breakdown-freshness.md.
     """
-    trades = list(
-        (await db.execute(select(Trade).order_by(Trade.trade_date, Trade.id))).scalars().all()
-    )
     if not trades:
         return []
-
-    traded_ids = {t.instrument_id for t in trades}
-    instr_rows = (
-        await db.execute(select(Instrument).where(Instrument.id.in_(traded_ids)))
-    ).scalars().all()
-    mf_ids = {i.id for i in instr_rows if i.instrument_type in MF_TYPES}
-
-    price_rows = list(
-        (
-            await db.execute(
-                select(
-                    PriceHistory.instrument_id,
-                    PriceHistory.price_date,
-                    PriceHistory.close,
-                ).order_by(PriceHistory.instrument_id, PriceHistory.price_date)
-            )
-        ).all()
-    )
-    nav_rows = list(
-        (
-            await db.execute(
-                select(
-                    NavHistory.instrument_id,
-                    NavHistory.nav_date,
-                    NavHistory.nav,
-                ).order_by(NavHistory.instrument_id, NavHistory.nav_date)
-            )
-        ).all()
-    )
-
-    price_lookup: dict[int, dict[date, float]] = defaultdict(dict)
-    for iid, d, c in price_rows:
-        price_lookup[iid][d] = float(c)
-    for iid, d, nav in nav_rows:
-        if iid in mf_ids:
-            price_lookup[iid][d] = float(nav)
 
     # Group trades by date for O(1) lookup inside the day loop.
     trades_by_date: dict[date, list[Trade]] = defaultdict(list)
@@ -95,7 +120,6 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
         trades_by_date[t.trade_date].append(t)
 
     start = trades[0].trade_date
-    end = date.today()
     base_date = max(UNIT_NAV_BASE_DATE, start)
 
     qty: dict[int, float] = defaultdict(float)
@@ -108,11 +132,8 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
 
     cur = start
     while cur <= end:
-        # Update last_close from any price_history row on this date.
-        for iid, day_map in price_lookup.items():
-            close = day_map.get(cur)
-            if close is not None:
-                last_close[iid] = close
+        for iid, close in closes_by_date.get(cur, ()):
+            last_close[iid] = close
 
         # Apply trades on this date, tracking net cash flow (BUY = contribution,
         # SELL = withdrawal) for today's TWR calc below.
