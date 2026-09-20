@@ -124,7 +124,7 @@ const NUM_LG = 'text-[13.8px]'
 // Direction lives in the arrow, so the number itself is printed unsigned.
 // Fixed width so the pill's edges land at the same x in every row, regardless
 // of how many digits the percentage has — otherwise the column looks ragged.
-const GAIN_CHIP_WIDTH = 'w-16'
+const GAIN_CHIP_WIDTH = 'w-[4.5rem]'
 function GainChip({ value }: { value: number | null | undefined }) {
   if (value == null) return <span className={cn('inline-block shrink-0', GAIN_CHIP_WIDTH)} />
   const up = value >= 0
@@ -132,12 +132,12 @@ function GainChip({ value }: { value: number | null | undefined }) {
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-medium',
+        'inline-flex shrink-0 items-center justify-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-medium whitespace-nowrap',
         GAIN_CHIP_WIDTH,
         up ? CHIP_CLASS.green : CHIP_CLASS.red,
       )}
     >
-      <Arrow className="size-2.5" />
+      <Arrow className="size-2.5 shrink-0" />
       {pct(Math.abs(value), 2, false)}
     </span>
   )

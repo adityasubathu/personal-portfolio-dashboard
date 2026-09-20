@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-16-54-29 — Fix gain chip arrow disappearing on double-digit gains
+- The chip's arrow icon could shrink to invisible when the gain percentage needed two digits before the decimal; the icon no longer shrinks and the pill is wide enough for three-digit percentages. (2026-09-20-16-54-29 · <pending>)
+
 ## 2026-09-20-16-52-48 — Gain chips align in a straight column
 - Gain % chips in the holdings table now have a fixed width, so the pills line up vertically instead of shifting left or right based on how many digits the percentage has. (2026-09-20-16-52-48 · 39a04c6)
 
