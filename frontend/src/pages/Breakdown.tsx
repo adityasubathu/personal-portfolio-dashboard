@@ -775,7 +775,7 @@ function SectorTab({
 
         <Section title="Sector" bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-[13.11px]">
               <thead>
                 <tr className="sticky top-0 z-10 bg-card">
                   <th className="h-8 px-2 text-left font-medium text-muted-foreground">Sector</th>
