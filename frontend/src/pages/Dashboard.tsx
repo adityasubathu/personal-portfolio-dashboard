@@ -210,11 +210,11 @@ function HoldingsTable() {
         <td data-numeric className={cn('px-2 py-1.5 text-right', (r.day_chg_abs ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumMoney value={r.day_chg_abs} showSign />
         </td>
-        <td data-numeric className="px-2 py-1.5 text-right text-[13px]">
+        <td data-numeric className="px-2 py-1.5 text-right">
           <NumPrice value={r.prev_close} />
           {r.prev_close_date && <p className="text-xs text-muted-foreground">{r.prev_close_date}</p>}
         </td>
-        <td data-numeric className="px-2 py-1.5 text-right text-[13px]">
+        <td data-numeric className="px-2 py-1.5 text-right">
           <NumPrice value={r.ltp} />
           {r.as_of && <p className="text-xs text-muted-foreground">{r.as_of}</p>}
         </td>
