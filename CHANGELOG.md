@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2026-09-20-17-07-12 — Larger text in the Allocation targets table
-- The Allocation / Equity allocation targets table (Breakdown > Overview) now renders at 15px instead of 12px, 25% larger. (2026-09-20-17-07-12 · <pending>)
+- The Allocation / Equity allocation targets table (Breakdown > Overview) now renders at 15px instead of 12px, 25% larger. (2026-09-20-17-07-12 · c2bca67)
+- Dialed that back to 13.5px after a follow-up request to reduce it 10%. (2026-09-20-17-07-36 · <pending>)
 
 ## 2026-09-20-17-06-11 — Breakdown page padding and a targets-edit popup
 - Portfolio Breakdown now has the same left/right page padding as Capital Gains and Fund Breakdown, across all three tabs. (2026-09-20-17-06-11 · b642eb8)
