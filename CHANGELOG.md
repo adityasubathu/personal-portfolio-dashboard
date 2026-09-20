@@ -8,7 +8,7 @@
 - NAV History: the sync, fetch and upload sections below the charts now sit in a centred, narrower column instead of spanning the full page. (2026-09-20-15-50-06 · 7e94c9c)
 - Capital Gains: the per-bucket tax estimate cards now centre themselves, so a short row sits in the middle instead of hugging the left edge. (2026-09-20-15-51-23 · 2838fd9)
 - Market Sentiment: charts are one per row at every width, and each chart's name is centred above it in a larger font. (2026-09-20-15-52-51 · 5501d74)
-- Market Sentiment: the period selector moved from the page header to the price chart's own control row, and that chart is now titled "Index Price and Trends". (2026-09-20-15-54-49 · PENDING)
+- Market Sentiment: the period selector moved from the page header to the price chart's own control row, and that chart is now titled "Index Price and Trends". (2026-09-20-15-54-49 · 41d3fde)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
