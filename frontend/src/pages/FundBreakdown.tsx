@@ -51,7 +51,13 @@ function groupHoldings(holdings: SchemeHolding[]) {
   const claimed = new Set(HOLDING_GROUPS.flatMap((g) => g.categories))
   const rest = holdings.filter((h) => !claimed.has(h.category))
   if (rest.length > 0) grouped.push({ label: 'Other', rows: rest })
-  return grouped.filter((g) => g.rows.length > 0)
+  return grouped
+    .filter((g) => g.rows.length > 0)
+    .map((g) => ({
+      ...g,
+      pct: g.rows.reduce((a, h) => a + h.pct, 0),
+      value: g.rows.reduce((a, h) => a + h.value, 0),
+    }))
 }
 
 function CategoryCell({ category }: { category: string }) {
@@ -177,11 +183,22 @@ export function FundBreakdown() {
                 </tr>
               </thead>
               <tbody>
-                {groupHoldings(breakdown.holdings).map((group) => (
+                {groupHoldings(breakdown.holdings).map((group, gi) => (
                   <Fragment key={group.label}>
-                    <tr>
-                      <td colSpan={5} className="border-y bg-muted px-2 py-1.5 text-[0.9rem] font-bold">
+                    {gi > 0 && (
+                      <tr aria-hidden>
+                        <td colSpan={5} className="h-4" />
+                      </tr>
+                    )}
+                    <tr className="bg-row-hover text-[0.9rem] font-bold">
+                      <td colSpan={3} className="border-y-2 border-foreground/25 px-2 py-2 uppercase tracking-wide">
                         {group.label}
+                      </td>
+                      <td data-numeric className="border-y-2 border-foreground/25 px-2 py-2 text-right">
+                        {group.pct.toFixed(2)}%
+                      </td>
+                      <td data-numeric className="border-y-2 border-foreground/25 px-2 py-2 text-right">
+                        <MoneyText value={group.value} compact />
                       </td>
                     </tr>
                     {group.rows.map((h, i) => (
