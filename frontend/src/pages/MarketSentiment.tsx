@@ -930,35 +930,37 @@ export function MarketSentiment() {
           <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Oscillators</h2>
 
           <div className="flex flex-col gap-4">
-            <OscillatorChart
-              caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
-              info={EXPLANATIONS.rsi}
-              scaleKey="rsi"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
-              formatter={oscFormatter}
-              seriesType="line"
-              line={oscData.rsi14}
-              label="Daily RSI"
-              compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
-              horizontalLines={[
-                { value: 70, color: '#dc2626', label: 'Overbought' },
-                { value: 30, color: '#2563eb', label: 'Oversold' },
-              ]}
-              persistKey="market-sentiment-rsi"
-            />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <OscillatorChart
+                caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
+                info={EXPLANATIONS.rsi}
+                scaleKey="rsi"
+                scaleWidth={chartPriceScaleWidth}
+                onScaleWidth={reportScaleWidth}
+                formatter={oscFormatter}
+                seriesType="line"
+                line={oscData.rsi14}
+                label="Daily RSI"
+                compareLines={[{ label: 'Weekly RSI', color: '#f59e0b', data: oscData.rsi14_weekly }]}
+                horizontalLines={[
+                  { value: 70, color: '#dc2626', label: 'Overbought' },
+                  { value: 30, color: '#2563eb', label: 'Oversold' },
+                ]}
+                persistKey="market-sentiment-rsi"
+              />
 
-            <OscillatorChart
-              caption={<>MACD Histogram ↓</>}
-              info={EXPLANATIONS.macd}
-              scaleKey="macd"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
-              formatter={oscFormatter}
-              seriesType="histogram"
-              line={oscData.macd_hist}
-              persistKey="market-sentiment-macd"
-            />
+              <OscillatorChart
+                caption={<>MACD Histogram ↓</>}
+                info={EXPLANATIONS.macd}
+                scaleKey="macd"
+                scaleWidth={chartPriceScaleWidth}
+                onScaleWidth={reportScaleWidth}
+                formatter={oscFormatter}
+                seriesType="histogram"
+                line={oscData.macd_hist}
+                persistKey="market-sentiment-macd"
+              />
+            </div>
 
             <OscillatorChart
               caption={<>ADX — trend strength (&gt;25 = trending) ↓</>}
