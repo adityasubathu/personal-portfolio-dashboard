@@ -101,7 +101,7 @@ function BucketCard({ bucket, slabRate }: { bucket: GainBucket, slabRate: number
     : (slabRate > 0 ? Math.round(bucket.taxable * slabRate) / 100 : null)
 
   return (
-    <div className="rounded-xl border bg-card p-3">
+    <div className="basis-[calc((100%-0.75rem)/2)] rounded-xl border bg-card p-3 sm:basis-[calc((100%-1.5rem)/3)] md:basis-[calc((100%-2.25rem)/4)]">
       <p className="mb-1 line-clamp-2 text-xs">{bucket.label}</p>
       <MoneyText value={bucket.gross_gain} colorize className="text-base font-semibold" />
       {(bucket.setoff_applied > 0 || bucket.exemption_applied > 0) && (
@@ -434,7 +434,7 @@ export function CapitalGains() {
       {data && (
         <div className="flex flex-col gap-4">
           {data.buckets.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <div className="flex flex-wrap justify-center gap-3">
               {data.buckets.map(bucket => (
                 <BucketCard key={bucket.key} bucket={bucket} slabRate={slabRate} />
               ))}
