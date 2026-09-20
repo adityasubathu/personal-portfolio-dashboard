@@ -21,7 +21,7 @@
 - Fund Detail holdings table: fonts trimmed 10% and alternating rows shaded. (2026-09-20-16-12-04 · f26a2f2)
 - Fund Detail: the alternating row shading is now actually visible, with a matching darker hover. (2026-09-20-16-12-43 · 088dbaa)
 - Fund Detail is inset horizontally to match Capital Gains. (2026-09-20-16-13-20 · cbba2b5)
-- Page titles are twice the size on every route. (2026-09-20-16-13-55 · PENDING)
+- Page titles are twice the size on every route. (2026-09-20-16-13-55 · 86d62d9)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
