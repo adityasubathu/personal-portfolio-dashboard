@@ -45,6 +45,9 @@
   --chip-red: #ffe3e3;     --chip-red-fg: #c92a2a;
   --chip-gray: #f1f3f5;    --chip-gray-fg: #212529;
 
+  --toggle-on: #2f5fd0;
+  --toggle-on-fg: #ffffff;
+
   --chart-1: #2f5fd0;
   --chart-2: #16834a;
   --chart-3: #aa7419;
@@ -96,6 +99,9 @@
   --chip-orange: #6d2408;  --chip-orange-fg: #fff4e6;
   --chip-red: #651515;     --chip-red-fg: #fff5f5;
   --chip-gray: #111315;    --chip-gray-fg: #f8f9fa;
+
+  --toggle-on: #3a68c2;
+  --toggle-on-fg: #ffffff;
 
   --chart-1: #6f9ef0;
   --chart-2: #49bd78;
@@ -190,4 +196,15 @@
   [data-numeric] {
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* Selected toggle/segmented options. Unlayered so it outranks the primitive's
+   own data-[state=on] and hover: utilities without touching src/components/ui. */
+[data-slot='toggle-group-item'][data-state='on'],
+[data-slot='toggle-group-item'][data-state='on']:hover,
+[data-slot='toggle'][data-state='on'],
+[data-slot='toggle'][data-state='on']:hover {
+  background-color: var(--toggle-on);
+  color: var(--toggle-on-fg);
+  border-color: var(--toggle-on);
 }
