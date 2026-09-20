@@ -12,6 +12,7 @@
 - Market Sentiment: RSI and MACD now share a row on wide screens; every other chart stays one per row. (2026-09-20-15-55-47 · 343881d)
 - Badges across the app use the Mantine build's light-variant palette again — saturated tints and deep text instead of the washed-out 10% overlays. (2026-09-20-15-58-31 · 0e6486e)
 - The selected option in every segmented toggle (index, period, sector level, NAV source) is now blue with white text instead of a faint grey. (2026-09-20-16-00-21 · e15bf72)
+- Capital Gains sits in from the window edges with its own horizontal padding. (2026-09-20-16-02-51 · PENDING)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
