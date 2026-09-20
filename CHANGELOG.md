@@ -25,7 +25,7 @@
 - Fund Detail holdings are grouped under Equity / Debt / Precious Metals / Cash headings, with empty groups omitted. (2026-09-20-16-15-17 · 807c745)
 - Fund Detail group headings carry their % and value totals, and stand apart from the rows they head. (2026-09-20-16-16-11 · 54d49b8)
 - Fund Detail: holdings rows are numbered within their group and the group name is centred over them. (2026-09-20-16-16-58 · 1cc2c38)
-- Fund Detail: foreign equity holdings get an indigo "Foreign" chip matching their donut slice. (2026-09-20-16-17-34 · PENDING)
+- Fund Detail: foreign equity holdings get an indigo "Foreign" chip matching their donut slice. (2026-09-20-16-17-34 · cb68e3c)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
