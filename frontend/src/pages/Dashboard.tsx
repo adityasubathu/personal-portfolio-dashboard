@@ -15,7 +15,7 @@ import {
   useSetManualUsdinrMutation,
 } from '../api/manualAssets'
 import { MoneyText } from '../components/MoneyText'
-import { inr, pct, heatmapBg, heatmapTextColor } from '../lib/format'
+import { inr, pct } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { HoldingRow } from '../types/portfolio'
@@ -189,7 +189,6 @@ const SORT_OPTIONS = [
   { value: 'pnl', label: 'P&L ₹' },
   { value: 'xirr', label: 'XIRR' },
   { value: 'day_chg_abs', label: 'Day ₹' },
-  { value: 'day_chg_pct', label: 'Day %' },
   { value: 'cost', label: 'Cost' },
 ]
 
@@ -245,10 +244,9 @@ function HoldingsTable() {
   }
   if (!data) return null
 
-  const { groups, day_chg_pct_min, day_chg_pct_max } = data
+  const { groups } = data
 
   function row(r: HoldingRow, idx: number) {
-    const dayPctBg = heatmapBg(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb')
     const striped = idx % 2 === 1
     return (
       <tr key={r.instrument_id} className={cn('group hover:bg-row-hover', striped && 'bg-row-stripe')}>
@@ -263,11 +261,11 @@ function HoldingsTable() {
         <td className="px-2 py-1.5 text-muted-foreground">{r.type}</td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumQty value={r.qty} /></td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', NUM_LG)}><NumMoney value={r.cost} /></td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
-          <NumPct value={r.day_chg_pct} />
-        </td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right', (r.day_chg_abs ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
-          <NumMoney value={r.day_chg_abs} showSign />
+        <td data-numeric className="px-2 py-1.5 text-right text-foreground">
+          <div className="flex items-center justify-end gap-1.5">
+            <NumMoney value={r.day_chg_abs} showSign />
+            <GainChip value={r.day_chg_pct} />
+          </div>
         </td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', NUM_LG)}><NumMoney value={r.value} /></td>
         <td data-numeric className="px-2 py-1.5 text-right text-foreground">
@@ -397,13 +395,13 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full text-[13.2px]" style={{ minWidth: 1130 }}>
+        <table className="w-full text-[13.2px]" style={{ minWidth: 1050 }}>
           <thead>
             <tr className="sticky top-0 z-20 bg-card">
               {header('Symbol', 'symbol')}
               <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
-              {header('Cost', 'cost')}{header('Day %', 'day_chg_pct')}{header('Day ₹', 'day_chg_abs')}
+              {header('Cost', 'cost')}{header('Day ₹', 'day_chg_abs')}
               {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('XIRR', 'xirr')}
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Updated</th>
             </tr>
@@ -415,7 +413,7 @@ function HoldingsTable() {
                 <React.Fragment key={g.label ?? '__ungrouped'}>
                   {g.label && sections === 'on' && (
                     <tr className="bg-row-hover">
-                      <td colSpan={10} className="border-y-2 border-foreground/25 px-2 py-1.5 text-xs font-bold tracking-wide uppercase">
+                      <td colSpan={9} className="border-y-2 border-foreground/25 px-2 py-1.5 text-xs font-bold tracking-wide uppercase">
                         {g.label}
                       </td>
                     </tr>
@@ -426,14 +424,14 @@ function HoldingsTable() {
             })()}
           </tbody>
           <tfoot>
-            <tr className={cn('sticky bottom-0 z-20 border-t-2 border-primary/50 bg-primary/10 font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
+            <tr className="sticky bottom-0 z-20 border-t-2 border-primary/50 bg-primary/10 font-semibold">
               <td colSpan={3} className="px-2 py-1.5 text-foreground">Total</td>
               <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_cost} /></td>
-              <td data-numeric className="px-2 py-1.5 text-right">
-                <NumPct value={data.total_day_chg_pct} />
-              </td>
-              <td data-numeric className="px-2 py-1.5 text-right">
-                <NumMoney value={data.total_day_chg} showSign />
+              <td data-numeric className="px-2 py-1.5 text-right text-foreground">
+                <div className="flex items-center justify-end gap-1.5">
+                  <NumMoney value={data.total_day_chg} showSign />
+                  <GainChip value={data.total_day_chg_pct} />
+                </div>
               </td>
               <td data-numeric className={cn('px-2 py-1.5 text-right text-foreground', NUM_LG)}><NumMoney value={data.total_value} /></td>
               <td data-numeric className="px-2 py-1.5 text-right text-foreground">
