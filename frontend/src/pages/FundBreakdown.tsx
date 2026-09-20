@@ -27,9 +27,12 @@ const CAP_CHIP: Record<string, { label: string; color: ChipColor }> = {
   'Unclassified Equity': { label: 'Unclassified', color: 'gray' },
 }
 
-// NSE's four-level taxonomy, most general first; missing levels drop out.
+// NSE's four-level taxonomy, most general first; missing levels drop out. Only
+// equity holdings are classified — cash, commodity and REIT rows stay blank.
 const industryPath = (h: SchemeHolding) =>
-  [h.macro_sector, h.sector, h.industry, h.basic_industry].filter(Boolean).join(' → ')
+  h.type === 'Equity'
+    ? [h.macro_sector, h.sector, h.industry, h.basic_industry].filter(Boolean).join(' → ')
+    : ''
 
 function CategoryCell({ category }: { category: string }) {
   const cap = CAP_CHIP[category]
@@ -153,7 +156,7 @@ export function FundBreakdown() {
                   <tr key={i} className="hover:bg-muted/50">
                     <td className="px-2 py-1.5">{h.name}</td>
                     <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
-                    <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h) || '—'}</td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>
                     <td data-numeric className="px-2 py-1.5 text-right">{h.pct.toFixed(2)}%</td>
                     <td data-numeric className="px-2 py-1.5 text-right"><MoneyText value={h.value} compact /></td>
                   </tr>
