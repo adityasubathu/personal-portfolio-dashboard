@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { RefreshCw, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, Trash2, Info } from 'lucide-react'
 import { useSummaryCards, useHoldings, useUpdateLtpMutation } from '../api/portfolio'
 import {
   useManualAssets,
@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Table as ShadTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS } from '@/lib/colors'
 import { notify } from '@/lib/notify'
@@ -121,6 +122,40 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   return <div className="space-y-0.5"><p className="text-xs text-muted-foreground">{label}</p><p className="text-sm" data-numeric>{children}</p></div>
 }
 
+function PriceDetailRow({ label, sub, children }: { label: string; sub?: string | null; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-muted-foreground">
+        {label}
+        {sub && <span className="ml-1 text-[11px]">{sub}</span>}
+      </dt>
+      <dd data-numeric>{children}</dd>
+    </div>
+  )
+}
+
+function PriceInfo({ row, compare }: { row: HoldingRow; compare: 'prev_close' | 'open' }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <ShadButton variant="ghost" size="icon-xs" aria-label={`Prices for ${row.symbol}`}>
+          <Info className="text-muted-foreground" />
+        </ShadButton>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-3">
+        <p className="mb-2 truncate text-xs font-semibold">{row.symbol}</p>
+        <dl className="space-y-1 text-xs">
+          <PriceDetailRow label="Avg price"><NumPrice value={row.avg_price} /></PriceDetailRow>
+          <PriceDetailRow label={compare === 'open' ? 'Open' : 'Prev close'} sub={row.prev_close_date}>
+            <NumPrice value={row.prev_close} />
+          </PriceDetailRow>
+          <PriceDetailRow label="LTP" sub={row.as_of}><NumPrice value={row.ltp} /></PriceDetailRow>
+        </dl>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // ── Holdings table ──────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS = [
@@ -202,21 +237,12 @@ function HoldingsTable() {
         </td>
         <td className="px-2 py-1.5 text-muted-foreground">{r.type}</td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumQty value={r.qty} /></td>
-        <td data-numeric className="px-2 py-1.5 text-right"><NumPrice value={r.avg_price} /></td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.cost} /></td>
         <td data-numeric className={cn('px-2 py-1.5 text-right')} style={{ background: dayPctBg, color: heatmapTextColor(r.day_chg_pct, day_chg_pct_min, day_chg_pct_max, 'rb') }}>
           <NumPct value={r.day_chg_pct} />
         </td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', (r.day_chg_abs ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumMoney value={r.day_chg_abs} showSign />
-        </td>
-        <td data-numeric className="px-2 py-1.5 text-right">
-          <NumPrice value={r.prev_close} />
-          {r.prev_close_date && <p className="text-xs text-muted-foreground">{r.prev_close_date}</p>}
-        </td>
-        <td data-numeric className="px-2 py-1.5 text-right">
-          <NumPrice value={r.ltp} />
-          {r.as_of && <p className="text-xs text-muted-foreground">{r.as_of}</p>}
         </td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumMoney value={r.value} /></td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', r.pnl >= 0 ? 'text-positive' : 'text-negative')}>
@@ -227,6 +253,12 @@ function HoldingsTable() {
         </td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', (r.xirr ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
           <NumPct value={r.xirr} />
+        </td>
+        <td className="px-2 py-1.5">
+          <div className="flex items-center justify-end gap-1">
+            <span data-numeric className="text-muted-foreground">{r.as_of ?? '—'}</span>
+            <PriceInfo row={r} compare={compare} />
+          </div>
         </td>
       </tr>
     )
@@ -340,17 +372,15 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full text-xs" style={{ minWidth: 1380 }}>
+        <table className="w-full text-xs" style={{ minWidth: 1200 }}>
           <thead>
             <tr className="sticky top-0 z-20 bg-card">
               {header('Symbol', 'symbol')}
               <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
-              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Avg</th>
               {header('Cost', 'cost')}{header('Day %', 'day_chg_pct')}{header('Day ₹', 'day_chg_abs')}
-              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Prev Close</th>
-              <th className="h-8 px-2 text-right font-medium text-muted-foreground">LTP</th>
               {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('Gain %', 'pnl_pct')}{header('XIRR', 'xirr')}
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Updated</th>
             </tr>
           </thead>
           <tbody>
@@ -358,7 +388,7 @@ function HoldingsTable() {
               <React.Fragment key={g.label ?? '__ungrouped'}>
                 {g.label && sections === 'on' && (
                   <tr>
-                    <td colSpan={13} className="bg-muted px-2 py-1.5 text-xs font-semibold">
+                    <td colSpan={11} className="bg-muted px-2 py-1.5 text-xs font-semibold">
                       {g.label}
                     </td>
                   </tr>
@@ -369,7 +399,7 @@ function HoldingsTable() {
           </tbody>
           <tfoot>
             <tr className={cn('sticky bottom-0 z-20 bg-card font-semibold', data.total_day_chg >= 0 ? 'text-positive' : 'text-negative')}>
-              <td colSpan={4} className="px-2 py-1.5 text-foreground">Total</td>
+              <td colSpan={3} className="px-2 py-1.5 text-foreground">Total</td>
               <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_cost} /></td>
               <td data-numeric className="px-2 py-1.5 text-right">
                 <NumPct value={data.total_day_chg_pct} />
@@ -377,12 +407,11 @@ function HoldingsTable() {
               <td data-numeric className="px-2 py-1.5 text-right">
                 <NumMoney value={data.total_day_chg} showSign />
               </td>
-              <td colSpan={2} />
               <td data-numeric className="px-2 py-1.5 text-right text-foreground"><NumMoney value={data.total_value} /></td>
               <td data-numeric className="px-2 py-1.5 text-right text-foreground">
                 <NumMoney value={data.total_value - data.total_cost} showSign />
               </td>
-              <td colSpan={2} />
+              <td colSpan={3} />
             </tr>
           </tfoot>
         </table>
