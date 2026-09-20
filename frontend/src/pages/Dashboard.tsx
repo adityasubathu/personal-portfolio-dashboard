@@ -258,7 +258,7 @@ function HoldingsTable() {
             <TooltipContent>{r.symbol}</TooltipContent>
           </Tooltip>
         </td>
-        <td className="px-2 py-1.5 text-muted-foreground">{r.type}</td>
+        <td className="px-2 py-1.5 text-right text-muted-foreground">{r.type}</td>
         <td data-numeric className="px-2 py-1.5 text-right"><NumQty value={r.qty} /></td>
         <td data-numeric className={cn('px-2 py-1.5 text-right', NUM_LG)}><NumMoney value={r.cost} /></td>
         <td data-numeric className="px-2 py-1.5 text-right text-foreground">
@@ -410,7 +410,7 @@ function HoldingsTable() {
           <thead>
             <tr className="sticky top-0 z-20 divide-x divide-border bg-card">
               {header('Symbol', 'symbol')}
-              <th className="h-8 px-2 text-left font-medium text-muted-foreground">Type</th>
+              <th className="h-8 px-2 text-right font-medium text-muted-foreground">Type</th>
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Qty</th>
               {header('Cost', 'cost')}{header('Day ₹', 'day_chg_abs')}
               {header('Value', 'value')}{header('Gain ₹', 'pnl')}{header('XIRR', 'xirr')}

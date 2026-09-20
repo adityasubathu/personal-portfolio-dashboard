@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-17-00-29 — Right-align the Type column
+- The Type column header and its cells now right-align like every other non-Symbol column instead of sitting flush left. (2026-09-20-17-00-29 · <pending>)
+
 ## 2026-09-20-16-59-01 — Holdings table column dividers and a wider Symbol column
 - Vertical dividers now separate every column in the holdings table. Symbol widened to 300px to show longer instrument names; the other columns were given fixed, tighter widths to make room. (2026-09-20-16-59-01 · 45fe18b)
 
