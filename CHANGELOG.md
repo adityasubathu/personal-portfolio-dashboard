@@ -3,7 +3,7 @@
 ## 2026-09-20-17-58-57 — NAV History page load performance
 - Scoped the NAV-history price/NAV queries to traded instruments and dates from the first trade onwards, and regrouped the price lookup by date. Cuts `GET /nav-history` from ~580ms to under 250ms with byte-identical output. (2026-09-20-17-58-57 · 282db07)
 - Memoized the NAV History chart's derived data arrays so unrelated re-renders (typing in a form field, an SSE log line arriving) no longer tear down and rebuild the chart series. (2026-09-20-17-59-52 · 15441d9)
-- The NAV History page now caches its series for 5 minutes between visits instead of refetching on every mount; the Kite price sync, OHLC fetch and OHLC upload all invalidate it so the chart still refreshes right after a sync. (2026-09-20-18-00-49 · PENDING)
+- The NAV History page now caches its series for 5 minutes between visits instead of refetching on every mount; the Kite price sync, OHLC fetch and OHLC upload all invalidate it so the chart still refreshes right after a sync. (2026-09-20-18-00-49 · 991f440)
 
 ## 2026-09-20-17-18-05 — Dead-code sweep and mobile-UI removal
 - Deleted six unused shadcn primitives (`card`, `chart`, `dropdown-menu`, `pagination`, `scroll-area`, `sonner`) and the `next-themes` dependency that only `ui/sonner` pulled in. (2026-09-20-17-18-05 · e7caaac)
