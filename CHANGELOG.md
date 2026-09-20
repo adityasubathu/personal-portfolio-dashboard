@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-20-17-08-20 — Larger text in the Sector table
-- The Sector table (Breakdown > Sector tab) now renders at 13.11px — up 15% from 12px, then dialed back 5% per a follow-up request. (2026-09-20-17-08-20 · <pending>)
+- The Sector table (Breakdown > Sector tab) now renders at 13.11px — up 15% from 12px, then dialed back 5% per a follow-up request. (2026-09-20-17-08-20 · f2af14e)
 
 ## 2026-09-20-17-07-12 — Larger text in the Allocation targets table
 - The Allocation / Equity allocation targets table (Breakdown > Overview) now renders at 15px instead of 12px, 25% larger. (2026-09-20-17-07-12 · c2bca67)
