@@ -817,9 +817,6 @@ export function MarketSentiment() {
               <ToggleGroupItem value="nifty50">Nifty 50</ToggleGroupItem>
               <ToggleGroupItem value="nifty500">Nifty 500</ToggleGroupItem>
             </ToggleGroup>
-            <ToggleGroup type="single" variant="outline" size="sm" value={rangeLabel} onValueChange={(v) => v && setRangeLabel(v)}>
-              {RANGE_OPTIONS.map((r) => <ToggleGroupItem key={r.label} value={r.label}>{r.label}</ToggleGroupItem>)}
-            </ToggleGroup>
             <Button
               size="xs"
               variant="ghost"
@@ -876,8 +873,12 @@ export function MarketSentiment() {
         </>
       )}
 
-      {/* Overlay legend */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      {/* Price chart controls: range on the left, overlay toggles on the right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup type="single" variant="outline" size="sm" value={rangeLabel} onValueChange={(v) => v && setRangeLabel(v)}>
+          {RANGE_OPTIONS.map((r) => <ToggleGroupItem key={r.label} value={r.label}>{r.label}</ToggleGroupItem>)}
+        </ToggleGroup>
+        <div className="flex flex-wrap items-center gap-3">
           {OVERLAY_DEFS.map((d) => {
             const enabled = enabledOverlays.includes(d.key)
             return (
@@ -894,6 +895,7 @@ export function MarketSentiment() {
               </div>
             )
           })}
+        </div>
       </div>
 
       {/* Price chart */}
@@ -901,8 +903,10 @@ export function MarketSentiment() {
         <Skeleton className="h-[440px] w-full" />
       ) : filteredCandles.length > 0 ? (
         <Section
+          title="Index Price and Trends"
           bodyClassName="p-2"
           action={<ChartInfo text={EXPLANATIONS.price} />}
+          centerTitle
         >
           <LwChart
             seriesType="candlestick"
