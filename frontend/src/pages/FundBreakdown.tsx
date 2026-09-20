@@ -24,6 +24,7 @@ const CAP_CHIP: Record<string, { label: string; color: ChipColor }> = {
   'Large Cap': { label: 'Large', color: 'green' },
   'Mid Cap': { label: 'Mid', color: 'blue' },
   'Small Cap': { label: 'Small', color: 'orange' },
+  'Equity - Foreign': { label: 'Foreign', color: 'indigo' },
   'Unclassified Equity': { label: 'Unclassified', color: 'gray' },
 }
 

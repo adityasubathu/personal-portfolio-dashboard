@@ -39,6 +39,7 @@
   --chip-green: #d3f9d8;   --chip-green-fg: #2b8a3e;
   --chip-teal: #c3fae8;    --chip-teal-fg: #087f5b;
   --chip-blue: #d0ebff;    --chip-blue-fg: #1864ab;
+  --chip-indigo: #dbe4ff;  --chip-indigo-fg: #364fc7;
   --chip-violet: #e5dbff;  --chip-violet-fg: #5f3dc4;
   --chip-yellow: #fff3bf;  --chip-yellow-fg: #e67700;
   --chip-orange: #ffe8cc;  --chip-orange-fg: #d9480f;
@@ -96,6 +97,7 @@
   --chip-green: #16451f;   --chip-green-fg: #ebfbee;
   --chip-teal: #04402e;    --chip-teal-fg: #e6fcf5;
   --chip-blue: #0c3256;    --chip-blue-fg: #e7f5ff;
+  --chip-indigo: #1b2864;  --chip-indigo-fg: #edf2ff;
   --chip-violet: #301f62;  --chip-violet-fg: #f3f0ff;
   --chip-yellow: #733c00;  --chip-yellow-fg: #fff9db;
   --chip-orange: #6d2408;  --chip-orange-fg: #fff4e6;
@@ -160,6 +162,8 @@
   --color-chip-teal-fg: var(--chip-teal-fg);
   --color-chip-blue: var(--chip-blue);
   --color-chip-blue-fg: var(--chip-blue-fg);
+  --color-chip-indigo: var(--chip-indigo);
+  --color-chip-indigo-fg: var(--chip-indigo-fg);
   --color-chip-violet: var(--chip-violet);
   --color-chip-violet-fg: var(--chip-violet-fg);
   --color-chip-yellow: var(--chip-yellow);
