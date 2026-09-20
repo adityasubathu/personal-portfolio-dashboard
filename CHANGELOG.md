@@ -3,6 +3,7 @@
 ## 2026-09-20-15-44-06 — Donut chart layout fix
 - Fixed donut charts rendering at full column width with their legend pushed off screen, and started each donut at 12 o'clock going clockwise. (2026-09-20-15-44-06 · a5f7a50)
 - Donut legends now stack under the chart when their card is narrow, so the Sector Allocation legend no longer spills over the sector table. (2026-09-20-15-45-57 · 8d36244)
+- Widened the Sector Allocation card to 560px, narrowing the sector table beside it, so the donut and its legend fit side by side. (2026-09-20-15-46-38 · 8139c48)
 - Donut legends now actually sit beside the chart once their card is wide enough, centred in their column; the sector legend is back on the right. (2026-09-20-15-48-07 · 5aac1cf)
 
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
