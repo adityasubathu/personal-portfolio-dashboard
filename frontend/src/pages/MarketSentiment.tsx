@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { InfoPopover } from '@/components/InfoPopover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -104,18 +105,6 @@ const EXPLANATIONS = {
   breadthRatioChart: `These two lines show how the Mid-Cap (Nifty Midcap 150) and Small-Cap (Nifty Smallcap 250) indices are performing relative to large-caps over the past year. Both are rebased to 100 at the start of the 1-year window so they share a comparable scale.\n\nThe large-cap leg is the Nifty 100 — the full large-cap universe (Nifty 50 + Nifty Next 50) — rather than the Nifty 50, which is only its top half. Using the wider index means the comparison is mid/small vs all large-caps, not mid/small vs mega-caps.\n\nRising line = that segment is outperforming large-caps — risk appetite expanding, breadth improving.\nFalling line = that segment is underperforming — rotation toward large-cap safety.\n\nWhen both lines fall while large-caps rise, that is the chart version of a Narrow Rally: the headline index propped up by a handful of the biggest names while the broader market weakens.\n\n(The Breadth Regime and Relative Strength readings above still use the Nifty 50 — there it is one rung of a size ladder (50 → Next 50 → Mid 150 → Small 250) that the Nifty 100 would overlap.)`,
 
   sectorTrends: `Trend labels use the same scoring as the summary card at the top of the page, so the two always agree for Nifty 50 and Nifty 500. Each horizon asks three yes/no questions — is the price above its moving average, is the trend still gaining strength, and has the price actually risen — and counts the yeses:\n\n• Short (weeks) — 20-day average, MACD, 1-month return\n• Mid (months) — 50-day average, +DI/−DI, 3-month return\n• Long (year+) — 200-day average, 200-day slope, 1-year return\n\n3/3 → Bullish · 2/3 → Mostly Bullish · 1/3 → Mostly Bearish · 0/3 → Bearish\n\nClick any badge to see which questions passed. ↘ means "losing steam" — the price is up, but the trend has stopped gaining strength.\n\nPerformance columns show annualised CAGR. Use the mode toggle to switch between absolute CAGR, excess vs Nifty 50, or excess vs Nifty 500 — positive = outperformed, negative = underperformed.\n\nCells showing — mean the index doesn't have enough history for that window (Healthcare, Consumer Durables, and Oil & Gas launched post-2021, so 5Y/10Y are unavailable).\n\nClick any column header to sort.`,
-}
-
-/** Click-to-open explainer popover. `children` is the trigger element. */
-function InfoPopover({ text, children }: { text: string; children: React.ReactNode }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-80" align="start">
-        <p className="text-xs leading-relaxed whitespace-pre-line">{text}</p>
-      </PopoverContent>
-    </Popover>
-  )
 }
 
 /** One oscillator panel: a Section titled with the indicator name, its

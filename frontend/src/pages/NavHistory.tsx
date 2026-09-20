@@ -113,7 +113,7 @@ export function NavHistory() {
 
       {navLoading && <p className="text-sm text-muted-foreground">Loading NAV history…</p>}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 grid-cols-2">
         {valueData.length > 0 && (
           <Section title="Portfolio value" description="Blue = market value · Orange = invested cost" bodyClassName="p-2">
             <LwChart

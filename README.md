@@ -162,6 +162,7 @@ portfolio-mac-arm/
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
 │       │   ├── SsePanel.tsx     # Spinner + scrolling log + result area; driven by useSse
+│       │   ├── InfoPopover.tsx  # Click-to-open explainer popover; default info-icon trigger
 │       │   └── MoneyText.tsx    # ₹ formatted text with colorize/compact/showSign props
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
@@ -180,6 +181,7 @@ portfolio-mac-arm/
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
+│       │   ├── useDebouncedValue.ts # Debounced mirror of a value (search boxes, cash inputs)
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
 │       │   └── PrivacyProvider.tsx # Privacy-mode provider
 │       └── lib/

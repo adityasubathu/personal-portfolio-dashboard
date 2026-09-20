@@ -26,7 +26,7 @@ export function AppLayout() {
             {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </Button>
         </header>
-        <div className="px-3 py-4 md:px-4">
+        <div className="px-4 py-4">
           {status?.demo_mode && (
             <Alert className="mb-4 border-info/40 bg-info/10">
               <FlaskConical className="size-4" />

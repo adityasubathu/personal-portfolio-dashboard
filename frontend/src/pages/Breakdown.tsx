@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Check, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
@@ -36,19 +36,11 @@ import { SsePanel } from '../components/SsePanel'
 import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact, shortDate } from '../lib/format'
 import type { ClassificationLevel, IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
-
-function useDebouncedValue<T>(value: T, delay: number): [T] {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(t)
-  }, [value, delay])
-  return [debounced]
-}
 
 const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
   { value: 'macro_sector', label: 'Macro' },
@@ -214,7 +206,7 @@ function AssetClassTargetsSection({
   const [targets, setTargets] = useState<Record<string, number>>({})
   const [editOpen, setEditOpen] = useState(false)
   const [cashInput, setCashInput] = useState<number | ''>('')
-  const [debouncedCash] = useDebouncedValue(cashInput, 500)
+  const debouncedCash = useDebouncedValue(cashInput, 500)
   const { data: plan } = useRebalancePlan('anchored', debouncedCash === '' ? undefined : debouncedCash)
 
   if (!ac) return null
@@ -266,7 +258,6 @@ function AssetClassTargetsSection({
           onCashChange={setCashInput}
         />
       )}
-      <p className="text-xs text-muted-foreground sm:hidden">Scroll horizontally to view all columns</p>
       <div className="overflow-x-auto">
         <table className="w-full text-xs" style={{ minWidth: 760 }}>
           {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Asset class" />}
@@ -345,7 +336,7 @@ function OverviewTab() {
   const [editOpen, setEditOpen] = useState(false)
   const [rebalanceView, setRebalanceView] = usePersistentState('rebalanceView', false)
   const [cashInput, setCashInput] = useState<number | ''>('')
-  const [debouncedCash] = useDebouncedValue(cashInput, 500)
+  const debouncedCash = useDebouncedValue(cashInput, 500)
   const { data: plan } = useRebalancePlan(mode, debouncedCash === '' ? undefined : debouncedCash)
 
   const isAnchored = mode === 'anchored'
@@ -472,7 +463,6 @@ function OverviewTab() {
             <p className="mb-2 text-xs text-muted-foreground">{plan.conflict_note}</p>
           )}
 
-          <p className="text-xs text-muted-foreground sm:hidden">Scroll horizontally to view all columns</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13.5px]" style={{ minWidth: 760 }}>
               {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Category" />}
@@ -1090,7 +1080,7 @@ export function Breakdown() {
   const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
 
   return (
-    <div className="flex flex-col gap-4 px-12 md:px-48">
+    <div className="flex flex-col gap-4 px-48">
       <PageHeader title="Portfolio Breakdown" actions={
         <ShadButton size="xs" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
           <RefreshCw className="size-3.5" />

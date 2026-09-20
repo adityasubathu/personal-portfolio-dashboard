@@ -1,7 +1,3 @@
-/* Layer order is load-bearing: Mantine must outrank Tailwind's preflight
-   (so its components keep their own resets) but lose to Tailwind utilities. */
-@layer theme, base, mantine, components, utilities;
-
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -50,12 +46,6 @@
   --toggle-on-fg: #ffffff;
   --row-stripe: #e9ebef;
   --row-hover: #dadde3;
-
-  --chart-1: #2f5fd0;
-  --chart-2: #16834a;
-  --chart-3: #aa7419;
-  --chart-4: #7b4fc9;
-  --chart-5: #0e7490;
 
   --sidebar: #16223a;
   --sidebar-foreground: #dce5f4;
@@ -108,12 +98,6 @@
   --toggle-on-fg: #ffffff;
   --row-stripe: #212327;
   --row-hover: #2e3238;
-
-  --chart-1: #6f9ef0;
-  --chart-2: #49bd78;
-  --chart-3: #e1aa45;
-  --chart-4: #a98ae6;
-  --chart-5: #3fb3c9;
 
   --sidebar: #0c1320;
   --sidebar-foreground: #dce5f4;
@@ -177,12 +161,6 @@
 
   --color-row-stripe: var(--row-stripe);
   --color-row-hover: var(--row-hover);
-
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);

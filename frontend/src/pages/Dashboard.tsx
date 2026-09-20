@@ -17,7 +17,6 @@ import {
 import { MoneyText } from '../components/MoneyText'
 import { inr, pct } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { HoldingRow } from '../types/portfolio'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '@/components/Section'
@@ -25,10 +24,8 @@ import { MetricCard } from '../components/MetricCard'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { Button as ShadButton } from '@/components/ui/button'
-import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,10 +40,10 @@ import { notify } from '@/lib/notify'
 
 function SummaryCards() {
   const { data } = useSummaryCards()
-  if (!data) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <MetricCard key={index} label="" value="" loading />)}</div>
+  if (!data) return <div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, index) => <MetricCard key={index} label="" value="" loading />)}</div>
   const pnlPositive = data.total_pnl >= 0
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="grid grid-cols-4 gap-3">
       <MetricCard label="Invested" value={<MoneyText value={data.total_cost} />} />
       <MetricCard label="Current value" value={<MoneyText value={data.total_value} />} />
       <MetricCard
@@ -143,10 +140,6 @@ function GainChip({ value }: { value: number | null | undefined }) {
   )
 }
 
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-0.5"><p className="text-xs text-muted-foreground">{label}</p><p className="text-sm" data-numeric>{children}</p></div>
-}
-
 function PriceDetailRow({ label, sub, children }: { label: string; sub?: string | null; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
@@ -183,19 +176,11 @@ function PriceInfo({ row, compare }: { row: HoldingRow; compare: 'prev_close' | 
 
 // ── Holdings table ──────────────────────────────────────────────────────────────
 
-const SORT_OPTIONS = [
-  { value: 'symbol', label: 'Symbol' },
-  { value: 'value', label: 'Value' },
-  { value: 'pnl', label: 'P&L ₹' },
-  { value: 'xirr', label: 'XIRR' },
-  { value: 'day_chg_abs', label: 'Day ₹' },
-  { value: 'cost', label: 'Cost' },
-]
+const SORTABLE = new Set(['symbol', 'value', 'pnl', 'xirr', 'day_chg_abs', 'cost'])
 
 function HoldingsTable() {
-  const mobile = useMediaQuery('(max-width: 767px)')
   const [storedSort, setSort] = usePersistentState('dashboard.sort', 'symbol')
-  const sort = SORT_OPTIONS.some((o) => o.value === storedSort) ? storedSort : 'pnl'
+  const sort = SORTABLE.has(storedSort) ? storedSort : 'pnl'
   const [dir, setDir] = usePersistentState<'asc' | 'desc'>('dashboard.dir', 'asc')
   const [sections, setSections] = usePersistentState<'on' | 'off'>('dashboard.sections', 'on')
   const [compare, setCompare] = usePersistentState<'prev_close' | 'open'>('dashboard.compare', 'prev_close')
@@ -291,9 +276,8 @@ function HoldingsTable() {
     if (sort === next) setDir(dir === 'asc' ? 'desc' : 'asc')
     else { setSort(next); setDir('asc') }
   }
-  const sortable = new Set(SORT_OPTIONS.map((option) => option.value))
   const header = (label: string, key?: string) =>
-    key && sortable.has(key) ? (
+    key && SORTABLE.has(key) ? (
       <th className="h-8 px-2 text-right font-medium text-muted-foreground" aria-sort={sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
         <button type="button" onClick={() => toggleSort(key)} className="inline-flex items-center gap-1">
           {label}
@@ -303,83 +287,6 @@ function HoldingsTable() {
     ) : (
       <th className={cn('h-8 px-2 font-medium text-muted-foreground', label !== 'Symbol' && label !== 'Type' && 'text-right')}>{label}</th>
     )
-
-  if (mobile) {
-    return (
-      <Section
-        title="Holdings"
-        action={<div className="flex flex-wrap items-center gap-2">{asOfText}{refreshButton}</div>}
-        bodyClassName="p-4 space-y-3"
-      >
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1">
-            <label className="text-xs text-muted-foreground">Sort holdings</label>
-            <ShadSelect value={sort} onValueChange={(v) => setSort(v)}>
-              <SelectTrigger size="sm" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </ShadSelect>
-          </div>
-          <ShadButton variant="outline" size="sm" onClick={() => setDir(dir === 'asc' ? 'desc' : 'asc')}>
-            {dir === 'asc' ? 'Ascending' : 'Descending'}
-          </ShadButton>
-        </div>
-        <div className="flex gap-2">
-          {sectionsToggle}
-          {compareToggle}
-        </div>
-        {groups.map((group) => (
-          <div key={group.label ?? '__ungrouped'} className="space-y-1">
-            {group.label && <p className="text-xs font-bold text-muted-foreground uppercase">{group.label}</p>}
-            {group.rows.map((r) => (
-              <Accordion key={r.instrument_id} type="single" collapsible className="rounded-md border px-3">
-                <AccordionItem value={String(r.instrument_id)} className="border-b-0">
-                  <AccordionTrigger className="py-2 hover:no-underline">
-                    <div className="flex w-full items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{r.symbol}</p>
-                        <p className="text-xs text-muted-foreground">{r.type}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end">
-                        <NumMoney value={r.value} />
-                        <p className={cn('text-xs', (r.pnl_pct ?? 0) >= 0 ? 'text-positive' : 'text-negative')}>
-                          Gain <NumPct value={r.pnl_pct} /> · Day <NumPct value={r.day_chg_pct} />
-                        </p>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Detail label="Qty"><NumQty value={r.qty} /></Detail>
-                      <Detail label="Avg"><NumPrice value={r.avg_price} /></Detail>
-                      <Detail label="Cost"><NumMoney value={r.cost} /></Detail>
-                      <Detail label="Day ₹"><NumMoney value={r.day_chg_abs} showSign /></Detail>
-                      <Detail label={`Compare (${r.prev_close_date ?? '—'})`}><NumPrice value={r.prev_close} /></Detail>
-                      <Detail label={`LTP (${r.as_of ?? '—'})`}><NumPrice value={r.ltp} /></Detail>
-                      <Detail label="Gain ₹"><NumMoney value={r.pnl} showSign /></Detail>
-                      <Detail label="XIRR"><NumPct value={r.xirr} /></Detail>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            ))}
-          </div>
-        ))}
-        <div className="rounded-xl border bg-card p-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Detail label="Total cost"><NumMoney value={data.total_cost} /></Detail>
-            <Detail label="Day %"><NumPct value={data.total_day_chg_pct} /></Detail>
-            <Detail label="Day ₹"><NumMoney value={data.total_day_chg} showSign /></Detail>
-            <Detail label="Current value"><NumMoney value={data.total_value} /></Detail>
-            <Detail label="Total gain"><NumMoney value={data.total_value - data.total_cost} showSign /></Detail>
-          </div>
-        </div>
-      </Section>
-    )
-  }
 
   return (
     <Section
@@ -625,7 +532,7 @@ function ManualAssets() {
         </Section>
 
         <Section title="PPF · NPS · Cash">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-4 gap-3">
             {data.ppf && (
               <div className="rounded-lg border p-2">
                 <p className="text-xs text-muted-foreground">PPF</p>

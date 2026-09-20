@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useTrades } from '../api/trades'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { MoneyText } from '../components/MoneyText'
 import { usePrivacy } from '../hooks/usePrivacy'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import { inr } from '../lib/format'
 import { apiUrl } from '../api/client'
 import type { TradeOrderRow, TradeRow } from '../types/trades'
@@ -14,15 +14,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS } from '@/lib/colors'
-
-function useDebouncedValue<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(t)
-  }, [value, delay])
-  return debounced
-}
 
 function QtyText({ value }: { value: number }) {
   const { privacyMode } = usePrivacy()
@@ -86,33 +77,11 @@ function OrderRow({ order, expanded, onToggle }: { order: TradeOrderRow; expande
   )
 }
 
-function MobileOrderCard({ order }: { order: TradeOrderRow }) {
-  return (
-    <div className="p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{order.symbol ?? '—'}</span>
-        <TradeTypeBadge type={order.trade_type} />
-      </div>
-      <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{order.trade_date}</span>
-        <span data-numeric>
-          <QtyText value={order.quantity} /> @ {inr(order.price)}
-        </span>
-      </div>
-      <div className="mt-1 flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{order.exchange ?? '—'}</span>
-        <MoneyText value={order.amount} className="font-medium" />
-      </div>
-    </div>
-  )
-}
-
 export function Trades() {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const debounced = useDebouncedValue(q, 300)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const isMobile = useMediaQuery('(max-width: 767px)')
 
   const { data, isLoading } = useTrades(page, debounced)
 
@@ -160,7 +129,7 @@ export function Trades() {
       >
         {isLoading && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
 
-        {data && !isMobile && (
+        {data && (
           <div className="overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: 1050 }}>
               <thead>
@@ -191,8 +160,6 @@ export function Trades() {
             </table>
           </div>
         )}
-
-        {data && isMobile && <div className="divide-y">{data.rows.map((order) => <MobileOrderCard key={order.order_id} order={order} />)}</div>}
 
         {data && data.total_pages > 1 && (
           <div className="flex items-center justify-between border-t px-4 py-2">

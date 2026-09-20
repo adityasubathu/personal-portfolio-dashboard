@@ -86,7 +86,7 @@ export function FundBreakdown() {
   const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
   return (
-    <div className="flex flex-col gap-4 px-12 md:px-48">
+    <div className="flex flex-col gap-4 px-48">
       <PageHeader
         title="Fund Detail"
         actions={
