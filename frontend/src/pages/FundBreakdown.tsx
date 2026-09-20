@@ -141,9 +141,9 @@ export function FundBreakdown() {
       {breakdown && breakdown.holdings.length > 0 && (
         <Section title="Holdings" bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-[0.9rem]">
+            <table className="w-full text-[0.81rem]">
               <thead>
-                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-base font-bold text-foreground">
+                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-[0.9rem] font-bold text-foreground">
                   <th className="h-9 px-2 text-left">Name</th>
                   <th className="h-9 px-2 text-left">Category</th>
                   <th className="h-9 px-2 text-left">
@@ -158,7 +158,7 @@ export function FundBreakdown() {
               </thead>
               <tbody>
                 {breakdown.holdings.map((h, i) => (
-                  <tr key={i} className="hover:bg-muted/50">
+                  <tr key={i} className="even:bg-muted/30 hover:bg-muted/50">
                     <td className="px-2 py-1.5">{h.name}</td>
                     <td className="px-2 py-1.5"><CategoryCell category={h.category} /></td>
                     <td className="px-2 py-1.5 text-muted-foreground">{industryPath(h)}</td>
