@@ -37,7 +37,9 @@ export function FundBreakdown() {
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
-                {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
+                <span className="truncate">
+                  {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
+                </span>
                 <ChevronsUpDown className="size-4 opacity-50" />
               </Button>
             </PopoverTrigger>
