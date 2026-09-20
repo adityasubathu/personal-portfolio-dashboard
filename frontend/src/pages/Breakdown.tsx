@@ -474,7 +474,7 @@ function OverviewTab() {
 
           <p className="text-xs text-muted-foreground sm:hidden">Scroll horizontally to view all columns</p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: 760 }}>
+            <table className="w-full text-[15px]" style={{ minWidth: 760 }}>
               {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Category" />}
               <tbody>
                 {rebalanceView && plan ? (
