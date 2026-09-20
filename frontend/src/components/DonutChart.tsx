@@ -35,7 +35,7 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
 
   return (
     <div className="flex w-full flex-col items-center gap-4 md:flex-row md:items-start">
-      <div className="relative aspect-square w-full max-w-[--size] shrink-0 md:w-[--size]" style={{ '--size': `${size}px` } as React.CSSProperties}>
+      <div className="relative aspect-square w-full max-w-(--size) shrink-0 md:w-(--size)" style={{ '--size': `${size}px` } as React.CSSProperties}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -44,6 +44,8 @@ export function DonutChart({ labels, values, total, colorMode = 'category', size
               nameKey="label"
               innerRadius="70%"
               outerRadius="100%"
+              startAngle={90}
+              endAngle={-270}
               stroke="var(--card)"
               strokeWidth={1}
               isAnimationActive={false}

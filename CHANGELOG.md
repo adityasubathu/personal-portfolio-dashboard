@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-20-15-44-06 — Donut chart layout fix
+- Fixed donut charts rendering at full column width with their legend pushed off screen, and started each donut at 12 o'clock going clockwise. (2026-09-20-15-44-06 · PENDING)
+
 ## 2026-09-18-23-50-57 — Tailwind CSS + shadcn/ui frontend rewrite
 - Added the Tailwind v4 toolchain and `@/` path alias, with Mantine moved to its layered CSS build so both coexist during the migration. (2026-09-18-23-50-57 · a0ec1fb)
 - Installed the shadcn/ui primitives and defined the flat white/bordered surface tokens; the colour scheme now follows the OS via a `dark` class. (2026-09-19-00-05-00 · 1fb334d)
