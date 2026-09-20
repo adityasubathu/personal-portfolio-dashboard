@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-20-16-50-44 — Holdings table section and totals rows made visually distinct
-- Section headers now use the darker row-hover tone with bold uppercase text instead of a border alone; the totals row gets a light blue tint and a primary-coloured top border so both stand out clearly from the striped rows. (2026-09-20-16-50-44 · <pending>)
+- Section headers now use the darker row-hover tone with bold uppercase text instead of a border alone; the totals row gets a light blue tint and a primary-coloured top border so both stand out clearly from the striped rows. (2026-09-20-16-50-44 · 602c3cd)
 
 ## 2026-09-20-16-49-27 — Holdings table section and totals borders
 - Section group headers (Equity, Bonds, Mutual Funds, ...) and the totals row now carry a stronger border so they stand out from the striped rows around them. (2026-09-20-16-49-27 · c41ab86)
