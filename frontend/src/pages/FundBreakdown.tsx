@@ -8,6 +8,7 @@ import { shortDate, shortDateTime } from '../lib/format'
 import type { SchemeHolding, SchemeListItem } from '../types/mfBreakdown'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -15,6 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS, type ChipColor } from '@/lib/colors'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
@@ -86,13 +88,13 @@ export function FundBreakdown() {
   const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
   return (
-    <div className="flex flex-col gap-4 px-48">
+    <PageShell>
       <PageHeader
         title="Fund Detail"
         actions={
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
+              <Button size="sm" variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
                 <span className="truncate">
                   {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
                 </span>
@@ -129,7 +131,11 @@ export function FundBreakdown() {
       {selectedIsin == null && (
         <EmptyState icon={<Landmark className="size-5" />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />
       )}
-      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {isLoading && (
+        <Section>
+          <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+        </Section>
+      )}
 
       {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
         <div>
@@ -220,6 +226,6 @@ export function FundBreakdown() {
           </div>
         </Section>
       )}
-    </div>
+    </PageShell>
   )
 }
