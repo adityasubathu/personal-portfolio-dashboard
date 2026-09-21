@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-21-19-53-53 — Market Sentiment volatility charts layout
-- ATR % and Realized Volatility charts on the Market Sentiment page now sit side-by-side in one row (matching the Oscillators section above) instead of stacked. (2026-09-21-19-53-53 · pending)
+- ATR % and Realized Volatility charts on the Market Sentiment page now sit side-by-side in one row (matching the Oscillators section above) instead of stacked. (2026-09-21-19-53-53 · 8b59fb8)
 
 ## 2026-09-21-19-51-58 — Chart jitter follow-up fix
 - Market Sentiment charts were still jittering horizontally on navigation after the earlier fix: applying the synced price-scale width could still trigger the same chart to re-measure and re-report it, letting the shared width drift. Applying and measuring the width are now separate effects, so applying it never triggers a re-measure. (2026-09-21-19-51-58 · 55a5bc6)
