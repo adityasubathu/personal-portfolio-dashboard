@@ -153,6 +153,7 @@ export function LwChart({
   const privacyMode = privacyModeRaw && maskInPrivacy
   const privacyModeRef = useRef(privacyMode)
   const priceFormatterRef = useRef(priceFormatter)
+  const onPriceScaleWidthRef = useRef(onPriceScaleWidth)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -176,6 +177,7 @@ export function LwChart({
   useEffect(() => { privacyModeRef.current = privacyMode }, [privacyMode])
   useEffect(() => { priceFormatterRef.current = priceFormatter }, [priceFormatter])
   useEffect(() => { heightRef.current = height }, [height])
+  useEffect(() => { onPriceScaleWidthRef.current = onPriceScaleWidth }, [onPriceScaleWidth])
 
   // Build chart once
   useEffect(() => {
@@ -417,14 +419,14 @@ export function LwChart({
         chart.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
       }
 
-      if (onPriceScaleWidth) {
+      if (onPriceScaleWidthRef.current) {
         // lightweight-charts renders a <table> where the last <td> of the first <tr>
         // is the right price scale cell — measure its actual rendered width
         const td = container.querySelector('table tr td:last-child') as HTMLElement | null
-        if (td) onPriceScaleWidth(td.offsetWidth)
+        if (td) onPriceScaleWidthRef.current(td.offsetWidth)
       }
     })
-  }, [candles, line, markers, seriesType, priceScaleWidth, onPriceScaleWidth])
+  }, [candles, line, markers, seriesType, priceScaleWidth])
 
   // Overbought/oversold-style reference lines (e.g. RSI 70/30)
   useEffect(() => {
