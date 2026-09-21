@@ -174,15 +174,15 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
             )}
           </div>
         </td>
-        <td className="px-2 py-1.5 whitespace-nowrap text-sm">
+        <td className="px-2 py-1.5 whitespace-nowrap">
           <span className="text-muted-foreground">{lot.buy_date} → </span>
           <span>{lot.sell_date}</span>
           <span className="text-muted-foreground"> · {lot.holding_days}d</span>
         </td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{lot.qty.toLocaleString('en-IN')}</td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.buy_value)}</td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.sell_value)}</td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right text-sm font-medium', lot.gain > 0 ? 'text-positive' : lot.gain < 0 ? 'text-negative' : undefined)}>
+        <td data-numeric className="px-2 py-1.5 text-right">{lot.qty.toLocaleString('en-IN')}</td>
+        <td data-numeric className="px-2 py-1.5 text-right">{fmt(lot.buy_value)}</td>
+        <td data-numeric className="px-2 py-1.5 text-right">{fmt(lot.sell_value)}</td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right font-medium', lot.gain > 0 ? 'text-positive' : lot.gain < 0 ? 'text-negative' : undefined)}>
           {fmt(lot.gain)}
         </td>
       </tr>

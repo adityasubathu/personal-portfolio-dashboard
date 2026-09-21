@@ -215,7 +215,7 @@ export function Kite() {
                     <AlertDescription>{syncMut.data.error_message ?? syncMut.data.status}</AlertDescription>
                   </Alert>
                   {syncMut.data.discrepancies && syncMut.data.discrepancies.length > 0 && (
-                    <Table className="text-xs">
+                    <Table className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Symbol</TableHead>

@@ -465,7 +465,7 @@ function OverviewTab() {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full text-[13.5px]" style={{ minWidth: 760 }}>
+            <table className="w-full text-xs" style={{ minWidth: 760 }}>
               {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Category" />}
               <tbody>
                 {rebalanceView && plan ? (

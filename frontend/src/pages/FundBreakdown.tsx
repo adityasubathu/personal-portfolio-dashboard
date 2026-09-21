@@ -174,20 +174,20 @@ export function FundBreakdown() {
       {breakdown && breakdown.holdings.length > 0 && (
         <Section title="Holdings" bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-[0.81rem]">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-[0.9rem] font-bold text-foreground">
-                  <th className="h-9 w-10 px-2 text-right">#</th>
-                  <th className="h-9 px-2 text-left">Name</th>
-                  <th className="h-9 px-2 text-left">Category</th>
-                  <th className="h-9 px-2 text-left">
+                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-xs font-semibold text-foreground">
+                  <th className="h-8 w-10 px-2 text-right">#</th>
+                  <th className="h-8 px-2 text-left">Name</th>
+                  <th className="h-8 px-2 text-left">Category</th>
+                  <th className="h-8 px-2 text-left">
                     Industry{' '}
                     <span className="text-xs font-normal text-muted-foreground">
                       (Macro → Sector → Industry → Basic)
                     </span>
                   </th>
-                  <th className="h-9 px-2 text-right">%</th>
-                  <th className="h-9 px-2 text-right">Value</th>
+                  <th className="h-8 px-2 text-right">%</th>
+                  <th className="h-8 px-2 text-right">Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,7 +198,7 @@ export function FundBreakdown() {
                         <td colSpan={6} className="h-4" />
                       </tr>
                     )}
-                    <tr className="bg-row-hover text-[0.9rem] font-bold">
+                    <tr className="bg-row-hover text-xs font-semibold">
                       <td colSpan={4} className="border-y-2 border-foreground/25 px-2 py-2 text-center uppercase tracking-wide">
                         {group.label}
                       </td>

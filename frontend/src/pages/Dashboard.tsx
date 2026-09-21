@@ -118,7 +118,7 @@ function NumQty({ value }: { value: number }) {
 }
 
 // Cost and Value carry the most weight on this table: 15% above the 12px base.
-const NUM_LG = 'text-[13.8px]'
+const NUM_LG = 'font-semibold'
 
 // Direction lives in the arrow, so the number itself is printed unsigned.
 // Fixed width so the pill's edges land at the same x in every row, regardless
@@ -304,7 +304,7 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full table-fixed text-[13.2px]" style={{ minWidth: 1160 }}>
+        <table className="w-full table-fixed text-xs" style={{ minWidth: 1160 }}>
           <colgroup>
             <col style={{ width: 300 }} />
             <col style={{ width: 70 }} />
@@ -487,7 +487,7 @@ function ManualAssets() {
         <Section title="Fixed Deposits" action={data.total_fd > 0 ? <MoneyText value={data.total_fd} className="text-sm font-semibold" /> : undefined}>
           <div className="space-y-3">
             {data.fds.length > 0 && (
-              <ShadTable className="text-xs">
+              <ShadTable className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Label</TableHead>
@@ -596,7 +596,7 @@ function ManualAssets() {
         >
           <div className="space-y-3">
             {data.foreign_equities.length > 0 && (
-              <ShadTable className="text-xs">
+              <ShadTable className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Label</TableHead>
