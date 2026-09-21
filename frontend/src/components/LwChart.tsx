@@ -409,15 +409,14 @@ export function LwChart({
       }
     }
 
-    // After the browser lays out the chart, measure and/or enforce price scale width
+    // After the browser lays out the chart, measure its natural (unconstrained)
+    // price scale width and report it up. Deliberately does NOT depend on
+    // priceScaleWidth: re-running this on every width-sync update would feed
+    // the measured (already-constrained) width back into the sync, which can
+    // drift indefinitely instead of settling.
     requestAnimationFrame(() => {
-      const chart = chartRef.current
       const container = containerRef.current
-      if (!chart || !container) return
-
-      if (priceScaleWidth != null) {
-        chart.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
-      }
+      if (!container) return
 
       if (onPriceScaleWidthRef.current) {
         // lightweight-charts renders a <table> where the last <td> of the first <tr>
@@ -426,7 +425,16 @@ export function LwChart({
         if (td) onPriceScaleWidthRef.current(td.offsetWidth)
       }
     })
-  }, [candles, line, markers, seriesType, priceScaleWidth])
+  }, [candles, line, markers, seriesType])
+
+  // Enforce the synced price scale width once it's known. Separate from the
+  // data effect above so applying it doesn't trigger a re-measure/re-report.
+  useEffect(() => {
+    if (priceScaleWidth == null) return
+    requestAnimationFrame(() => {
+      chartRef.current?.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
+    })
+  }, [priceScaleWidth])
 
   // Overbought/oversold-style reference lines (e.g. RSI 70/30)
   useEffect(() => {
