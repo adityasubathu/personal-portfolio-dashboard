@@ -42,6 +42,16 @@ interface LwChartProps {
   hideMainTag?: boolean
   maskInPrivacy?: boolean
   horizontalLines?: Array<{ value: number; color: string; label?: string }>
+  /** Default initial view window in days (e.g. 365 for 1Y), instead of fitting all data.
+   *  The full data is still loaded — the user can scroll/zoom out to see more history. */
+  defaultZoomDays?: number
+}
+
+function setDefaultZoomRange(chart: IChartApi, lastTimeStr: string, days: number) {
+  const fromDate = new Date(lastTimeStr)
+  fromDate.setDate(fromDate.getDate() - days)
+  const fromStr = fromDate.toISOString().slice(0, 10)
+  chart.timeScale().setVisibleRange({ from: fromStr as Time, to: lastTimeStr as Time })
 }
 
 function toMarkers(markers: TradeMarker[]): SeriesMarker<Time>[] {
@@ -144,6 +154,7 @@ export function LwChart({
   hideMainTag = false,
   maskInPrivacy = true,
   horizontalLines,
+  defaultZoomDays,
 }: LwChartProps) {
   const { privacyMode: privacyModeRaw } = usePrivacy()
   const privacyMode = privacyModeRaw && maskInPrivacy
@@ -405,9 +416,16 @@ export function LwChart({
 
     // Always show the full selected range, regardless of how narrow the
     // chart's column is — otherwise a chart in a multi-column row can end up
-    // showing only the bars that fit at the default bar spacing.
-    chartRef.current?.timeScale().fitContent()
-  }, [candles, line, markers, seriesType])
+    // showing only the bars that fit at the default bar spacing. Unless
+    // defaultZoomDays caps the initial view to a shorter window; the rest of
+    // the data is still loaded and reachable by scrolling/zooming out.
+    const mainData = seriesType === 'candlestick' ? candles : line
+    if (defaultZoomDays && mainData?.length) {
+      setDefaultZoomRange(chartRef.current!, String(mainData[mainData.length - 1].time), defaultZoomDays)
+    } else {
+      chartRef.current?.timeScale().fitContent()
+    }
+  }, [candles, line, markers, seriesType, defaultZoomDays])
 
   // Overbought/oversold-style reference lines (e.g. RSI 70/30)
   useEffect(() => {
@@ -455,7 +473,18 @@ export function LwChart({
       return s
     })
 
-    chart.timeScale().fitContent()
+    if (defaultZoomDays) {
+      const lastTimes = compareLines
+        .map((cl) => (cl.data.length ? String(cl.data[cl.data.length - 1].time) : null))
+        .filter((t): t is string => t !== null)
+      if (lastTimes.length) {
+        setDefaultZoomRange(chart, lastTimes.reduce((a, b) => (a > b ? a : b)), defaultZoomDays)
+      } else {
+        chart.timeScale().fitContent()
+      }
+    } else {
+      chart.timeScale().fitContent()
+    }
 
     const seriesMeta = seriesMetaRef.current
     return () => {
@@ -471,7 +500,7 @@ export function LwChart({
         })
       }
     }
-  }, [compareLines])
+  }, [compareLines, defaultZoomDays])
 
   // Sync height
   useEffect(() => {

@@ -133,6 +133,7 @@ function OscillatorChart({
         priceFormatter={formatter}
         hideControls
         maskInPrivacy={false}
+        defaultZoomDays={365}
       />
     </Section>
   )
@@ -878,6 +879,7 @@ export function MarketSentiment() {
             showOhlcInfo
             hideMainTag
           maskInPrivacy={false}
+          defaultZoomDays={365}
           />
         </Section>
       ) : null}

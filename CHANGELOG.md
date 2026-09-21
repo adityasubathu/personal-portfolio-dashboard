@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-21-20-26-54 — Cap default chart zoom at 1 year
+- Market Sentiment's price chart and oscillator/volatility charts (RSI, MACD, ADX, ATR, Realized Vol) now open zoomed to the last 1 year by default instead of showing full history. The range toggle and its underlying data are untouched — it still defaults to "All" and loads all history, so scrolling/zooming out still works. (2026-09-21-20-26-54 · PENDING)
+- NAV History's Portfolio value chart (Value vs Invested) now opens zoomed to the last 1 year by default for the same reason. The Unit NAV chart is unchanged. (2026-09-21-20-26-54 · PENDING)
+
 ## 2026-09-21-20-01-08 — More vibrant Sector Trends CAGR heatmap
 - The CAGR and excess-CAGR columns in the Market Sentiment page's Sector Trends table now use a more saturated heatmap gradient than the default table heatmap, making the strongest/weakest sectors easier to spot at a glance. (2026-09-21-20-01-08 · b1de8df)
 

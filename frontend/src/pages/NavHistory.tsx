@@ -154,6 +154,7 @@ export function NavHistory() {
               defaultHeight={400}
               priceFormatter={navPriceFormatter}
               compareLines={portfolioCompareLines}
+              defaultZoomDays={365}
             />
           </Section>
         )}
