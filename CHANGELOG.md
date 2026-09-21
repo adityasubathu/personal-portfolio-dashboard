@@ -3,7 +3,8 @@
 ## 2026-09-21-12-40-25 — Desktop UI consistency pass
 - Added shared desktop route, content-heading, and confirmation-action layout contracts. (2026-09-21-12-40-25 · 5131030)
 - Aligned the portfolio overview and analysis routes to shared wide shells and consistent content states. (2026-09-21-12-44-20 · 977c475)
-- Aligned chart and market-research routes with shared desktop shells and heading controls. (2026-09-21-12-47-07 · pending)
+- Aligned chart and market-research routes with shared desktop shells and heading controls. (2026-09-21-12-47-07 · f606887)
+- Unified operations and settings route shells, controls, and destructive triggers. (2026-09-21-12-50-21 · pending)
 
 ## 2026-09-20-17-58-57 — NAV History page load performance
 - Scoped the NAV-history price/NAV queries to traded instruments and dates from the first trade onwards, and regrouped the price lookup by date. Cuts `GET /nav-history` from ~580ms to under 250ms with byte-identical output. (2026-09-20-17-58-57 · 282db07)

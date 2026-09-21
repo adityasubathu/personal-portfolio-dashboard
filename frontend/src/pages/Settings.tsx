@@ -12,6 +12,7 @@ import { useAppStatus, useResetDemoMutation } from '../api/status'
 import type { DeleteResult } from '../types/charts'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { notify } from '@/lib/notify'
@@ -39,7 +40,8 @@ function DangerButton({ label, description, mutate }: DangerButtonProps) {
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <ConfirmActionButton
-        variant="destructive"
+        variant="outline"
+        className="text-destructive hover:text-destructive"
         size="xs"
         confirmTitle={`Confirm: ${label}`}
         confirmDescription={`${description} This cannot be undone.`}
@@ -76,7 +78,7 @@ export function Settings() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <PageShell width="narrow">
       <PageHeader title="Settings" />
 
       {db && (
@@ -95,7 +97,7 @@ export function Settings() {
               </p>
               <p className="text-xs text-muted-foreground">Wipes all data and re-seeds the demo portfolio from scratch. No restart needed.</p>
             </div>
-            <Button variant="outline" size="xs" disabled={resetLoading} onClick={handleResetDemo}>
+            <Button variant="outline" size="sm" disabled={resetLoading} onClick={handleResetDemo}>
               Reset
             </Button>
           </div>
@@ -129,6 +131,6 @@ export function Settings() {
           mutate={() => deleteManualAssetsMut.mutateAsync()}
         />
       </Section>
-    </div>
+    </PageShell>
   )
 }

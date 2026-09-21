@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { usePolicyTracker, useSetTriggerStateMutation } from '../api/policyTracker'
 import type { TriggerResult, TriggerStatus } from '../types/policyTracker'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -284,7 +285,7 @@ export function PolicyTracker() {
   if (!data) return null
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+    <PageShell width="narrow">
       <PageHeader
         title="Policy Tracker"
         meta={
@@ -306,6 +307,6 @@ export function PolicyTracker() {
           ))}
         </Section>
       ))}
-    </div>
+    </PageShell>
   )
 }

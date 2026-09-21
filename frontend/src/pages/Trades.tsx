@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Search } from 'lucide-react'
 import { useTrades } from '../api/trades'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { MoneyText } from '../components/MoneyText'
@@ -8,6 +8,7 @@ import { inr } from '../lib/format'
 import { apiUrl } from '../api/client'
 import type { TradeOrderRow, TradeRow } from '../types/trades'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -100,13 +101,11 @@ export function Trades() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader
         title="Trades"
         actions={
-          <a href={apiUrl('/api/v1/trades/template')} download className="text-xs text-primary underline-offset-4 hover:underline">
-            Download CSV template
-          </a>
+          <Button size="sm" variant="outline" asChild><a href={apiUrl('/api/v1/trades/template')} download><Download className="size-3.5" />Download CSV template</a></Button>
         }
       />
 
@@ -177,6 +176,6 @@ export function Trades() {
           </div>
         )}
       </Section>
-    </div>
+    </PageShell>
   )
 }
