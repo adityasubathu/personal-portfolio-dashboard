@@ -40,8 +40,6 @@ interface LwChartProps {
   showOhlcInfo?: boolean
   hideControls?: boolean
   hideMainTag?: boolean
-  priceScaleWidth?: number
-  onPriceScaleWidth?: (width: number) => void
   maskInPrivacy?: boolean
   horizontalLines?: Array<{ value: number; color: string; label?: string }>
 }
@@ -144,8 +142,6 @@ export function LwChart({
   showOhlcInfo = false,
   hideControls = false,
   hideMainTag = false,
-  priceScaleWidth,
-  onPriceScaleWidth,
   maskInPrivacy = true,
   horizontalLines,
 }: LwChartProps) {
@@ -153,7 +149,6 @@ export function LwChart({
   const privacyMode = privacyModeRaw && maskInPrivacy
   const privacyModeRef = useRef(privacyMode)
   const priceFormatterRef = useRef(priceFormatter)
-  const onPriceScaleWidthRef = useRef(onPriceScaleWidth)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -177,7 +172,6 @@ export function LwChart({
   useEffect(() => { privacyModeRef.current = privacyMode }, [privacyMode])
   useEffect(() => { priceFormatterRef.current = priceFormatter }, [priceFormatter])
   useEffect(() => { heightRef.current = height }, [height])
-  useEffect(() => { onPriceScaleWidthRef.current = onPriceScaleWidth }, [onPriceScaleWidth])
 
   // Build chart once
   useEffect(() => {
@@ -195,7 +189,7 @@ export function LwChart({
         horzLines: { color: '#b0b6bf', style: LineStyle.Dotted },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#d1d5db', ...(priceScaleWidth != null ? { minimumWidth: priceScaleWidth } : {}) },
+      rightPriceScale: { borderColor: '#d1d5db' },
       timeScale: { borderColor: '#d1d5db', timeVisible: true },
       localization: {
         priceFormatter: privacyModeRef.current ? () => '•••' : (priceFormatter ?? undefined),
@@ -409,32 +403,11 @@ export function LwChart({
       }
     }
 
-    // After the browser lays out the chart, measure its natural (unconstrained)
-    // price scale width and report it up. Deliberately does NOT depend on
-    // priceScaleWidth: re-running this on every width-sync update would feed
-    // the measured (already-constrained) width back into the sync, which can
-    // drift indefinitely instead of settling.
-    requestAnimationFrame(() => {
-      const container = containerRef.current
-      if (!container) return
-
-      if (onPriceScaleWidthRef.current) {
-        // lightweight-charts renders a <table> where the last <td> of the first <tr>
-        // is the right price scale cell — measure its actual rendered width
-        const td = container.querySelector('table tr td:last-child') as HTMLElement | null
-        if (td) onPriceScaleWidthRef.current(td.offsetWidth)
-      }
-    })
+    // Always show the full selected range, regardless of how narrow the
+    // chart's column is — otherwise a chart in a multi-column row can end up
+    // showing only the bars that fit at the default bar spacing.
+    chartRef.current?.timeScale().fitContent()
   }, [candles, line, markers, seriesType])
-
-  // Enforce the synced price scale width once it's known. Separate from the
-  // data effect above so applying it doesn't trigger a re-measure/re-report.
-  useEffect(() => {
-    if (priceScaleWidth == null) return
-    requestAnimationFrame(() => {
-      chartRef.current?.priceScale('right').applyOptions({ minimumWidth: priceScaleWidth })
-    })
-  }, [priceScaleWidth])
 
   // Overbought/oversold-style reference lines (e.g. RSI 70/30)
   useEffect(() => {
@@ -481,6 +454,8 @@ export function LwChart({
 
       return s
     })
+
+    chart.timeScale().fitContent()
 
     const seriesMeta = seriesMetaRef.current
     return () => {

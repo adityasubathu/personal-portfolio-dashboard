@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertCircle, Info, RefreshCw } from 'lucide-react'
 import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
 import { usePersistentState } from '../hooks/usePersistentState'
@@ -110,30 +110,21 @@ const EXPLANATIONS = {
 }
 
 /** One oscillator panel: a Section titled with the indicator name, its
- *  explainer in the header, and a short chart sharing the price-scale
- *  width of every other chart on the page. */
+ *  explainer in the header, and a short chart. */
 function OscillatorChart({
   caption,
   info,
-  scaleKey,
-  scaleWidth,
-  onScaleWidth,
   formatter,
   ...chart
 }: {
   caption: React.ReactNode
   info: string
-  scaleKey: string
-  scaleWidth: number | undefined
-  onScaleWidth: (key: string, w: number) => void
   formatter: (v: number) => string
 } & React.ComponentProps<typeof LwChart>) {
   return (
     <Section title={caption} action={<ChartInfo text={info} />} bodyClassName="p-2" centerTitle>
       <LwChart
         {...chart}
-        priceScaleWidth={scaleWidth}
-        onPriceScaleWidth={(w) => onScaleWidth(scaleKey, w)}
         defaultHeight={130}
         priceFormatter={formatter}
         hideControls
@@ -722,16 +713,6 @@ export function MarketSentiment() {
   const { data: summary, isLoading: summaryLoading } = useSentimentSummary(index)
   const { data: breadthData } = useMarketBreadth()
 
-  // Sync price scale widths across all charts so x-axes align perfectly.
-  // Each chart reports its natural rendered width; we enforce the max on all.
-  const [chartPriceScaleWidth, setChartPriceScaleWidth] = useState<number | undefined>(undefined)
-  const reportedScaleWidths = useRef<Record<string, number>>({})
-  const reportScaleWidth = useCallback((key: string, w: number) => {
-    reportedScaleWidths.current[key] = w
-    const max = Math.max(...Object.values(reportedScaleWidths.current))
-    setChartPriceScaleWidth(prev => (max !== prev ? max : prev))
-  }, [])
-
   const [rangeLabel, setRangeLabel] = usePersistentState<string>('market-sentiment-range', 'All')
   const [enabledOverlays, setEnabledOverlays] = usePersistentState<OverlayKey[]>(
     'market-sentiment-overlays',
@@ -839,8 +820,6 @@ export function MarketSentiment() {
               label={`Mid150 / ${breadthData.ratios!.benchmark}`}
               compareLines={[{ label: `Small250 / ${breadthData.ratios!.benchmark}`, color: '#f59e0b', data: toNavPoints(breadthData.ratios!.small250) }]}
               persistKey="market-sentiment-breadth-ratio"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('breadth-ratio', w)}
               defaultHeight={180}
               priceFormatter={(p) => p.toFixed(1)}
               hideControls
@@ -890,8 +869,6 @@ export function MarketSentiment() {
             candles={filteredCandles}
             compareLines={compareLines}
             persistKey="market-sentiment-price"
-              priceScaleWidth={chartPriceScaleWidth}
-              onPriceScaleWidth={(w) => reportScaleWidth('price', w)}
             defaultHeight={440}
             priceFormatter={numFormatter}
             showOhlcInfo
@@ -911,9 +888,6 @@ export function MarketSentiment() {
               <OscillatorChart
                 caption={<>RSI — overbought &gt;70 / oversold &lt;30 ↓</>}
                 info={EXPLANATIONS.rsi}
-                scaleKey="rsi"
-                scaleWidth={chartPriceScaleWidth}
-                onScaleWidth={reportScaleWidth}
                 formatter={oscFormatter}
                 seriesType="line"
                 line={oscData.rsi14}
@@ -929,9 +903,6 @@ export function MarketSentiment() {
               <OscillatorChart
                 caption={<>MACD Histogram ↓</>}
                 info={EXPLANATIONS.macd}
-                scaleKey="macd"
-                scaleWidth={chartPriceScaleWidth}
-                onScaleWidth={reportScaleWidth}
                 formatter={oscFormatter}
                 seriesType="histogram"
                 line={oscData.macd_hist}
@@ -942,9 +913,6 @@ export function MarketSentiment() {
             <OscillatorChart
               caption={<>ADX — trend strength (&gt;25 = trending) ↓</>}
               info={EXPLANATIONS.adx}
-              scaleKey="adx"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
               formatter={oscFormatter}
               seriesType="line"
               line={oscData.adx}
@@ -958,9 +926,6 @@ export function MarketSentiment() {
             <OscillatorChart
               caption={<>ATR % ↓</>}
               info={EXPLANATIONS.atr}
-              scaleKey="atr"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
               formatter={oscFormatter}
               seriesType="line"
               line={oscData.atr_pct}
@@ -970,9 +935,6 @@ export function MarketSentiment() {
             <OscillatorChart
               caption={<>Realized Volatility (annualized %) ↓</>}
               info={EXPLANATIONS.vol}
-              scaleKey="vol"
-              scaleWidth={chartPriceScaleWidth}
-              onScaleWidth={reportScaleWidth}
               formatter={oscFormatter}
               seriesType="line"
               line={oscData.rv20}
