@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-21-20-01-08 — More vibrant Sector Trends CAGR heatmap
-- The CAGR and excess-CAGR columns in the Market Sentiment page's Sector Trends table now use a more saturated heatmap gradient than the default table heatmap, making the strongest/weakest sectors easier to spot at a glance. (2026-09-21-20-01-08 · pending)
+- The CAGR and excess-CAGR columns in the Market Sentiment page's Sector Trends table now use a more saturated heatmap gradient than the default table heatmap, making the strongest/weakest sectors easier to spot at a glance. (2026-09-21-20-01-08 · b1de8df)
 
 ## 2026-09-21-19-59-32 — Full-range charts, removed price-scale sync
 - Market Sentiment charts in a side-by-side row (RSI/MACD, ATR/RV) now always show the full selected time range instead of only the bars that fit at the default bar spacing in a half-width column. (2026-09-21-19-59-32 · 3a9dcb8)
