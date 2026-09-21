@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-09-21-19-51-58 — Chart jitter follow-up fix
-- Market Sentiment charts were still jittering horizontally on navigation after the earlier fix: applying the synced price-scale width could still trigger the same chart to re-measure and re-report it, letting the shared width drift. Applying and measuring the width are now separate effects, so applying it never triggers a re-measure. (2026-09-21-19-51-58 · pending)
+- Market Sentiment charts were still jittering horizontally on navigation after the earlier fix: applying the synced price-scale width could still trigger the same chart to re-measure and re-report it, letting the shared width drift. Applying and measuring the width are now separate effects, so applying it never triggers a re-measure. (2026-09-21-19-51-58 · 55a5bc6)
 
 ## 2026-09-21-19-47-50 — Sidebar persistence and chart jitter fixes
 - Fixed the left sidebar always reopening on refresh — it now reads the `sidebar_state` cookie on load instead of always defaulting to expanded. (2026-09-21-19-48-05 · e490f3f)
