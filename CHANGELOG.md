@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-21-12-40-25 — Desktop UI consistency pass
+- Added shared desktop route, content-heading, and confirmation-action layout contracts. (2026-09-21-12-40-25 · pending)
+
 ## 2026-09-20-17-58-57 — NAV History page load performance
 - Scoped the NAV-history price/NAV queries to traded instruments and dates from the first trade onwards, and regrouped the price lookup by date. Cuts `GET /nav-history` from ~580ms to under 250ms with byte-identical output. (2026-09-20-17-58-57 · 282db07)
 - Memoized the NAV History chart's derived data arrays so unrelated re-renders (typing in a form field, an SSE log line arriving) no longer tear down and rebuild the chart series. (2026-09-20-17-59-52 · 15441d9)

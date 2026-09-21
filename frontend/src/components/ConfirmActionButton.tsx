@@ -29,6 +29,7 @@ interface ConfirmActionButtonProps {
   children: ReactNode
   // 'subtle' and 'light' are legacy Mantine variant names from unmigrated call sites, mapped to a shadcn equivalent.
   variant?: ButtonVariant | 'subtle' | 'light'
+  confirmVariant?: ButtonVariant
   size?: ButtonSize
   className?: string
   // Legacy Mantine props (color, leftSection, old variant names) from unmigrated call sites; ignored here.
@@ -42,6 +43,7 @@ export function ConfirmActionButton({
   confirmLabel = 'Confirm',
   children,
   variant,
+  confirmVariant = 'destructive',
   size,
   className,
   color,
@@ -79,7 +81,7 @@ export function ConfirmActionButton({
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
-            <Button variant={resolvedVariant} onClick={confirm} disabled={pending}>
+            <Button variant={confirmVariant} onClick={confirm} disabled={pending}>
               {pending && <Loader2 className="size-4 animate-spin" />}
               {confirmLabel}
             </Button>
