@@ -1,8 +1,8 @@
 # Changelog
 
 ## 2026-09-21-19-59-32 — Full-range charts, removed price-scale sync
-- Market Sentiment charts in a side-by-side row (RSI/MACD, ATR/RV) now always show the full selected time range instead of only the bars that fit at the default bar spacing in a half-width column. (2026-09-21-19-59-32 · pending)
-- Removed the cross-chart price-scale-width sync ("x-axis alignment") on the Market Sentiment page — it existed to keep every chart's x-axis pixel-aligned when they were all full-width and stacked, which no longer applies now that charts sit in independent side-by-side columns. (2026-09-21-19-59-32 · pending)
+- Market Sentiment charts in a side-by-side row (RSI/MACD, ATR/RV) now always show the full selected time range instead of only the bars that fit at the default bar spacing in a half-width column. (2026-09-21-19-59-32 · 3a9dcb8)
+- Removed the cross-chart price-scale-width sync ("x-axis alignment") on the Market Sentiment page — it existed to keep every chart's x-axis pixel-aligned when they were all full-width and stacked, which no longer applies now that charts sit in independent side-by-side columns. (2026-09-21-19-59-32 · 3a9dcb8)
 
 ## 2026-09-21-19-53-53 — Market Sentiment volatility charts layout
 - ATR % and Realized Volatility charts on the Market Sentiment page now sit side-by-side in one row (matching the Oscillators section above) instead of stacked. (2026-09-21-19-53-53 · 8b59fb8)
