@@ -4,6 +4,8 @@ import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIn
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
+import { ContentHeader } from '@/components/ContentHeader'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -775,18 +777,8 @@ export function MarketSentiment() {
     setEnabledOverlays(next)
   }
 
-  if (summaryLoading) return <Skeleton className="m-8 h-8 w-32" />
-  if (summary?.no_data) {
-    return (
-      <Alert>
-        <AlertCircle className="size-4" />
-        <AlertDescription>No {indexLabel} price history found. Run a portfolio sync (Kite → Sync) to load index data.</AlertDescription>
-      </Alert>
-    )
-  }
-
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader
         title={`Market Sentiment — ${indexLabel}`}
         meta={summary?.as_of && `As of ${summary.as_of} · Close: ${summary.close?.toLocaleString('en-IN')}`}
@@ -797,8 +789,8 @@ export function MarketSentiment() {
               <ToggleGroupItem value="nifty500">Nifty 500</ToggleGroupItem>
             </ToggleGroup>
             <Button
-              size="xs"
-              variant="ghost"
+              size="sm"
+              variant="outline"
               disabled={refreshMutation.isPending}
               onClick={() => {
                 refreshMutation.mutate(undefined, {
@@ -822,6 +814,12 @@ export function MarketSentiment() {
         }
       />
 
+      {summaryLoading ? (
+        <Section><Skeleton className="h-8 w-32" /></Section>
+      ) : summary?.no_data ? (
+        <Section><Alert><AlertCircle className="size-4" /><AlertDescription>No {indexLabel} price history found. Run a portfolio sync (Kite → Sync) to load index data.</AlertDescription></Alert></Section>
+      ) : (
+        <>
       {summary?.horizons && <SentimentSummaryCard data={summary} />}
       {summary?.flags && <Section><FlagsBanner flags={summary.flags} /></Section>}
 
@@ -906,7 +904,7 @@ export function MarketSentiment() {
       {/* Oscillator panels */}
       {oscData && (
         <>
-          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Oscillators</h2>
+          <ContentHeader centered title="Oscillators" className="mt-2" />
 
           <div className="flex flex-col gap-4">
             <div className="grid gap-4 xl:grid-cols-2">
@@ -954,7 +952,7 @@ export function MarketSentiment() {
             />
           </div>
 
-          <h2 className="mt-2 text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Volatility</h2>
+          <ContentHeader centered title="Volatility" className="mt-2" />
 
           <div className="flex flex-col gap-4">
             <OscillatorChart
@@ -987,6 +985,8 @@ export function MarketSentiment() {
       )}
 
       <SectorTrendsTable />
-    </div>
+        </>
+      )}
+    </PageShell>
   )
 }

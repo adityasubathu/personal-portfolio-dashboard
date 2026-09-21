@@ -4,6 +4,7 @@ import { LwChart } from '../components/LwChart'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,7 +20,7 @@ export function PriceChart() {
   })) ?? []
 
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader
         title="Price Chart"
         actions={
@@ -27,7 +28,7 @@ export function PriceChart() {
             value={selectedId != null ? String(selectedId) : undefined}
             onValueChange={(v) => setSelectedId(v ? Number(v) : null)}
           >
-            <SelectTrigger className="w-72">
+            <SelectTrigger size="sm" className="w-72">
               <SelectValue placeholder="Select instrument…" />
             </SelectTrigger>
             <SelectContent>
@@ -59,6 +60,6 @@ export function PriceChart() {
           />
         </Section>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -6,6 +6,7 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import type { NavPoint } from '../types/charts'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -90,7 +91,7 @@ export function NavChart() {
   }, [compareMode, mainData, selectedInstr])
 
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader
         title="Fund NAV Chart"
         actions={
@@ -103,7 +104,7 @@ export function NavChart() {
                 setCompareId(null)
               }}
             >
-              <SelectTrigger className="w-72">
+              <SelectTrigger size="sm" className="w-72">
                 <SelectValue placeholder="Select fund…" />
               </SelectTrigger>
               <SelectContent>
@@ -177,6 +178,6 @@ export function NavChart() {
           )}
         </Section>
       )}
-    </div>
+    </PageShell>
   )
 }
