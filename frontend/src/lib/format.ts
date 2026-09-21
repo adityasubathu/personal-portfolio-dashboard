@@ -25,16 +25,19 @@ export function heatmapBg(
   min: number | null | undefined,
   max: number | null | undefined,
   mode: 'rg' | 'rb' = 'rg',
+  intensityRange: [number, number] = [7, 18],
 ): string | undefined {
   if (value == null || value === 0) return undefined
+  const [floor, ceil] = intensityRange
+  const span = ceil - floor
   if (value > 0 && max != null && max > 0) {
     const intensity = Math.min(value / max, 1)
     const color = mode === 'rb' ? 'var(--info)' : 'var(--positive)'
-    return `color-mix(in oklab, ${color} ${Math.round(7 + intensity * 11)}%, var(--card))`
+    return `color-mix(in oklab, ${color} ${Math.round(floor + intensity * span)}%, var(--card))`
   }
   if (value < 0 && min != null && min < 0) {
     const intensity = Math.min(Math.abs(value) / Math.abs(min), 1)
-    return `color-mix(in oklab, var(--negative) ${Math.round(7 + intensity * 11)}%, var(--card))`
+    return `color-mix(in oklab, var(--negative) ${Math.round(floor + intensity * span)}%, var(--card))`
   }
   return undefined
 }
@@ -44,8 +47,9 @@ export function heatmapTextColor(
   min: number | null | undefined,
   max: number | null | undefined,
   mode: 'rg' | 'rb' = 'rg',
+  intensityRange?: [number, number],
 ): string | undefined {
-  return heatmapBg(value, min, max, mode) ? 'var(--foreground)' : undefined
+  return heatmapBg(value, min, max, mode, intensityRange) ? 'var(--foreground)' : undefined
 }
 
 export function gainColor(value: number | null | undefined): string {

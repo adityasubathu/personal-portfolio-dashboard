@@ -23,6 +23,10 @@ import type { NavPoint } from '../types/charts'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// More vibrant than DataTable's default heatmap intensity — this table's CAGR
+// and excess-CAGR columns are the page's main "which sector is winning" read.
+const CAGR_HEATMAP_RANGE: [number, number] = [15, 45]
+
 const RANGE_OPTIONS = [
   { label: '1M', days: 30 },
   { label: '3M', days: 90 },
@@ -676,8 +680,8 @@ function SectorTrendsTable() {
                   ))}
                   {horizons.map((h, ci) => {
                     const v = cagrVal(row, h)
-                    const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci])
-                    const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci])
+                    const bg = isBench ? undefined : heatmapBg(v, cagrMin[ci], cagrMax[ci], 'rg', CAGR_HEATMAP_RANGE)
+                    const fg = isBench ? undefined : heatmapTextColor(v, cagrMin[ci], cagrMax[ci], 'rg', CAGR_HEATMAP_RANGE)
                     return (
                       <td key={`cagr_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
                         {v != null ? pct(v, 1) : <span className="text-xs text-muted-foreground">—</span>}
@@ -686,8 +690,8 @@ function SectorTrendsTable() {
                   })}
                   {horizons.map((h, ci) => {
                     const v = vsVal(row, bench, h)
-                    const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci])
-                    const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci])
+                    const bg = isBench ? undefined : heatmapBg(v, vsMin[ci], vsMax[ci], 'rg', CAGR_HEATMAP_RANGE)
+                    const fg = isBench ? undefined : heatmapTextColor(v, vsMin[ci], vsMax[ci], 'rg', CAGR_HEATMAP_RANGE)
                     return (
                       <td key={`vs_${h}`} data-numeric className={cn('px-2 py-1.5 text-right', ci === 0 && 'border-l-2 border-foreground')} style={{ background: bg, color: fg }}>
                         {v != null ? pct(v, 1, true) : <span className="text-xs text-muted-foreground">—</span>}
