@@ -18,18 +18,18 @@ export function Section({ title, description, action, children, className, bodyC
       {hasHeader && (
         <header
           className={cn(
-            'flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3',
+            'flex min-h-11 flex-wrap items-center justify-between gap-2 border-b px-4 py-3',
             centerTitle && 'relative justify-center',
           )}
         >
           <div className={cn('min-w-0', centerTitle && 'text-center')}>
-            {title && <h2 className={cn('text-sm font-medium', centerTitle && 'text-base font-semibold')}>{title}</h2>}
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+            {title && <h2 className={cn('text-sm font-semibold', centerTitle && 'text-base font-semibold')}>{title}</h2>}
+            {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
           </div>
           {action && (
             <div
               className={cn(
-                'flex flex-wrap items-center gap-2',
+                'flex shrink-0 flex-wrap items-center gap-2',
                 centerTitle && 'absolute top-1/2 right-4 -translate-y-1/2',
               )}
             >

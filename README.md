@@ -16,9 +16,9 @@
 
 A self-hosted portfolio tracker for Indian investors. Imports trades from Zerodha Kite CSVs, syncs live prices from Kite and AMFI, tracks manual assets (FDs, PPF, NPS, cash), computes FIFO cost basis, XIRR, and portfolio NAV over time, and visualizes allocation by market-cap category.
 
-The frontend is a responsive workspace that follows the operating system's light/dark preference with local system typography, a collapsible sidebar with a mobile sheet drawer below 768px, lazy-loaded routes, contained analytical tables, and privacy masking preserved across desktop and mobile views.
+The frontend is a responsive workspace that follows the operating system's light/dark preference with local system typography, a collapsible sidebar with a mobile sheet drawer below 768px, lazy-loaded routes, contained analytical tables, and privacy masking preserved across desktop and mobile views. Desktop routes use shared wide/narrow shells, page/card/content heading levels, compact page and row controls, and dense data tables.
 
-**Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Alembic · React 18 (Vite + TypeScript) · Tailwind CSS v4 · shadcn/ui · TanStack Query · lightweight-charts · recharts
+**Stack:** FastAPI · SQLAlchemy (async) · PostgreSQL · Alembic · React 19 (Vite + TypeScript) · Tailwind CSS v4 · shadcn/ui · TanStack Query · lightweight-charts · recharts
 
 ---
 
@@ -153,11 +153,13 @@ portfolio-mac-arm/
 │       │   ├── ui/              # shadcn/ui primitives — CLI-managed, never hand-edited
 │       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (13 routes)
 │       │   ├── AppSidebar.tsx   # Nav groups/links; badge on Policy when actions pending
+│       │   ├── PageShell.tsx    # Shared wide/narrow desktop route canvas
+│       │   ├── ContentHeader.tsx # Unboxed subsection heading and actions
 │       │   ├── PageHeader.tsx   # Shared route title, metadata, and action layout
 │       │   ├── Section.tsx      # Semantic content surface (border + card background)
 │       │   ├── MetricCard.tsx   # Dashboard and summary metric surface
 │       │   ├── EmptyState.tsx   # Selector-driven route empty state
-│       │   ├── ConfirmActionButton.tsx # Confirmed destructive action control (shadcn Dialog)
+│       │   ├── ConfirmActionButton.tsx # Confirmed action control with destructive final confirmation
 │       │   ├── DonutChart.tsx   # recharts Pie/Cell, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells

@@ -4,6 +4,7 @@ import { useImports, useImportMutation, useRollbackMutation, useSplitCreditMutat
 import { useTradedInstruments } from '../api/portfolio'
 import type { ImportResponse } from '../types/trades'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
 import { Button } from '@/components/ui/button'
@@ -99,7 +100,7 @@ export function Import() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader title="Import Trades" />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -112,7 +113,7 @@ export function Import() {
               multiple
               className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
             />
-            <Button size="xs" disabled={importMut.isPending} onClick={handleUpload}>
+            <Button size="sm" disabled={importMut.isPending} onClick={handleUpload}>
               <Upload className="size-3.5" />
               Import
             </Button>
@@ -138,14 +139,14 @@ export function Import() {
               </Select>
             </div>
             <div className="w-36 space-y-1">
-              <Label htmlFor="split-date">Date</Label>
-              <Input id="split-date" type="date" value={splitDate} onChange={(e) => setSplitDate(e.target.value)} />
+              <Label htmlFor="split-date" className="text-xs">Date</Label>
+              <Input id="split-date" type="date" value={splitDate} onChange={(e) => setSplitDate(e.target.value)} className="h-8" />
             </div>
             <div className="w-28 space-y-1">
-              <Label htmlFor="split-qty">Quantity</Label>
-              <Input id="split-qty" type="number" min={0} value={splitQty} onChange={(e) => setSplitQty(e.target.value)} />
+              <Label htmlFor="split-qty" className="text-xs">Quantity</Label>
+              <Input id="split-qty" type="number" min={0} value={splitQty} onChange={(e) => setSplitQty(e.target.value)} className="h-8" />
             </div>
-            <Button size="xs" disabled={splitMut.isPending} onClick={handleSplitCredit}>
+            <Button size="sm" disabled={splitMut.isPending} onClick={handleSplitCredit}>
               Record
             </Button>
           </div>
@@ -181,7 +182,8 @@ export function Import() {
                       <td className="px-2 py-1.5">
                         <ConfirmActionButton
                           size="xs"
-                          variant="destructive"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
                           confirmTitle="Rollback import?"
                           confirmDescription={`Rollback ${log.filename ?? 'this import'} and its imported trades?`}
                           onConfirm={() => handleRollback(log.batch_id)}
@@ -198,6 +200,6 @@ export function Import() {
           </Section>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }

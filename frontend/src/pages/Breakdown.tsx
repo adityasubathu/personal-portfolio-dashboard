@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Check, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button as ShadButton } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -464,7 +465,7 @@ function OverviewTab() {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full text-[13.5px]" style={{ minWidth: 760 }}>
+            <table className="w-full text-xs" style={{ minWidth: 760 }}>
               {rebalanceView ? <RebalanceTableHead /> : <TargetsTableHead firstColumn="Category" />}
               <tbody>
                 {rebalanceView && plan ? (
@@ -1080,9 +1081,9 @@ export function Breakdown() {
   const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
 
   return (
-    <div className="flex flex-col gap-4 px-48">
+    <PageShell>
       <PageHeader title="Portfolio Breakdown" actions={
-        <ShadButton size="xs" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
+        <ShadButton size="sm" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
           <RefreshCw className="size-3.5" />
           Refresh disclosures
         </ShadButton>
@@ -1117,6 +1118,6 @@ export function Breakdown() {
         </TabsContent>
         <TabsContent value="composition" className="pt-4"><CompositionTab /></TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   )
 }

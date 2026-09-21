@@ -5,6 +5,8 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { MoneyText } from '../components/MoneyText'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
+import { ContentHeader } from '@/components/ContentHeader'
 import { Section } from '@/components/Section'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -172,15 +174,15 @@ function SymbolDetailRows({ lots, fyStart }: { lots: RealizedLot[], fyStart: str
             )}
           </div>
         </td>
-        <td className="px-2 py-1.5 whitespace-nowrap text-sm">
+        <td className="px-2 py-1.5 whitespace-nowrap">
           <span className="text-muted-foreground">{lot.buy_date} → </span>
           <span>{lot.sell_date}</span>
           <span className="text-muted-foreground"> · {lot.holding_days}d</span>
         </td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{lot.qty.toLocaleString('en-IN')}</td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.buy_value)}</td>
-        <td data-numeric className="px-2 py-1.5 text-right text-sm">{fmt(lot.sell_value)}</td>
-        <td data-numeric className={cn('px-2 py-1.5 text-right text-sm font-medium', lot.gain > 0 ? 'text-positive' : lot.gain < 0 ? 'text-negative' : undefined)}>
+        <td data-numeric className="px-2 py-1.5 text-right">{lot.qty.toLocaleString('en-IN')}</td>
+        <td data-numeric className="px-2 py-1.5 text-right">{fmt(lot.buy_value)}</td>
+        <td data-numeric className="px-2 py-1.5 text-right">{fmt(lot.sell_value)}</td>
+        <td data-numeric className={cn('px-2 py-1.5 text-right font-medium', lot.gain > 0 ? 'text-positive' : lot.gain < 0 ? 'text-negative' : undefined)}>
           {fmt(lot.gain)}
         </td>
       </tr>
@@ -342,24 +344,6 @@ export function CapitalGains() {
 
   const { data, isLoading } = useCapitalGains(activeFy)
 
-  if (yearsLoading) {
-    return (
-      <Section>
-        <Skeleton className="h-5 w-24" />
-      </Section>
-    )
-  }
-
-  if (fys.length === 0) {
-    return (
-      <Section>
-        <Alert>
-          <AlertDescription>No sell trades found. Import your tradebook to see capital gains.</AlertDescription>
-        </Alert>
-      </Section>
-    )
-  }
-
   const totalStcg = (data?.lots ?? []).reduce((s, l) => s + (isLongTerm(l.tax_bucket) ? 0 : l.gain), 0)
   const totalLtcg = (data?.lots ?? []).reduce((s, l) => s + (isLongTerm(l.tax_bucket) ? l.gain : 0), 0)
 
@@ -371,12 +355,24 @@ export function CapitalGains() {
   const totalEstTax = (data?.totals.est_tax ?? 0) + slabTax
 
   return (
-    <div className="flex flex-col gap-4 px-48">
+    <PageShell>
       <PageHeader
         title="Capital Gains"
         actions={<InfoPopover text={HELP_TEXT} className="w-96" />}
       />
 
+      {yearsLoading ? (
+        <Section>
+          <Skeleton className="h-5 w-24" />
+        </Section>
+      ) : fys.length === 0 ? (
+        <Section>
+          <Alert>
+            <AlertDescription>No sell trades found. Import your tradebook to see capital gains.</AlertDescription>
+          </Alert>
+        </Section>
+      ) : (
+        <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-center gap-2">
           <Label className="text-sm">Fiscal year</Label>
@@ -466,10 +462,7 @@ export function CapitalGains() {
 
           <Separator />
 
-          <div className="space-y-1">
-            <p className="text-sm font-semibold">Realized P&amp;L by symbol</p>
-            <p className="text-xs text-muted-foreground">Click a row to see the opening position and individual lots.</p>
-          </div>
+          <ContentHeader title="Realized P&amp;L by symbol" description="Click a row to see the opening position and individual lots." />
           <Section bodyClassName="p-0">
             <SymbolTable lots={data.lots} fy={activeFy} />
           </Section>
@@ -491,6 +484,8 @@ export function CapitalGains() {
           )}
         </div>
       )}
-    </div>
+        </>
+      )}
+    </PageShell>
   )
 }

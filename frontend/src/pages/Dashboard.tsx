@@ -19,6 +19,8 @@ import { inr, pct } from '../lib/format'
 import { usePrivacy } from '../hooks/usePrivacy'
 import type { HoldingRow } from '../types/portfolio'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
+import { ContentHeader } from '@/components/ContentHeader'
 import { Section } from '@/components/Section'
 import { MetricCard } from '../components/MetricCard'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
@@ -116,7 +118,7 @@ function NumQty({ value }: { value: number }) {
 }
 
 // Cost and Value carry the most weight on this table: 15% above the 12px base.
-const NUM_LG = 'text-[13.8px]'
+const NUM_LG = 'font-semibold'
 
 // Direction lives in the arrow, so the number itself is printed unsigned.
 // Fixed width so the pill's edges land at the same x in every row, regardless
@@ -302,7 +304,7 @@ function HoldingsTable() {
       }
     >
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-        <table className="w-full table-fixed text-[13.2px]" style={{ minWidth: 1160 }}>
+        <table className="w-full table-fixed text-xs" style={{ minWidth: 1160 }}>
           <colgroup>
             <col style={{ width: 300 }} />
             <col style={{ width: 70 }} />
@@ -468,22 +470,24 @@ function ManualAssets() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Manual Assets</h2>
-        <div className="flex items-center gap-3">
+      <ContentHeader
+        title="Manual Assets"
+        action={
+          <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground"><MoneyText value={data.total_manual} /> total</span>
           <ShadButton size="xs" variant="ghost" onClick={toggleEditor}>
             {open ? 'Hide' : 'Edit'}
             {open ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
           </ShadButton>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Section title="Fixed Deposits" action={data.total_fd > 0 ? <MoneyText value={data.total_fd} className="text-sm font-semibold" /> : undefined}>
           <div className="space-y-3">
             {data.fds.length > 0 && (
-              <ShadTable className="text-xs">
+              <ShadTable className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Label</TableHead>
@@ -506,7 +510,7 @@ function ManualAssets() {
                       <TableCell>{fd.maturity_date}</TableCell>
                       <TableCell><MoneyText value={fd.current_value} /></TableCell>
                       <TableCell>
-                        <ConfirmActionButton size="icon-xs" variant="ghost" confirmTitle="Delete fixed deposit?" confirmDescription={`Delete ${fd.label}?`} onConfirm={() => deleteMut.mutateAsync(fd.id)}>
+                        <ConfirmActionButton size="icon-xs" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete fixed deposit?" confirmDescription={`Delete ${fd.label}?`} onConfirm={() => deleteMut.mutateAsync(fd.id)}>
                           <Trash2 className="size-3" />
                         </ConfirmActionButton>
                       </TableCell>
@@ -565,22 +569,22 @@ function ManualAssets() {
               <div className="flex flex-wrap items-end gap-2">
                 <div className="w-36 space-y-1"><Label className="text-xs">PPF value</Label><Input type="number" value={ppfValue} onChange={(e) => setPpfValue(e.target.value)} className="h-8" /></div>
                 <ShadButton size="sm" disabled={ppfMut.isPending} onClick={() => ppfMut.mutate({ current_value: Number(ppfValue) })}>Save</ShadButton>
-                {data.ppf && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete PPF?" confirmDescription="Delete this PPF asset?" onConfirm={() => deleteMut.mutateAsync(data.ppf!.id)}>Delete</ConfirmActionButton>}
+                {data.ppf && <ConfirmActionButton size="sm" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete PPF?" confirmDescription="Delete this PPF asset?" onConfirm={() => deleteMut.mutateAsync(data.ppf!.id)}>Delete</ConfirmActionButton>}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="w-36 space-y-1"><Label className="text-xs">NPS value</Label><Input type="number" value={npsValue} onChange={(e) => setNpsValue(e.target.value)} className="h-8" /></div>
                 <ShadButton size="sm" disabled={npsMut.isPending} onClick={() => npsMut.mutate({ current_value: Number(npsValue) })}>Save</ShadButton>
-                {data.nps && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete NPS?" confirmDescription="Delete this NPS asset?" onConfirm={() => deleteMut.mutateAsync(data.nps!.id)}>Delete</ConfirmActionButton>}
+                {data.nps && <ConfirmActionButton size="sm" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete NPS?" confirmDescription="Delete this NPS asset?" onConfirm={() => deleteMut.mutateAsync(data.nps!.id)}>Delete</ConfirmActionButton>}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="w-36 space-y-1"><Label className="text-xs">Cash / Savings value</Label><Input type="number" value={cashValue} onChange={(e) => setCashValue(e.target.value)} className="h-8" /></div>
                 <ShadButton size="sm" disabled={cashMut.isPending} onClick={() => cashMut.mutate({ current_value: Number(cashValue) })}>Save</ShadButton>
-                {data.cash && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete cash?" confirmDescription="Delete this cash asset?" onConfirm={() => deleteMut.mutateAsync(data.cash!.id)}>Delete</ConfirmActionButton>}
+                {data.cash && <ConfirmActionButton size="sm" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete cash?" confirmDescription="Delete this cash asset?" onConfirm={() => deleteMut.mutateAsync(data.cash!.id)}>Delete</ConfirmActionButton>}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="w-36 space-y-1"><Label className="text-xs">INDMoney balance ($)</Label><Input type="number" min={0} step={0.01} value={usdCashValue} onChange={(e) => setUsdCashValue(e.target.value)} className="h-8" /></div>
                 <ShadButton size="sm" disabled={usdCashMut.isPending} onClick={() => usdCashMut.mutate({ current_value: Number(usdCashValue) })}>Save</ShadButton>
-                {data.usd_cash && <ConfirmActionButton size="sm" variant="ghost" confirmTitle="Delete USD cash?" confirmDescription="Delete this USD cash asset?" onConfirm={() => deleteMut.mutateAsync(data.usd_cash!.id)}>Delete</ConfirmActionButton>}
+                {data.usd_cash && <ConfirmActionButton size="sm" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete USD cash?" confirmDescription="Delete this USD cash asset?" onConfirm={() => deleteMut.mutateAsync(data.usd_cash!.id)}>Delete</ConfirmActionButton>}
               </div>
             </div>
           )}
@@ -592,7 +596,7 @@ function ManualAssets() {
         >
           <div className="space-y-3">
             {data.foreign_equities.length > 0 && (
-              <ShadTable className="text-xs">
+              <ShadTable className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Label</TableHead>
@@ -636,7 +640,7 @@ function ManualAssets() {
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {open && <ShadButton size="xs" variant="ghost" onClick={() => initFxEdit(fe)}>Edit</ShadButton>}
-                            <ConfirmActionButton size="icon-xs" variant="ghost" confirmTitle="Delete foreign equity?" confirmDescription={`Delete ${fe.label}?`} onConfirm={() => deleteMut.mutateAsync(fe.id)}>
+                            <ConfirmActionButton size="icon-xs" variant="ghost" className="text-destructive hover:text-destructive" confirmTitle="Delete foreign equity?" confirmDescription={`Delete ${fe.label}?`} onConfirm={() => deleteMut.mutateAsync(fe.id)}>
                               <Trash2 className="size-3" />
                             </ConfirmActionButton>
                           </div>
@@ -688,11 +692,11 @@ function ManualAssets() {
 
 export function Dashboard() {
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader title="Dashboard" />
       <SummaryCards />
       <HoldingsTable />
       <ManualAssets />
-    </div>
+    </PageShell>
   )
 }

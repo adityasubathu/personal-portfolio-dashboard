@@ -10,6 +10,7 @@ import {
 import { useAppStatus } from '../api/status'
 import { ConfirmActionButton } from '../components/ConfirmActionButton'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,19 +75,19 @@ export function Kite() {
 
   if (demoMode) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <PageShell width="narrow">
         <PageHeader title="Kite Integration" />
         <Alert>
           <FlaskConical className="size-4" />
           <AlertTitle>Demo mode</AlertTitle>
           <AlertDescription>Kite integration is disabled in demo mode. The app is running with sample data — no live prices or sync available.</AlertDescription>
         </Alert>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <PageShell width="narrow">
       <PageHeader title="Kite Integration" />
 
       {status && (
@@ -114,11 +115,11 @@ export function Kite() {
       <Section title="API Credentials">
         <div className="flex flex-col gap-3">
           <div className="space-y-1">
-            <Label htmlFor="kite-api-key">API Key</Label>
-            <Input id="kite-api-key" value={apiKey || status?.api_key || ''} onChange={(e) => setApiKey(e.target.value)} />
+            <Label htmlFor="kite-api-key" className="text-xs">API Key</Label>
+            <Input id="kite-api-key" value={apiKey || status?.api_key || ''} onChange={(e) => setApiKey(e.target.value)} className="h-8" />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="kite-api-secret">API Secret</Label>
+            <Label htmlFor="kite-api-secret" className="text-xs">API Secret</Label>
             <div className="relative">
               <Input
                 id="kite-api-secret"
@@ -126,7 +127,7 @@ export function Kite() {
                 placeholder={status?.configured ? '(leave blank to keep current)' : ''}
                 value={apiSecret}
                 onChange={(e) => setApiSecret(e.target.value)}
-                className="pr-9"
+                className="h-8 pr-9"
               />
               <button
                 type="button"
@@ -139,13 +140,14 @@ export function Kite() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="xs" disabled={saveMut.isPending} onClick={handleSave}>
+            <Button size="sm" disabled={saveMut.isPending} onClick={handleSave}>
               Save
             </Button>
             {status?.configured && (
               <ConfirmActionButton
-                size="xs"
+                size="sm"
                 variant="outline"
+                className="text-destructive hover:text-destructive"
                 confirmTitle="Delete Kite configuration?"
                 confirmDescription="Saved Kite configuration will be removed."
                 onConfirm={handleDelete}
@@ -170,7 +172,7 @@ export function Kite() {
             <Alert className="border-warning/40 bg-warning/10">
               <AlertDescription className="gap-2">
                 Token expired or not set. Login with Kite to refresh.
-                <Button size="xs" asChild>
+                <Button size="sm" asChild>
                   <a href={status.login_url ?? undefined}>
                     <LogIn className="size-3" />
                     Login with Kite
@@ -213,7 +215,7 @@ export function Kite() {
                     <AlertDescription>{syncMut.data.error_message ?? syncMut.data.status}</AlertDescription>
                   </Alert>
                   {syncMut.data.discrepancies && syncMut.data.discrepancies.length > 0 && (
-                    <Table className="text-xs">
+                    <Table className="text-xs [&_th]:h-8 [&_td]:px-2 [&_td]:py-1.5">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Symbol</TableHead>
@@ -253,6 +255,6 @@ export function Kite() {
           )}
         </Section>
       )}
-    </div>
+    </PageShell>
   )
 }

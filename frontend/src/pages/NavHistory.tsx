@@ -11,6 +11,7 @@ import { apiUrl } from '../api/client'
 import type { NavPoint as NavSeriesPoint } from '../types/portfolio'
 import type { NavPoint } from '../types/charts'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -139,7 +140,7 @@ export function NavHistory() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <PageShell>
       <PageHeader title="Portfolio NAV History" />
 
       {navLoading && <p className="text-sm text-muted-foreground">Loading NAV history…</p>}
@@ -313,6 +314,6 @@ export function NavHistory() {
           </Section>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }

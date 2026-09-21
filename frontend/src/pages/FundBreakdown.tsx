@@ -8,6 +8,7 @@ import { shortDate, shortDateTime } from '../lib/format'
 import type { SchemeHolding, SchemeListItem } from '../types/mfBreakdown'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -15,6 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS, type ChipColor } from '@/lib/colors'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
@@ -86,13 +88,13 @@ export function FundBreakdown() {
   const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
   return (
-    <div className="flex flex-col gap-4 px-48">
+    <PageShell>
       <PageHeader
         title="Fund Detail"
         actions={
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
+              <Button size="sm" variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
                 <span className="truncate">
                   {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
                 </span>
@@ -129,7 +131,11 @@ export function FundBreakdown() {
       {selectedIsin == null && (
         <EmptyState icon={<Landmark className="size-5" />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />
       )}
-      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {isLoading && (
+        <Section>
+          <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+        </Section>
+      )}
 
       {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
         <div>
@@ -168,20 +174,20 @@ export function FundBreakdown() {
       {breakdown && breakdown.holdings.length > 0 && (
         <Section title="Holdings" bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-[0.81rem]">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-[0.9rem] font-bold text-foreground">
-                  <th className="h-9 w-10 px-2 text-right">#</th>
-                  <th className="h-9 px-2 text-left">Name</th>
-                  <th className="h-9 px-2 text-left">Category</th>
-                  <th className="h-9 px-2 text-left">
+                <tr className="sticky top-0 z-10 border-b-2 border-border bg-muted/60 text-xs font-semibold text-foreground">
+                  <th className="h-8 w-10 px-2 text-right">#</th>
+                  <th className="h-8 px-2 text-left">Name</th>
+                  <th className="h-8 px-2 text-left">Category</th>
+                  <th className="h-8 px-2 text-left">
                     Industry{' '}
                     <span className="text-xs font-normal text-muted-foreground">
                       (Macro → Sector → Industry → Basic)
                     </span>
                   </th>
-                  <th className="h-9 px-2 text-right">%</th>
-                  <th className="h-9 px-2 text-right">Value</th>
+                  <th className="h-8 px-2 text-right">%</th>
+                  <th className="h-8 px-2 text-right">Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -192,7 +198,7 @@ export function FundBreakdown() {
                         <td colSpan={6} className="h-4" />
                       </tr>
                     )}
-                    <tr className="bg-row-hover text-[0.9rem] font-bold">
+                    <tr className="bg-row-hover text-xs font-semibold">
                       <td colSpan={4} className="border-y-2 border-foreground/25 px-2 py-2 text-center uppercase tracking-wide">
                         {group.label}
                       </td>
@@ -220,6 +226,6 @@ export function FundBreakdown() {
           </div>
         </Section>
       )}
-    </div>
+    </PageShell>
   )
 }
