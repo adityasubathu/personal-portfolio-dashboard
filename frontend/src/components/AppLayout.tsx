@@ -7,12 +7,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePrivacy } from '../hooks/usePrivacy'
 import { useAppStatus } from '../api/status'
 
+function getSidebarDefaultOpen(): boolean {
+  const match = document.cookie.match(/(?:^|; )sidebar_state=([^;]*)/)
+  return match ? match[1] === 'true' : true
+}
+
 export function AppLayout() {
   const { privacyMode, togglePrivacy } = usePrivacy()
   const { data: status } = useAppStatus()
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={getSidebarDefaultOpen()}>
       <AppSidebar />
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b bg-background px-3">

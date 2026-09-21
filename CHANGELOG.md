@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-21-19-47-50 — Sidebar persistence and chart jitter fixes
+- Fixed the left sidebar always reopening on refresh — it now reads the `sidebar_state` cookie on load instead of always defaulting to expanded. (pending · pending)
+- Fixed Market Sentiment charts rapidly resizing horizontally — the shared price-scale-width sync no longer re-measures on every parent re-render, only when data actually changes. (pending · pending)
+
 ## 2026-09-21-12-40-25 — Desktop UI consistency pass
 - Added shared desktop route, content-heading, and confirmation-action layout contracts. (2026-09-21-12-40-25 · 5131030)
 - Aligned the portfolio overview and analysis routes to shared wide shells and consistent content states. (2026-09-21-12-44-20 · 977c475)
