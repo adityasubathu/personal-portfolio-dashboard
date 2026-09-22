@@ -326,7 +326,7 @@ function HoldingsTable() {
               <th className="h-8 px-2 text-right font-medium text-muted-foreground">Updated</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-[13px]">
             {(() => {
               let rowIndex = 0
               return groups.map((g) => (

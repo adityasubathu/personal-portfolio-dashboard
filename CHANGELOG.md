@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-22-17-16-59 — Dashboard holdings table row font size
+- Holdings table rows on the Dashboard now render at 13px instead of 12px, matching the rest of the table. (2026-09-22-17-16-59 · PENDING)
+
 ## 2026-09-21-20-26-54 — Cap default chart zoom at 1 year
 - Market Sentiment's price chart and oscillator/volatility charts (RSI, MACD, ADX, ATR, Realized Vol) now open zoomed to the last 1 year by default instead of showing full history. The range toggle and its underlying data are untouched — it still defaults to "All" and loads all history, so scrolling/zooming out still works. (2026-09-21-20-26-54 · 77eec2e)
 - NAV History's Portfolio value chart (Value vs Invested) now opens zoomed to the last 1 year by default for the same reason. The Unit NAV chart is unchanged. (2026-09-21-20-26-54 · 77eec2e)
