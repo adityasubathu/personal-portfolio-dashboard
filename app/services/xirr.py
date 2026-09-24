@@ -9,8 +9,12 @@ The rate r satisfies:  sum( cf_i / (1 + r) ** ((d_i - d_0) / 365) ) = 0
 Solved with Newton-Raphson on the NPV, falling back to bisection when
 the derivative is near zero or the root moves outside a reasonable bracket.
 Returns None when the cashflows can't support a rate (all same sign, <2 flows, or no convergence).
+
+Per-holding XIRR only covers the current holding cycle: if a position went to zero and
+stayed flat for RESTART_FLAT_TRADING_DAYS trading days (weekdays) before being bought
+again, the earlier trades are dropped.
 """
-from datetime import date
+from datetime import date, timedelta
 from typing import Sequence
 
 from sqlalchemy import select
@@ -20,6 +24,9 @@ from app.models.holding import Holding
 from app.models.trade import Trade
 
 Cashflow = tuple[date, float]
+
+RESTART_FLAT_TRADING_DAYS = 5
+_QTY_EPSILON = 1e-6
 
 
 def xirr(cashflows: Sequence[Cashflow], guess: float = 0.1) -> float | None:
@@ -80,10 +87,35 @@ def xirr(cashflows: Sequence[Cashflow], guess: float = 0.1) -> float | None:
     return (lo + hi) / 2
 
 
+def _trading_days_between(start: date, end: date) -> int:
+    """Weekdays in [start, end)."""
+    return sum(1 for i in range((end - start).days) if (start + timedelta(days=i)).weekday() < 5)
+
+
+def current_cycle_trades(trades: Sequence[Trade]) -> list[Trade]:
+    """Trades since the last time the position sat at zero for RESTART_FLAT_TRADING_DAYS
+    trading days (counted from the day it hit zero up to the day it was bought again).
+    `trades` must be ordered by trade_date, id."""
+    start = 0
+    position = 0.0
+    flat_since: date | None = None
+    for i, t in enumerate(trades):
+        if flat_since is not None and t.trade_type == "BUY":
+            if _trading_days_between(flat_since, t.trade_date) >= RESTART_FLAT_TRADING_DAYS:
+                start = i
+            flat_since = None
+        qty = float(t.quantity)
+        position += qty if t.trade_type == "BUY" else -qty
+        if abs(position) < _QTY_EPSILON:
+            position = 0.0
+            flat_since = t.trade_date
+    return list(trades[start:])
+
+
 async def holding_cashflows(db: AsyncSession, instrument_id: int, *, as_of: date) -> list[Cashflow]:
-    """Build cashflows for a single instrument: every BUY is negative, every SELL positive,
-    plus the terminal holding value (qty * last_price) as a positive flow dated `as_of`.
-    Returns [] if we can't price the terminal value and there are no sells."""
+    """Build cashflows for a single instrument's current holding cycle: every BUY is negative,
+    every SELL positive, plus the terminal holding value (qty * last_price) as a positive flow
+    dated `as_of`. Returns [] if we can't price the terminal value and there are no sells."""
     trades = (
         await db.execute(
             select(Trade).where(Trade.instrument_id == instrument_id).order_by(Trade.trade_date, Trade.id)
@@ -94,7 +126,7 @@ async def holding_cashflows(db: AsyncSession, instrument_id: int, *, as_of: date
     ).scalar_one_or_none()
 
     flows: list[Cashflow] = []
-    for t in trades:
+    for t in current_cycle_trades(trades):
         amt = float(t.quantity) * float(t.price)
         if t.trade_type == "BUY":
             flows.append((t.trade_date, -amt))

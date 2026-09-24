@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-24-17-42-16 — Per-holding XIRR restarts after a full exit
+- Per-holding XIRR now only covers the current holding cycle: if a position went to zero and stayed flat for 5 trading days (weekdays) before being bought again, trades before the re-entry are ignored. Portfolio XIRR is unchanged and still uses every trade. (2026-09-24-17-42-16 · PENDING)
+
 ## 2026-09-22-17-16-59 — Dashboard holdings table row font size
 - Holdings table rows on the Dashboard now render at 13px instead of 12px, matching the rest of the table. (2026-09-22-17-16-59 · e0645a2)
 
