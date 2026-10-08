@@ -262,6 +262,16 @@ _AC_DEBT = {"Debt", "Equity - Arbitrage"}
 _AC_PRECIOUS_METALS = {"Gold", "Silver"}
 
 
+def _investable_debt(category_totals: dict[str, float], manual: dict) -> float:
+    """Debt for the target tables: debt categories plus cash held inside mutual funds,
+    minus the emergency fund. Savings-account and INDmoney-wallet cash (manual
+    total_cash, which _build_category_totals_full folds into "Cash") is the only cash
+    left out."""
+    mf_cash = category_totals.get("Cash", 0) - manual.get("total_cash", 0)
+    debt = sum(category_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - manual.get("emergency_total", 0)
+    return max(0.0, debt)
+
+
 async def get_asset_class_comparison(db: AsyncSession) -> dict:
     all_holdings = await load_portfolio_holdings(db)
     category_totals = await _build_category_totals_full(db, all_holdings, use_cost=False)
@@ -270,13 +280,8 @@ async def get_asset_class_comparison(db: AsyncSession) -> dict:
     savings_cash = manual.get("total_cash", 0)
     emergency_fund = manual.get("emergency_total", 0)
 
-    # MF internal cash = total "Cash" category minus savings-account-only cash
-    mf_cash = max(0.0, category_totals.get("Cash", 0) - savings_cash)
-
     equity = sum(category_totals.get(c, 0) for c in _AC_EQUITY)
-    # PPF is already in category_totals["Debt"] via _build_category_totals_full; include it in investable debt
-    debt = sum(category_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund
-    debt = max(0.0, debt)
+    debt = _investable_debt(category_totals, manual)
     precious_metals = sum(category_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
 
     investable_total = equity + debt + precious_metals
@@ -625,16 +630,8 @@ async def _get_free_float_comparison(
     domestic_inv: float,
 ) -> dict:
     manual = await get_manual_assets_summary(db)
-    savings_cash = manual.get("total_cash", 0)
-    emergency_fund = manual.get("emergency_total", 0)
-
-    # Pool = investable total (everything except savings cash, USD cash, emergency fund)
-    # USD cash is already excluded from manual_assets total_cash vs total_foreign_equity_inr split,
-    # but if stored under a separate key, handle it. USD equity is in Equity - Foreign already.
-    mf_cash = max(0.0, current_totals.get("Cash", 0) - savings_cash)
-    debt_cur = sum(current_totals.get(c, 0) for c in _AC_DEBT) + mf_cash - emergency_fund
-    debt_cur = max(0.0, debt_cur)
-    debt_inv = sum(invested_totals.get(c, 0) for c in _AC_DEBT)
+    debt_cur = _investable_debt(current_totals, manual)
+    debt_inv = _investable_debt(invested_totals, manual)
     pm_cur = sum(current_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
     pm_inv = sum(invested_totals.get(c, 0) for c in _AC_PRECIOUS_METALS)
 

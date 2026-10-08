@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-08-15-16-31 — Allocation targets cash exclusions
+- Free Float invested Debt now follows the same rule as current Debt: the emergency fund is excluded and cash inside mutual funds is counted, so invested Debt and the invested pool/percentages are no longer inflated. (2026-10-08-15-16-31 · PENDING_ID)
+
 ## 2026-09-24-17-42-16 — Per-holding XIRR restarts after a full exit
 - Per-holding XIRR now only covers the current holding cycle: if a position went to zero and stayed flat for 5 trading days (weekdays) before being bought again, trades before the re-entry are ignored. Portfolio XIRR is unchanged and still uses every trade. (2026-09-24-17-42-16 · a9ec5cc)
 
