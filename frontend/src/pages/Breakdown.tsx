@@ -319,7 +319,7 @@ function AssetClassTargetsSection({
           <p className="text-xs text-muted-foreground">
             Excludes:{' '}
             {emergency_fund > 0 && <>Emergency fund {inrCompact(emergency_fund)}, </>}
-            {cash > 0 && <>Savings {inrCompact(cash)}</>}
+            {cash > 0 && <>Savings & INDmoney cash {inrCompact(cash)}</>}
           </p>
         </div>
       )}
@@ -439,7 +439,7 @@ function OverviewTab() {
             isAnchored ? (
               <>Equity allocation targets <span className="text-xs font-normal text-muted-foreground">(% of domestic equity)</span></>
             ) : (
-              <>Allocation targets <span className="text-xs font-normal text-muted-foreground">(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund & cash)</span></>
+              <>Allocation targets <span className="text-xs font-normal text-muted-foreground">(% of pool · <MoneyText value={comparison.pool ?? comparison.current_equity} compact />, excludes emergency fund, savings & INDmoney cash)</span></>
             )
           }
           action={

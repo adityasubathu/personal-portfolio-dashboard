@@ -439,7 +439,9 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 **Equity categories:** `Large Cap`, `Mid Cap`, `Small Cap`, `Unclassified Equity` (domestic), `Equity - Foreign`, `Equity - Arbitrage`.  
 **Allocation comparison:** two modes selectable per session:
 - **Anchored (default):** Mid Cap and Small Cap ideal values are anchored to Large Cap (e.g. Mid = 70% of LC). Foreign ideal = `cur_large × anchor_ratio` where `anchor_ratio = foreign_target / (large_target × domestic_share)`. Large Cap shows no diff; it is the anchor.
-- **Free Float:** all ideals computed from total equity × target %; targets are shown as % of total equity.
+- **Free Float:** every row (Large/Mid/Small/Foreign/Debt/Precious Metals) is a % of the investable pool, and ideal = pool × target %.
+
+**Investable pool** (asset class targets and Free Float): Equity + Debt + Precious Metals. Debt = Debt + Equity - Arbitrage + cash held inside mutual funds − emergency-fund FDs, applied the same way to current and invested values. Only savings-account cash, INDmoney wallet cash and the emergency fund are excluded; Real Estate Trust and Derivatives - Leveraged are also left out of the pool.
 
 `Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
 
