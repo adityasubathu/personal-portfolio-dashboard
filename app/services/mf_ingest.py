@@ -87,6 +87,7 @@ _EDGE_MARKER_RE = re.compile(r"^(?:\s*(?:\^\^|\*\*))+|(?:(?:\^\^|\*\*)\s*)+$")
 _NAME_ALIASES: dict[str, str] = {
     "m.r.f.": "mrf",
     "m r f": "mrf",
+    "dixon technologies india": "dixon technologies",
 }
 
 
