@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.sse import sse_stream
-from app.models.allocation_target import AllocationTarget
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
 from app.services.allocation import (
     get_allocation_comparison,
@@ -166,14 +165,7 @@ async def update_asset_class_targets(request: Request, db: AsyncSession = Depend
                 foreign_pct = v
             else:
                 targets[asset_class] = v
-    await save_asset_class_targets(db, targets)
-    if foreign_pct is not None:
-        await db.execute(
-            pg_insert(AllocationTarget)
-            .values(category="Equity - Foreign", target_pct=foreign_pct)
-            .on_conflict_do_update(index_elements=["category"], set_={"target_pct": foreign_pct})
-        )
-        await db.commit()
+    await save_asset_class_targets(db, targets, foreign_pct=foreign_pct)
     return {"ok": True}
 
 

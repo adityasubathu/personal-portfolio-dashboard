@@ -1,6 +1,7 @@
 from difflib import SequenceMatcher
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.allocation_target import AllocationTarget, AssetClassTarget
@@ -240,7 +241,20 @@ async def get_asset_class_targets(db: AsyncSession) -> dict[str, float]:
     return {r.asset_class: float(r.target_pct) for r in rows}
 
 
-async def save_asset_class_targets(db: AsyncSession, targets: dict[str, float]):
+def _foreign_target_upsert(pct: float):
+    return (
+        pg_insert(AllocationTarget)
+        .values(category=FOREIGN_CAT, alloc_mode="anchored", target_pct=pct)
+        .on_conflict_do_update(
+            index_elements=["category", "alloc_mode"],
+            set_={"target_pct": pct},
+        )
+    )
+
+
+async def save_asset_class_targets(
+    db: AsyncSession, targets: dict[str, float], foreign_pct: float | None = None
+):
     for asset_class, pct in targets.items():
         existing = (await db.execute(
             select(AssetClassTarget).where(AssetClassTarget.asset_class == asset_class)
@@ -254,6 +268,8 @@ async def save_asset_class_targets(db: AsyncSession, targets: dict[str, float]):
             AssetClassTarget.asset_class.notin_(list(targets.keys()))
         )
     )
+    if foreign_pct is not None:
+        await db.execute(_foreign_target_upsert(foreign_pct))
     await db.commit()
 
 
