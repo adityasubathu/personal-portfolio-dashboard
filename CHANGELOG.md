@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-10-13-17-35-51 — Fix asset class targets save
-- Saving Equity / Debt / Precious Metals / Foreign targets on the Breakdown page no longer fails with a 500: the foreign-equity target upsert now matches the (category, alloc_mode) unique key, and the whole save commits in one transaction. (2026-10-13-17-35-51 · ID)
+- Saving Equity / Debt / Precious Metals / Foreign targets on the Breakdown page no longer fails with a 500: the foreign-equity target upsert now matches the (category, alloc_mode) unique key, and the whole save commits in one transaction. (2026-10-13-17-35-51 · db89d53)
 
 ## 2026-10-08-15-16-31 — Allocation targets cash exclusions
 - Free Float invested Debt now follows the same rule as current Debt: the emergency fund is excluded and cash inside mutual funds is counted, so invested Debt and the invested pool/percentages are no longer inflated. (2026-10-08-15-16-31 · 7f71773)
