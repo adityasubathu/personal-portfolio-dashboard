@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2026-10-19-14-26-19 — Nifty 50 / Nifty 500 on the Unit NAV chart
-- NAV history points now include Nifty 50 and Nifty 500, rebased to the Unit NAV at its base date. (2026-10-19-14-26-19 · @@ID1@@)
+- NAV history points now include Nifty 50 and Nifty 500, rebased to the Unit NAV at its base date. (2026-10-19-14-26-19 · c9408cc)
+- The Unit NAV chart overlays Nifty 50 and Nifty 500 lines, with header toggles that are remembered across reloads. (2026-10-19-14-26-39 · @@ID2@@)
 
 ## 2026-10-13-17-35-51 — Fix asset class targets save
 - Saving Equity / Debt / Precious Metals / Foreign targets on the Breakdown page no longer fails with a 500: the foreign-equity target upsert now matches the (category, alloc_mode) unique key, and the whole save commits in one transaction. (2026-10-13-17-35-51 · db89d53)

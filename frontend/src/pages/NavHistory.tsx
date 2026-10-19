@@ -32,6 +32,13 @@ function unitNavFormatter(value: number): string {
   return value.toFixed(2)
 }
 
+type Benchmark = 'nifty50' | 'nifty500'
+
+const BENCHMARK_LINES: Array<{ key: Benchmark; label: string; color: string }> = [
+  { key: 'nifty50', label: 'Nifty 50', color: '#3b82f6' },
+  { key: 'nifty500', label: 'Nifty 500', color: '#ef4444' },
+]
+
 function HaltSyncButton() {
   const [halting, setHalting] = useState(false)
 
@@ -62,6 +69,7 @@ export function NavHistory() {
   const syncHistoryMut = useSyncNavHistoryMutation()
   const syncNavMut = useSyncNavMutation()
   const [navSource, setNavSource] = usePersistentState<'mfapi' | 'finapi'>('navSource', 'mfapi')
+  const [benchmarks, setBenchmarks] = usePersistentState<Benchmark[]>('navBenchmarks', ['nifty50', 'nifty500'])
 
   const qc = useQueryClient()
   const priceSyncSse = useSse(`${apiUrl('/api/v1/portfolio/sync-price-history/stream')}`)
@@ -113,6 +121,13 @@ export function NavHistory() {
         .map((p: NavSeriesPoint) => ({ time: p.date, value: p.unit_nav as number })),
     [navSeries],
   )
+  const benchmarkData = useMemo<Record<Benchmark, NavPoint[]>>(() => {
+    const pointsFor = (key: Benchmark) =>
+      (navSeries ?? [])
+        .filter((p: NavSeriesPoint) => p[key] != null)
+        .map((p: NavSeriesPoint) => ({ time: p.date, value: p[key] as number }))
+    return { nifty50: pointsFor('nifty50'), nifty500: pointsFor('nifty500') }
+  }, [navSeries])
 
   // Stable identities — LwChart's compare-series effect keys off these, and a
   // fresh array on every render tears down and re-adds ~4800 points of series.
@@ -124,8 +139,15 @@ export function NavHistory() {
     [valueData, investedData],
   )
   const unitNavCompareLines = useMemo(
-    () => [{ data: unitNavData, label: 'Unit NAV', color: '#10b981' }],
-    [unitNavData],
+    () => [
+      { data: unitNavData, label: 'Unit NAV', color: '#10b981' },
+      ...BENCHMARK_LINES.filter((b) => benchmarks.includes(b.key) && benchmarkData[b.key].length > 0).map((b) => ({
+        data: benchmarkData[b.key],
+        label: b.label,
+        color: b.color,
+      })),
+    ],
+    [unitNavData, benchmarkData, benchmarks],
   )
 
   async function handleUploadOhlc() {
@@ -160,7 +182,21 @@ export function NavHistory() {
         )}
 
         {unitNavData.length > 0 && (
-          <Section title="Unit NAV" description="Performance excluding cash flows (base = 100 on 5 Nov 2022)" bodyClassName="p-2">
+          <Section
+            title="Unit NAV"
+            description="Performance excluding cash flows (base = 100 on 5 Nov 2022) · indices rebased to the same start"
+            bodyClassName="p-2"
+            action={
+              <ToggleGroup type="multiple" variant="outline" size="sm" value={benchmarks} onValueChange={(v) => setBenchmarks(v as Benchmark[])}>
+                {BENCHMARK_LINES.map((b) => (
+                  <ToggleGroupItem key={b.key} value={b.key} disabled={benchmarkData[b.key].length === 0}>
+                    <span className="size-2 rounded-full" style={{ backgroundColor: b.color }} />
+                    {b.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            }
+          >
             <LwChart
               seriesType="line"
               persistKey="portfolio_unit_nav_h"

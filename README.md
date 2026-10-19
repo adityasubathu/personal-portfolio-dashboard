@@ -452,6 +452,8 @@ forward-fill gaps → output `{date, value, invested, unit_nav, nifty50, nifty50
 
 `nifty50` / `nifty500` are the Nifty 50 and Nifty 500 closes from `price_history` (instruments with `instrument_type = 'INDEX'`), forward-filled across non-trading days and rebased so that on the first day `unit_nav` exists they equal it (100 on the base date). They are null where `unit_nav` is null or no index close is known yet. The rebasing is the pure `add_benchmark_series()`.
 
+The Unit NAV chart overlays Nifty 50 (blue) and Nifty 500 (red); a toggle in its header shows/hides each, remembered in localStorage under `navBenchmarks` (both on by default). A toggle is disabled when that index has no price history.
+
 Only rows that the walk can use are loaded: instruments that were actually
 traded, on dates from the first trade onwards, grouped as
 `{date -> [(instrument_id, close)]}` so each day touches only the rows that
