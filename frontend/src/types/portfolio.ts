@@ -73,4 +73,6 @@ export interface NavPoint {
   value: number
   invested: number
   unit_nav: number | null
+  nifty50: number | null
+  nifty500: number | null
 }

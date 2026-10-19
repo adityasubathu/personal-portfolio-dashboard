@@ -2,7 +2,7 @@
 from datetime import date
 
 from app.models.trade import Trade
-from app.services.nav_history import UNIT_NAV_BASE, build_nav_series
+from app.services.nav_history import UNIT_NAV_BASE, add_benchmark_series, build_nav_series
 
 
 def trade(trade_date, instrument_id, trade_type, qty, price, brokerage=0.0):
@@ -100,3 +100,36 @@ def test_nav_row_wins_over_price_row_on_the_same_day():
     closes = {date(2023, 1, 1): [(1, 100.0), (1, 105.0)]}
     series = build_nav_series(trades, closes, date(2023, 1, 1))
     assert series[0]["value"] == 1050.0
+
+
+def points(*rows):
+    return [{"date": d, "unit_nav": nav} for d, nav in rows]
+
+
+def test_benchmark_anchors_on_last_close_before_a_weekend_base_date():
+    # 5 Nov 2022 is a Saturday: the anchor is Friday's close, forward-filled.
+    series = points(("2022-11-05", 100.0), ("2022-11-06", 100.0), ("2022-11-07", 101.0))
+    closes = {date(2022, 11, 4): 18000.0, date(2022, 11, 7): 18360.0}
+    add_benchmark_series(series, "nifty50", closes)
+    assert [p["nifty50"] for p in series] == [100.0, 100.0, 102.0]
+
+
+def test_benchmark_is_null_before_unit_nav_starts():
+    series = points(("2022-11-03", None), ("2022-11-04", None), ("2022-11-05", 100.0), ("2022-11-07", 100.0))
+    closes = {date(2022, 11, 3): 500.0, date(2022, 11, 4): 400.0, date(2022, 11, 7): 440.0}
+    add_benchmark_series(series, "nifty500", closes)
+    # Earlier closes don't move the anchor: it's the 4 Nov close carried to 5 Nov.
+    assert [p["nifty500"] for p in series] == [None, None, 100.0, 110.0]
+
+
+def test_benchmark_is_all_null_without_closes():
+    series = points(("2022-11-05", 100.0), ("2022-11-06", 103.0))
+    add_benchmark_series(series, "nifty50", {})
+    assert [p["nifty50"] for p in series] == [None, None]
+
+
+def test_benchmark_starting_after_unit_nav_anchors_on_that_days_unit_nav():
+    series = points(("2023-01-01", 100.0), ("2023-01-02", 105.0), ("2023-01-03", 110.0))
+    closes = {date(2023, 1, 2): 200.0, date(2023, 1, 3): 220.0}
+    add_benchmark_series(series, "nifty50", closes)
+    assert [p["nifty50"] for p in series] == [None, 105.0, 115.5]

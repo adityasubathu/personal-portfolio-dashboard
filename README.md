@@ -296,7 +296,7 @@ Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configurat
 |---|---|
 | `GET /direct` | Holdings table (sortable, grouped by type, day change columns) |
 | `GET /summary-cards` | Total cost, value, PnL, XIRR, last sync |
-| `GET /nav-history` | Portfolio value timeseries `{date, value, invested}` |
+| `GET /nav-history` | Portfolio timeseries `{date, value, invested, unit_nav, nifty50, nifty500}` |
 | `GET /instruments` | All traded instruments with price row count |
 | `GET /sync-price-history/stream` | SSE: Kite OHLC sync with live progress |
 | `POST /sync-price-history/cancel` | Halt a running price sync |
@@ -448,7 +448,9 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily
 close from `price_history` (stocks/bonds/ETFs) and `nav_history` (MFs) →
-forward-fill gaps → output `{date, value, invested, unit_nav}` timeseries.
+forward-fill gaps → output `{date, value, invested, unit_nav, nifty50, nifty500}` timeseries.
+
+`nifty50` / `nifty500` are the Nifty 50 and Nifty 500 closes from `price_history` (instruments with `instrument_type = 'INDEX'`), forward-filled across non-trading days and rebased so that on the first day `unit_nav` exists they equal it (100 on the base date). They are null where `unit_nav` is null or no index close is known yet. The rebasing is the pure `add_benchmark_series()`.
 
 Only rows that the walk can use are loaded: instruments that were actually
 traded, on dates from the first trade onwards, grouped as

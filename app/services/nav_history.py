@@ -28,16 +28,21 @@ MF_TYPES = {"MF"}
 
 UNIT_NAV_BASE_DATE = date(2022, 11, 5)
 UNIT_NAV_BASE = 100.0
+BENCHMARK_INDICES = {"nifty50": "NIFTY 50", "nifty500": "NIFTY 500"}
+# Reach back far enough to find the last close on or before a base date that
+# falls on a weekend or a long market holiday.
+BENCHMARK_LOOKBACK = timedelta(days=14)
 
 
 async def compute_nav_series(db: AsyncSession) -> list[dict]:
-    """Return [{date, value, invested, unit_nav}] from the earliest trade to today.
+    """Return [{date, value, invested, unit_nav, nifty50, nifty500}] from the earliest trade to today.
 
     See build_nav_series for the reconstruction rules. This function only loads
     the inputs: trades, and the closing prices the walk can actually use —
     instruments that were traded, on dates from the first trade onwards. Rows
     outside that window are never read by the walk, so fetching them is pure
     transfer cost (it was ~3.3x the rows on a real portfolio).
+    Benchmark index closes are loaded from just before the unit-NAV base date and rebased by add_benchmark_series.
     """
     trades = list(
         (await db.execute(select(Trade).order_by(Trade.trade_date, Trade.id))).scalars().all()
@@ -86,7 +91,11 @@ async def compute_nav_series(db: AsyncSession) -> list[dict]:
     for iid, d, nav in nav_rows:
         closes_by_date[d].append((iid, float(nav)))
 
-    return build_nav_series(trades, closes_by_date, date.today())
+    series = build_nav_series(trades, closes_by_date, date.today())
+    benchmark_closes = await load_benchmark_closes(db, max(UNIT_NAV_BASE_DATE, start))
+    for key, closes in benchmark_closes.items():
+        add_benchmark_series(series, key, closes)
+    return series
 
 
 def build_nav_series(
@@ -195,3 +204,57 @@ def build_nav_series(
         cur += timedelta(days=1)
 
     return series
+
+
+async def load_benchmark_closes(db: AsyncSession, base_date: date) -> dict[str, dict[date, float]]:
+    """{benchmark key -> {date -> close}} for every BENCHMARK_INDICES entry.
+
+    Starts BENCHMARK_LOOKBACK before `base_date` so the first unit-NAV day can
+    forward-fill from the last close on or before it. An index with no rows
+    maps to an empty dict.
+    """
+    rows = (
+        await db.execute(
+            select(Instrument.tradingsymbol, PriceHistory.price_date, PriceHistory.close)
+            .join(PriceHistory, PriceHistory.instrument_id == Instrument.id)
+            .where(
+                Instrument.tradingsymbol.in_(BENCHMARK_INDICES.values()),
+                Instrument.instrument_type == "INDEX",
+                PriceHistory.price_date >= base_date - BENCHMARK_LOOKBACK,
+            )
+        )
+    ).all()
+
+    key_by_symbol = {symbol: key for key, symbol in BENCHMARK_INDICES.items()}
+    closes: dict[str, dict[date, float]] = {key: {} for key in BENCHMARK_INDICES}
+    for symbol, d, close in rows:
+        closes[key_by_symbol[symbol]][d] = float(close)
+    return closes
+
+
+def add_benchmark_series(series: list[dict], key: str, closes: dict[date, float]) -> None:
+    """Set `point[key]` on every point to the index rebased onto `unit_nav`.
+
+    Closes are forward-filled across days with no row. The anchor is the first
+    point that has both a `unit_nav` and a known close: there the benchmark
+    equals `unit_nav`, and after it moves by the index's own returns. Points
+    without `unit_nav` or without a close yet get None.
+    """
+    ordered = sorted(closes.items())
+    i = 0
+    last_close: float | None = None
+    anchor: tuple[float, float] | None = None  # (close, unit_nav) on the anchor day
+
+    for point in series:
+        d = date.fromisoformat(point["date"])
+        while i < len(ordered) and ordered[i][0] <= d:
+            last_close = ordered[i][1]
+            i += 1
+
+        if point["unit_nav"] is None or last_close is None:
+            point[key] = None
+            continue
+        if anchor is None:
+            anchor = (last_close, point["unit_nav"])
+        anchor_close, anchor_nav = anchor
+        point[key] = round(anchor_nav * last_close / anchor_close, 4)
