@@ -169,7 +169,7 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level, sub-1% Others clubbing on Basic), Composition
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset on Refresh disclosures), sub-1% Others clubbing on Basic), Composition
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
@@ -432,7 +432,7 @@ Click "Sync price history (Kite)" → opens EventSource → server acquires asyn
 
 Steps 1 and 2 must complete before step 3, since step 3's backfill needs both a populated `amfi_market_cap` and `isin` values on `mf_scheme_breakdown`. First run classifies roughly 750 ISINs (~6 minutes); later runs only query ISINs new to the portfolio, typically seconds.
 
-Classification is per-holding, driven by the API's `holding_type`/`section`, not per-fund: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; a non-`IN` ISIN prefix is also treated as foreign; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form.
+Classification is per-holding, driven by the API's `holding_type`/`section`, not per-fund: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; a non-`IN` ISIN prefix is also treated as foreign; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form. Holdings are grouped across disclosures by `normalize_company_name`, which also folds rights entitlements ("… Ltd - Rights") and a stray share-class letter after the suffix ("… Ltd. A") into the parent company.
 
 **Arbitrage funds** (name matches `arbitrage`): equity and offsetting short-futures legs are grouped by ISIN and summed across contract expiries; the matched (lower) notional becomes `Equity - Arbitrage`, any leftover becomes extra `Equity` (long side bigger) or `Derivatives - Leveraged` (short side bigger, stored as a negative market value). OpenFin sometimes mislabels money-market paper (CDs) as `holding_type: "equity"` — a populated `instrument_yield` (never set on real equity) is used to catch and reclassify these as `Debt`.
 

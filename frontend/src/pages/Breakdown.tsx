@@ -701,11 +701,11 @@ function SectorClassifyPanel({
 }
 
 function SectorTab({
-  dismissedLevels,
+  dismissedNames,
   onDismiss,
 }: {
-  dismissedLevels: ClassificationLevel[]
-  onDismiss: (level: ClassificationLevel) => void
+  dismissedNames: Partial<Record<ClassificationLevel, string[]>>
+  onDismiss: (level: ClassificationLevel, names: string[]) => void
 }) {
   const [level, setLevel] = usePersistentState<ClassificationLevel>('sectorLevel', 'sector')
   const { data: sectors } = useSectorComposition(level)
@@ -719,7 +719,9 @@ function SectorTab({
 
   if (!sectors) return <p className="text-sm text-muted-foreground">Loading…</p>
 
-  const unknownHoldings = stockBreakdown?.find((s) => s.sector === 'Unknown')?.holdings ?? []
+  const dismissed = dismissedNames[level] ?? []
+  const unknownHoldings = (stockBreakdown?.find((s) => s.sector === 'Unknown')?.holdings ?? [])
+    .filter((h) => !dismissed.includes(h.name))
 
   const totalSum = sectors.reduce((acc, s) => acc + s.total, 0)
   const grandTotal = stockBreakdown ? stockBreakdown.reduce((acc, s) => acc + s.total, 0) : 0
@@ -831,8 +833,12 @@ function SectorTab({
         </Section>
       </div>
 
-      {!dismissedLevels.includes(level) && unknownHoldings.length > 0 && (
-        <SectorClassifyPanel level={level} unknownHoldings={unknownHoldings} onDone={() => onDismiss(level)} />
+      {unknownHoldings.length > 0 && (
+        <SectorClassifyPanel
+          level={level}
+          unknownHoldings={unknownHoldings}
+          onDone={() => onDismiss(level, unknownHoldings.map((h) => h.name))}
+        />
       )}
     </div>
   )
@@ -1077,13 +1083,19 @@ function ClassifyPanel({
 export function Breakdown() {
   const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
   const [dismissedResult, setDismissedResult] = useState<IngestDonePayload | null>(null)
-  const [dismissedLevels, setDismissedLevels] = usePersistentState<ClassificationLevel[]>('sectorClassifyDismissedLevels', [])
+  const [dismissedNames, setDismissedNames] = usePersistentState<Partial<Record<ClassificationLevel, string[]>>>('sectorClassifyDismissedNames', {})
   const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
+
+  function refreshDisclosures() {
+    setDismissedResult(null)
+    setDismissedNames({})
+    ingestSse.start()
+  }
 
   return (
     <PageShell>
       <PageHeader title="Portfolio Breakdown" actions={
-        <ShadButton size="sm" disabled={ingestSse.status === 'running'} onClick={ingestSse.start}>
+        <ShadButton size="sm" disabled={ingestSse.status === 'running'} onClick={refreshDisclosures}>
           <RefreshCw className="size-3.5" />
           Refresh disclosures
         </ShadButton>
@@ -1112,8 +1124,8 @@ export function Breakdown() {
         <TabsContent value="overview" className="pt-4"><OverviewTab /></TabsContent>
         <TabsContent value="sector" className="pt-4">
           <SectorTab
-            dismissedLevels={dismissedLevels}
-            onDismiss={(lvl) => setDismissedLevels(dismissedLevels.includes(lvl) ? dismissedLevels : [...dismissedLevels, lvl])}
+            dismissedNames={dismissedNames}
+            onDismiss={(lvl, names) => setDismissedNames({ ...dismissedNames, [lvl]: [...(dismissedNames[lvl] ?? []), ...names] })}
           />
         </TabsContent>
         <TabsContent value="composition" className="pt-4"><CompositionTab /></TabsContent>
