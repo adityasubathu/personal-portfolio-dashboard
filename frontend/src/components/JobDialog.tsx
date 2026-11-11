@@ -49,7 +49,7 @@ function KiteJobActions({ job }: { job: JobDetail }) {
         disabled={!active || cancel.isPending}
         onClick={() => cancel.mutate(job.id, { onError: (e) => notify.error(String(e)) })}
       >
-        <Square className="size-3" />
+        <Square className="size-3 fill-current" />
         {waiting ? 'Cancel' : 'Halt'}
       </Button>
     </DialogFooter>
