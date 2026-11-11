@@ -49,14 +49,14 @@ export function HeaderJobActions() {
               <ChevronDown className="size-3.5" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-3">
+          <PopoverContent align="end" className="w-auto p-3">
             <p className="mb-2 text-xs font-medium">NAV source</p>
             <ToggleGroup type="single" variant="outline" size="sm" value={navSource} onValueChange={(v) => v && setNavSource(v as NavSource)}>
               {NAV_SOURCE_OPTIONS.map((o) => (
                 <ToggleGroupItem key={o.value} value={o.value}>{o.label}</ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <p className="mt-2 text-xs text-muted-foreground">{NAV_SOURCE_OPTIONS.find((o) => o.value === navSource)?.hint}</p>
+            <p className="mt-2 w-0 min-w-full text-xs text-muted-foreground">{NAV_SOURCE_OPTIONS.find((o) => o.value === navSource)?.hint}</p>
           </PopoverContent>
         </Popover>
       </div>

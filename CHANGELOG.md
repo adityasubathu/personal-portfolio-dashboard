@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-11-11-25-46 — NAV source picker fits its buttons
+- The MF NAV source picker in the header now sizes to its mfapi.in / FinAPI / AMFI latest buttons instead of letting them overflow the box. (2026-11-11-11-25-46 · PENDING)
+
 ## 2026-11-11-11-23-35 — Job popups under the bell
 - The Halt button's stop icon is now filled instead of an outline. (2026-11-11-11-23-35 · 0f3ee9c)
 - Finished-job popups now appear under the notification bell with a tip pointing at it instead of bottom-right toasts; each stays until its close button marks the job read (or the job is viewed). (2026-11-11-11-23-35 · b93c9f1)
