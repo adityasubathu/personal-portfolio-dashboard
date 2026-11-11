@@ -76,6 +76,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py
 │   │   ├── manual_assets.py
 │   │   ├── mf.py
+│   │   ├── jobs.py              # JobStartRequest, JobSummary, JobDetail
 │   │   └── settings.py
 │   ├── models/
 │   │   ├── __init__.py          # Re-exports all models (for Alembic / metadata)
@@ -90,6 +91,7 @@ portfolio-mac-arm/
 │   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown + EquityCategoryOverride + EquitySectorOverride + NseIndustryClassification
 │   │   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
 │   │   ├── app_config.py        # AppConfig — KV store for cached config (USDINR rate)
+│   │   ├── background_job.py    # BackgroundJob — one run of a header job; doubles as the notification record
 │   │   └── nav_tracked_instrument.py
 │   ├── routers/                 # All return JSON, SSE stream, file download, or redirect
 │   │   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, SSE sync
@@ -97,6 +99,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py              # Kite OAuth, config CRUD, holdings sync
 │   │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
 │   │   ├── mf_breakdown.py      # Ingest OpenFin disclosures, batch classify, chart data
+│   │   ├── jobs.py              # Background jobs: start, list, detail, read, cancel, delete
 │   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
 │   │   ├── usdinr.py            # USDINR rate: Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
@@ -115,6 +118,8 @@ portfolio-mac-arm/
 │       ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
+│       ├── background_jobs.py   # Server-owned asyncio job tasks (one per kind), DB persistence, read/delete/purge rules
+│       ├── job_runners.py       # Body and summary line of each job kind (MF NAV history so far)
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
 │       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, manual taxonomy overrides (any of the four NSE levels, cascading up the hierarchy)
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
@@ -287,9 +292,23 @@ Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures
 ### AppConfig
 Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configuration that needs to survive restarts. Currently used to store the USDINR exchange rate fetched from Kite's CDS USDINR futures market, including source and timestamp metadata.
 
+### BackgroundJob
+One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf_disclosures`). Fields: `status` (`running`, `waiting_login`, `done`, `failed`), `params`, `logs` (JSONB array of lines), `summary`, `result`, `error`, `started_at`, `finished_at`, `read_at`. The table is also the notification store: finished jobs stay until deleted, and read jobs are purged 24h after `read_at`. Active rows are marked `failed` ("Interrupted — the server restarted") on startup.
+
 ---
 
 ## API Endpoints
+
+### Jobs (`/api/v1/jobs`)
+| Endpoint | Description |
+|---|---|
+| `GET /` | All jobs, newest first (purges read jobs older than 24h first) |
+| `POST /` | Body `{kind, params}` — starts a job, or returns the running one of that kind; 400 for unknown kind |
+| `GET /{id}` | Job with full log and result; 404 if missing |
+| `POST /{id}/read` | Marks a finished, unread job as read |
+| `POST /{id}/cancel` | Halts a running job; 409 if not running |
+| `DELETE /{id}` | Deletes a finished job; 404 if missing or still running |
+| `DELETE /` | Deletes every finished job, returns `{deleted}` |
 
 ### Portfolio (`/api/v1/portfolio`)
 | Endpoint | Description |

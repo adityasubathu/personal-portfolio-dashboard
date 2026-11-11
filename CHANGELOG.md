@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-11-09-51-31 — Background jobs and notification tray
+- Added server-owned background jobs with a persisted log and result, starting with the MF NAV sync (mfapi.in, FinAPI or AMFI latest) via `/api/v1/jobs`. (2026-11-11-09-51-31 · PENDING)
+
 ## 2026-11-11-08-34-07 — Merge holding name variants, classify panel dismissals
 - Look-through holdings now merge rights entitlements ("Ola Electric Mobility Ltd - Rights") and stray share-class letters ("HEG Graphite Ltd. A") into the parent company. (2026-11-11-08-34-07 · dcdce40)
 - The unknown-sector classify panel remembers dismissed stocks per name instead of hiding the whole level forever, so new unknowns reappear; Refresh disclosures resets both the sector and market-cap panel dismissals. (2026-11-11-08-34-07 · f9b5344)

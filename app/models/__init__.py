@@ -11,6 +11,7 @@ from app.models.allocation_target import AllocationTarget, AssetClassTarget
 from app.models.policy_trigger import PolicyTriggerState, PolicyTriggerEvent
 from app.models.nav_tracked_instrument import NavTrackedInstrument
 from app.models.app_config import AppConfig
+from app.models.background_job import BackgroundJob
 
 __all__ = [
     "Instrument",
@@ -31,4 +32,5 @@ __all__ = [
     "PolicyTriggerEvent",
     "NavTrackedInstrument",
     "AppConfig",
+    "BackgroundJob",
 ]

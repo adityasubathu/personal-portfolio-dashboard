@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
             else:
                 print("[demo] Already seeded — skipping.")
 
+    from app.services.background_jobs import mark_interrupted_jobs
+    await mark_interrupted_jobs()
+
     yield
 
 
@@ -47,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings as settings_router, charts, policy_tracker, usdinr, demo, market_sentiment, capital_gains  # noqa: E402
+from app.routers import trades, portfolio, kite, mf, mf_breakdown, manual_assets, settings as settings_router, charts, policy_tracker, usdinr, demo, market_sentiment, capital_gains, jobs  # noqa: E402
 app.include_router(trades.router)
 app.include_router(portfolio.router)
 app.include_router(kite.router)
@@ -61,3 +64,4 @@ app.include_router(usdinr.router)
 app.include_router(demo.router)
 app.include_router(market_sentiment.router)
 app.include_router(capital_gains.router)
+app.include_router(jobs.router)
