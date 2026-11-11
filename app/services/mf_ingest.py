@@ -78,6 +78,10 @@ _SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 _TRAILING_JUNK = re.compile(r"[\s.*\-]+$")
+# Rights entitlements ("Ola Electric Mobility Ltd - Rights") are the same company.
+_RIGHTS_SUFFIX_RE = re.compile(r"\s*-\s*rights(?:\s+entitlements?)?$")
+# Stray share-class letter after the suffix ("HEG Graphite Ltd. A").
+_POST_SUFFIX_LETTER_RE = re.compile(r"\blimited\s+[a-z]$")
 _MULTI_SPACE = re.compile(r"\s+")
 
 # Footnote markers AMCs append/prepend in disclosures ("^^INOX Renewable Ltd **").
@@ -102,8 +106,10 @@ def normalize_company_name(name: str) -> str:
     s = _GLUED_DOT.sub(". ", s)
     for pat, expansion in _ABBREV_MAP:
         s = pat.sub(expansion, s)
+    s = _POST_SUFFIX_LETTER_RE.sub("limited", s)
     s = _SUFFIX_RE.sub("", s)
     s = s.replace("(", " ").replace(")", " ").replace(".", " ")
+    s = _RIGHTS_SUFFIX_RE.sub("", s.strip())
     s = _TRAILING_JUNK.sub("", s)
     s = _MULTI_SPACE.sub(" ", s).strip()
     for alias, canonical in _NAME_ALIASES.items():
