@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-11-11-27-21 — Disclosures removed from the sidebar
+- The Disclosures page is no longer in the sidebar; it opens from the header Disclosures button or from a disclosure sync notification. (2026-11-11-11-27-21 · PENDING)
+
 ## 2026-11-11-11-25-46 — NAV source picker fits its buttons
 - The MF NAV source picker in the header now sizes to its mfapi.in / FinAPI / AMFI latest buttons instead of letting them overflow the box. (2026-11-11-11-25-46 · 3621349)
 

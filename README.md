@@ -182,7 +182,7 @@ portfolio-mac-arm/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio value + Unit NAV charts, OHLC fetch SSE, manual OHLC upload, manually tracked NAV funds (no sync sections — those are header jobs)
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset when the header Disclosures button runs), sub-1% Others clubbing on Basic), Composition
-│       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel
+│       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel; not in the sidebar — opened by the header Disclosures button or its notification
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
