@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { Eye, EyeOff, FlaskConical } from 'lucide-react'
 import { AppSidebar } from './AppSidebar'
+import { NotificationTray } from './NotificationTray'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -22,14 +23,17 @@ export function AppLayout() {
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b bg-background px-3">
           <SidebarTrigger />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={togglePrivacy}
-            aria-label={privacyMode ? 'Show values' : 'Hide values'}
-          >
-            {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <NotificationTray />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={togglePrivacy}
+              aria-label={privacyMode ? 'Show values' : 'Hide values'}
+            >
+              {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+          </div>
         </header>
         <div className="px-4 py-4">
           {status?.demo_mode && (
