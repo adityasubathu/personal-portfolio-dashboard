@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { request } from './client'
 import { isJobActive } from '@/lib/jobs'
@@ -68,4 +69,12 @@ export function useClearJobsMutation() {
     mutationFn: () => request<{ deleted: number }>('/api/v1/jobs', { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: jobKeys.all }),
   })
+}
+
+export function useMarkReadWhenFinished(job: JobDetail | undefined) {
+  const { mutate } = useMarkJobReadMutation()
+  const unreadFinishedId = job && !isJobActive(job) && !job.read_at ? job.id : null
+  useEffect(() => {
+    if (unreadFinishedId != null) mutate(unreadFinishedId)
+  }, [unreadFinishedId, mutate])
 }

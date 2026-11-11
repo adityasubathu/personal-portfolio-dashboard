@@ -1,5 +1,7 @@
 import type { JobKind, JobSummary } from '@/types/jobs'
 
+export const SECTOR_DISMISSALS_KEY = 'sectorClassifyDismissedNames'
+
 export const JOB_LABELS: Record<JobKind, string> = {
   mf_nav_history: 'MF NAV sync',
   kite_price_history: 'Kite price sync',

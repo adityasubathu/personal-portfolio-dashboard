@@ -139,7 +139,7 @@ portfolio-mac-arm/
 │   ├── components.json          # shadcn CLI config (style new-york, base colour neutral)
 │   └── src/
 │       ├── main.tsx             # QueryClientProvider, PrivacyProvider, BrowserRouter, sonner Toaster
-│       ├── App.tsx              # Routes (13 pages under AppLayout)
+│       ├── App.tsx              # Routes (14 pages under AppLayout)
 │       ├── api/                 # Typed fetch client + per-domain React Query hooks
 │       │   ├── client.ts        # request<T>() wrapper; VITE_API_BASE_URL
 │       │   ├── portfolio.ts
@@ -157,7 +157,7 @@ portfolio-mac-arm/
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1 (jobs.ts: job kinds, statuses, result shapes)
 │       ├── components/
 │       │   ├── ui/              # shadcn/ui primitives — CLI-managed, never hand-edited
-│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (13 routes)
+│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (14 routes)
 │       │   ├── AppSidebar.tsx   # Nav groups/links; badge on Policy when actions pending
 │       │   ├── PageShell.tsx    # Shared wide/narrow desktop route canvas
 │       │   ├── ContentHeader.tsx # Unboxed subsection heading and actions
@@ -170,7 +170,7 @@ portfolio-mac-arm/
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
 │       │   ├── SsePanel.tsx     # Spinner + scrolling log + result area; driven by useSse
-│       │   ├── HeaderJobActions.tsx # Header buttons: MF NAV (split button + provider picker mfapi.in / FinAPI / AMFI latest, stored in localStorage `navSource`) and Kite prices (hidden in demo mode)
+│       │   ├── HeaderJobActions.tsx # Header buttons: MF NAV (split button + provider picker mfapi.in / FinAPI / AMFI latest, stored in localStorage `navSource`), Kite prices (hidden in demo mode) and Disclosures
 │       │   ├── ClassifySelectPanel.tsx # Collapsible "pick a value for each unclassified stock" table (select or searchable combobox); shared by Breakdown's Sector tab and the Disclosures page
 │       │   ├── IngestResult.tsx # Renders a disclosure run's AMFI / OpenFin / per-fund table / NSE result
 │       │   ├── JobPanel.tsx     # Status line + scrolling log + error box for a job; result passed as children
@@ -181,7 +181,8 @@ portfolio-mac-arm/
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
 │       │   ├── NavHistory.tsx   # Portfolio value + Unit NAV charts, OHLC fetch SSE, manual OHLC upload, manually tracked NAV funds (no sync sections — those are header jobs)
-│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset on Refresh disclosures), sub-1% Others clubbing on Basic), Composition
+│       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset when the header Disclosures button runs), sub-1% Others clubbing on Basic), Composition
+│       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
@@ -366,7 +367,6 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf
 ### MF Breakdown (`/api/v1/mf-breakdown`)
 | Endpoint | Description |
 |---|---|
-| `GET /ingest/stream` | SSE: load AMFI xlsx, refresh stale disclosures from OpenFin, then classify held ISINs from NSE. First run classifies ~750 ISINs (~6 min); later runs only query ISINs new to the portfolio. |
 | `GET /unclassified-equities` | Sorted distinct names whose category is still `Unclassified Equity` (drives the market-cap tagging panel) |
 | `PATCH /classify-batch` | Manual market-cap tag, form fields `name`, `category`; applies to every scheme's still-unclassified rows with that name and writes the global name override |
 | `GET /chart-data` | Allocation doughnut data |
@@ -449,7 +449,7 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. It is started from the **Kite prices** button in the header (hidden in demo mode); when the cached Kite status says the token is invalid, the click also opens the Kite login page in a new tab, and the job dialog shows a "Login with Kite" link while waiting.
 
 ### MF Breakdown
-"Refresh disclosures" runs three steps in order, inside one SSE stream (`GET /ingest/stream`). The same three steps also run as the `mf_disclosures` background job (the stream stays until the Disclosures page lands):
+The header **Disclosures** button runs three steps in order as the `mf_disclosures` background job (first run classifies ~750 ISINs, ~6 min; later runs only query ISINs new to the portfolio):
 
 1. **AMFI sync.** Load the local xlsx → enrich each company's `sector`/`macro_sector`/`industry`/`basic_industry` by ISIN from `nse_industry_classification` → write `company_master.csv`.
 2. **OpenFin disclosures.** Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`. Each row also records the holding's own `isin`, straight from OpenFin.
@@ -469,6 +469,15 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 **Investable pool** (asset class targets and Free Float): Equity + Debt + Precious Metals. Debt = Debt + Equity - Arbitrage + cash held inside mutual funds − emergency-fund FDs, applied the same way to current and invested values. Only savings-account cash, INDmoney wallet cash and the emergency fund are excluded; Real Estate Trust and Derivatives - Leveraged are also left out of the pool.
 
 `Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
+
+**Disclosures page** (`/portfolio/disclosures/:jobId?`): shows the given run, or the newest `mf_disclosures` run when no id is in the URL, with its live log and result. Viewing a finished run marks it read. Above it, a tagging panel lists every stock still `Unclassified Equity`, read from `GET /unclassified-equities` (so it appears even when the run says "All schemes up to date"); tagging a stock applies to every fund that holds it. Clicking Disclosures also clears the Sector tab's remembered dismissals.
+
+### Background jobs & notifications
+Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).
+- **MF NAV** (provider picker: mfapi.in, FinAPI, AMFI latest) and **Kite prices** open a dialog with the live log and result; **Disclosures** opens its page.
+- The **bell** lists every job: running ones with a spinner and last log line, finished ones with ✓/✗ and a summary. Clicking an entry reopens it (`?job=<id>` on any page opens the dialog); × deletes a finished entry and "Clear all" deletes every finished one.
+- Finished jobs are notifications: unread ones stay until deleted, and read ones (dialog closed, or Disclosures run viewed) are purged 24h after being read. A toast with a View button appears when a job finishes while the app is open.
+- Job state is polled every second only while a job is active.
 
 ### NAV History Chart
 Walk trades first-to-today → track qty + cost per instrument → look up daily

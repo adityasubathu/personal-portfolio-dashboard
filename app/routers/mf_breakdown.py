@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import update
@@ -7,7 +5,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.sse import sse_stream
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
 from app.services.allocation import (
     get_allocation_comparison,
@@ -27,33 +24,10 @@ from app.services.composition import (
     get_unclassified_equity_names,
     save_sector_overrides,
 )
-from app.services.mf_ingest import (
-    ingest_from_openfin,
-    normalize_company_name,
-    sync_amfi_market_cap,
-)
-from app.services.nse_industry import refresh_held_classifications
+from app.services.mf_ingest import normalize_company_name
 from app.time_util import now_ist
 
 router = APIRouter(prefix="/api/v1/mf-breakdown", tags=["mf-breakdown"])
-
-_ingest_lock = asyncio.Lock()
-
-
-@router.get("/ingest/stream")
-async def ingest_stream(db: AsyncSession = Depends(get_db)):
-    async def _runner(on_progress):
-        amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
-        if "error" not in amfi:
-            ingest = await ingest_from_openfin(db, on_progress=on_progress)
-            nse = await refresh_held_classifications(db, on_progress=on_progress)
-        else:
-            ingest = {"error": "Skipped — AMFI classification not loaded"}
-            nse = {"error": "Skipped — AMFI classification not loaded"}
-        return {"amfi": amfi, "ingest": ingest, "nse": nse}
-
-    return sse_stream(_runner, lock=_ingest_lock, busy_msg="An ingest is already running.")
-
 
 VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", "Equity - Foreign"}
 

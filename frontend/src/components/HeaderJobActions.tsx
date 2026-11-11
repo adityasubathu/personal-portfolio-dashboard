@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CandlestickChart, ChevronDown, LineChart, Loader2 } from 'lucide-react'
+import { CandlestickChart, ChevronDown, FileSearch, LineChart, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -7,7 +7,7 @@ import { useJobs, useStartJobMutation } from '@/api/jobs'
 import { useKiteStatus } from '@/api/kite'
 import { useAppStatus } from '@/api/status'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { isJobActive, jobHref } from '@/lib/jobs'
+import { SECTOR_DISMISSALS_KEY, isJobActive, jobHref } from '@/lib/jobs'
 import { notify } from '@/lib/notify'
 import type { JobKind, NavSource } from '@/types/jobs'
 
@@ -47,6 +47,15 @@ export function HeaderJobActions() {
     start('kite_price_history')
   }
 
+  function startDisclosures() {
+    try {
+      localStorage.removeItem(SECTOR_DISMISSALS_KEY)
+    } catch {
+      // storage unavailable — dismissals simply persist
+    }
+    start('mf_disclosures')
+  }
+
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex items-center">
@@ -77,6 +86,10 @@ export function HeaderJobActions() {
           <span className="hidden sm:inline">Kite prices</span>
         </Button>
       )}
+      <Button size="sm" variant="outline" onClick={startDisclosures}>
+        <JobIcon active={active('mf_disclosures')} icon={FileSearch} />
+        <span className="hidden sm:inline">Disclosures</span>
+      </Button>
     </div>
   )
 }

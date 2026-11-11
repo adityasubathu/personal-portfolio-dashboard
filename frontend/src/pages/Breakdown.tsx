@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
@@ -11,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
+import { SECTOR_DISMISSALS_KEY } from '@/lib/jobs'
 import {
   useBreakdownChart,
   useSectorComposition,
@@ -21,23 +21,18 @@ import {
   useRebalancePlan,
   useSaveAllocationTargetsMutation,
   useSaveAssetClassTargetsMutation,
-  useClassifyBatchMutation,
   useSectorList,
   useSectorClassifyBatchMutation,
   useSchemeBreakdown,
 } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { ClassifySelectPanel } from '@/components/ClassifySelectPanel'
-import { IngestResult } from '@/components/IngestResult'
-import { SsePanel } from '../components/SsePanel'
 import { MoneyText } from '../components/MoneyText'
-import { useSse } from '../hooks/useSse'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
-import type { ClassificationLevel, IngestDonePayload, RebalanceBucket } from '../types/mfBreakdown'
+import type { ClassificationLevel, RebalanceBucket } from '../types/mfBreakdown'
 
 const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
   { value: 'macro_sector', label: 'Macro' },
@@ -804,67 +799,12 @@ function CompositionTab() {
   )
 }
 
-const CAP_CATEGORIES = ['Large Cap', 'Mid Cap', 'Small Cap', 'Equity - Foreign']
-
-function ClassifyPanel({
-  names,
-  onDone,
-}: {
-  names: string[]
-  onDone: () => void
-}) {
-  const classifyMut = useClassifyBatchMutation()
-
-  return (
-    <ClassifySelectPanel
-      title={(n) => `Classify unmatched equities (${n})`}
-      columnLabel="Market cap"
-      columnWidth={160}
-      placeholder="Select…"
-      options={CAP_CATEGORIES}
-      names={names}
-      saving={classifyMut.isPending}
-      onSave={async (selections) =>
-        (await classifyMut.mutateAsync(Object.entries(selections).map(([name, category]) => ({ name, category })))).updated
-      }
-      onDone={onDone}
-    />
-  )
-}
-
 export function Breakdown() {
-  const ingestSse = useSse<IngestDonePayload>(apiUrl('/api/v1/mf-breakdown/ingest/stream'))
-  const [dismissedResult, setDismissedResult] = useState<IngestDonePayload | null>(null)
-  const [dismissedNames, setDismissedNames] = usePersistentState<Partial<Record<ClassificationLevel, string[]>>>('sectorClassifyDismissedNames', {})
-  const unmatchedEquities = dismissedResult === ingestSse.result ? [] : (ingestSse.result?.ingest?.unmatched_equities ?? [])
-
-  function refreshDisclosures() {
-    setDismissedResult(null)
-    setDismissedNames({})
-    ingestSse.start()
-  }
+  const [dismissedNames, setDismissedNames] = usePersistentState<Partial<Record<ClassificationLevel, string[]>>>(SECTOR_DISMISSALS_KEY, {})
 
   return (
     <PageShell>
-      <PageHeader title="Portfolio Breakdown" actions={
-        <ShadButton size="sm" disabled={ingestSse.status === 'running'} onClick={refreshDisclosures}>
-          <RefreshCw className="size-3.5" />
-          Refresh disclosures
-        </ShadButton>
-      } />
-
-      <SsePanel
-        sse={ingestSse}
-        heading="Ingesting portfolios…"
-        resultRenderer={(r) => <IngestResult result={r as IngestDonePayload} />}
-      />
-
-      {unmatchedEquities.length > 0 && (
-        <ClassifyPanel
-          names={[...new Set(unmatchedEquities.map((e) => e.name))]}
-          onDone={() => setDismissedResult(ingestSse.result)}
-        />
-      )}
+      <PageHeader title="Portfolio Breakdown" />
 
       <Tabs defaultValue="overview">
         <TabsList>

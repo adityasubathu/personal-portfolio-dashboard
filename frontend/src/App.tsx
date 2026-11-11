@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const NavHistory = lazy(() => import('./pages/NavHistory').then((m) => ({ default: m.NavHistory })));
 const Breakdown = lazy(() => import('./pages/Breakdown').then((m) => ({ default: m.Breakdown })));
+const Disclosures = lazy(() => import('./pages/Disclosures').then((m) => ({ default: m.Disclosures })));
 const FundBreakdown = lazy(() => import('./pages/FundBreakdown').then((m) => ({ default: m.FundBreakdown })));
 const PriceChart = lazy(() => import('./pages/PriceChart').then((m) => ({ default: m.PriceChart })));
 const NavChart = lazy(() => import('./pages/NavChart').then((m) => ({ default: m.NavChart })));
@@ -34,6 +35,7 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/portfolio/nav-history" element={<NavHistory />} />
         <Route path="/portfolio/breakdown" element={<Breakdown />} />
+        <Route path="/portfolio/disclosures/:jobId?" element={<Disclosures />} />
         <Route path="/portfolio/fund-breakdown" element={<FundBreakdown />} />
         <Route path="/market/sentiment" element={<MarketSentiment />} />
         <Route path="/portfolio/capital-gains" element={<CapitalGains />} />
