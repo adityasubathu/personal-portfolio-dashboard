@@ -170,6 +170,8 @@ portfolio-mac-arm/
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
 │       │   ├── SsePanel.tsx     # Spinner + scrolling log + result area; driven by useSse
+│       │   ├── JobPanel.tsx     # Status line + scrolling log + error box for a job; result passed as children
+│       │   ├── JobDialog.tsx    # Opens on any page when the URL has ?job=<id>; live log, Halt/Login for Kite; closing marks the job read
 │       │   ├── NotificationTray.tsx # Header bell: popover listing every background job (live status, unread dot, × delete, Clear all)
 │       │   ├── InfoPopover.tsx  # Click-to-open explainer popover; default info-icon trigger
 │       │   └── MoneyText.tsx    # ₹ formatted text with colorize/compact/showSign props
@@ -189,6 +191,7 @@ portfolio-mac-arm/
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
+│       │   ├── useJobWatcher.ts # Toast with View + query invalidation when a job finishes while the app is open
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
 │       │   ├── useDebouncedValue.ts # Debounced mirror of a value (search boxes, cash inputs)
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
@@ -198,7 +201,7 @@ portfolio-mac-arm/
 │           ├── jobs.ts          # JOB_LABELS, JOB_INVALIDATES, isJobActive, jobHref
 │           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
 │           ├── utils.ts         # cn() — clsx + tailwind-merge, used by every component
-│           └── notify.ts        # notify.success/error/info/warning — thin wrapper over sonner's toast
+│           └── notify.ts        # notify.success/error/info/warning/withAction — thin wrapper over sonner's toast
 ├── alembic/
 │   ├── env.py                   # Sync psycopg2 driver, imports app models
 │   ├── script.py.mako
