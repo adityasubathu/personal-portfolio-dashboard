@@ -171,6 +171,8 @@ portfolio-mac-arm/
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
 │       │   ├── SsePanel.tsx     # Spinner + scrolling log + result area; driven by useSse
 │       │   ├── HeaderJobActions.tsx # Header buttons: MF NAV (split button + provider picker mfapi.in / FinAPI / AMFI latest, stored in localStorage `navSource`) and Kite prices (hidden in demo mode)
+│       │   ├── ClassifySelectPanel.tsx # Collapsible "pick a value for each unclassified stock" table (select or searchable combobox); shared by Breakdown's Sector tab and the Disclosures page
+│       │   ├── IngestResult.tsx # Renders a disclosure run's AMFI / OpenFin / per-fund table / NSE result
 │       │   ├── JobPanel.tsx     # Status line + scrolling log + error box for a job; result passed as children
 │       │   ├── JobDialog.tsx    # Opens on any page when the URL has ?job=<id>; live log, Halt/Login for Kite; closing marks the job read
 │       │   ├── NotificationTray.tsx # Header bell: popover listing every background job (live status, unread dot, × delete, Clear all)
@@ -365,7 +367,8 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf
 | Endpoint | Description |
 |---|---|
 | `GET /ingest/stream` | SSE: load AMFI xlsx, refresh stale disclosures from OpenFin, then classify held ISINs from NSE. First run classifies ~750 ISINs (~6 min); later runs only query ISINs new to the portfolio. |
-| `PATCH /classify-batch` | Manual category override for unmatched equities |
+| `GET /unclassified-equities` | Sorted distinct names whose category is still `Unclassified Equity` (drives the market-cap tagging panel) |
+| `PATCH /classify-batch` | Manual market-cap tag, form fields `name`, `category`; applies to every scheme's still-unclassified rows with that name and writes the global name override |
 | `GET /chart-data` | Allocation doughnut data |
 | `GET /allocation-comparison` | Current vs target allocation with deltas (`?mode=anchored\|free_float`) |
 | `POST /allocation-targets` | Save per-category equity targets |

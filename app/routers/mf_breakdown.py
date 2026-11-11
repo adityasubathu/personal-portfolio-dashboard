@@ -24,6 +24,7 @@ from app.services.composition import (
     get_sector_composition,
     get_sector_list,
     get_sector_stock_breakdown,
+    get_unclassified_equity_names,
     save_sector_overrides,
 )
 from app.services.mf_ingest import (
@@ -60,18 +61,17 @@ VALID_CATEGORIES = {"Large Cap", "Mid Cap", "Small Cap", "Unclassified Equity", 
 @router.patch("/classify-batch")
 async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
-    isins = form.getlist("scheme_isin")
     names = form.getlist("name")
     categories = form.getlist("category")
 
     updated = 0
     override_rows: list[dict] = []
-    for isin, name, cat in zip(isins, names, categories):
+    for name, cat in zip(names, categories):
         if cat not in VALID_CATEGORIES:
             continue
         result = await db.execute(
             update(MfSchemeBreakdown)
-            .where(MfSchemeBreakdown.scheme_isin == isin, MfSchemeBreakdown.name == name)
+            .where(MfSchemeBreakdown.name == name, MfSchemeBreakdown.category == "Unclassified Equity")
             .values(category=cat, updated_at=now_ist())
         )
         updated += result.rowcount
@@ -91,6 +91,11 @@ async def classify_batch(request: Request, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"updated": updated}
+
+
+@router.get("/unclassified-equities")
+async def unclassified_equities(db: AsyncSession = Depends(get_db)):
+    return JSONResponse(await get_unclassified_equity_names(db))
 
 
 @router.patch("/sector-classify-batch")

@@ -1,15 +1,11 @@
 import React, { useState } from 'react'
-import { Check, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '@/components/PageShell'
 import { Section } from '@/components/Section'
 import { Button as ShadButton } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent as ShadSelectContent, SelectItem as ShadSelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -30,9 +26,9 @@ import {
   useSectorClassifyBatchMutation,
   useSchemeBreakdown,
 } from '../api/mfBreakdown'
-import { DataTable } from '../components/DataTable'
-import type { Column } from '../components/DataTable'
 import { DonutChart } from '../components/DonutChart'
+import { ClassifySelectPanel } from '@/components/ClassifySelectPanel'
+import { IngestResult } from '@/components/IngestResult'
 import { SsePanel } from '../components/SsePanel'
 import { MoneyText } from '../components/MoneyText'
 import { useSse } from '../hooks/useSse'
@@ -40,8 +36,8 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { apiUrl } from '../api/client'
 import { categoryColor, sectorColor } from '../lib/colors'
-import { inrCompact, shortDate } from '../lib/format'
-import type { ClassificationLevel, IngestDonePayload, RebalanceBucket, SyncedFund } from '../types/mfBreakdown'
+import { inrCompact } from '../lib/format'
+import type { ClassificationLevel, IngestDonePayload, RebalanceBucket } from '../types/mfBreakdown'
 
 const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
   { value: 'macro_sector', label: 'Macro' },
@@ -529,144 +525,6 @@ function OverviewTab() {
   )
 }
 
-/** Shared shell for the two "pick a value for each unclassified name" panels.
- *  onSave returns how many holdings the server updated. */
-function ClassifySelectPanel({
-  title,
-  columnLabel,
-  columnWidth,
-  placeholder,
-  options,
-  searchable = false,
-  names,
-  saving,
-  onSave,
-  onDone,
-}: {
-  title: (count: number) => string
-  columnLabel: string
-  columnWidth: number
-  placeholder: string
-  options: string[]
-  searchable?: boolean
-  names: string[]
-  saving: boolean
-  onSave: (selections: Record<string, string>) => Promise<number>
-  onDone: () => void
-}) {
-  const [selections, setSelections] = useState<Record<string, string>>({})
-  const [open, setOpen] = useState(true)
-
-  async function handleSave() {
-    const picked = Object.fromEntries(names.filter((n) => selections[n]).map((n) => [n, selections[n]]))
-    if (!Object.keys(picked).length) return
-    try {
-      const updated = await onSave(picked)
-      notify.success(`Classified ${updated} holding${updated === 1 ? '' : 's'}.`)
-      onDone()
-    } catch (e) {
-      notify.error(String(e))
-    }
-  }
-
-  const doneCount = names.filter((n) => selections[n]).length
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card">
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left">
-        <span className="text-sm font-medium">{title(names.length)}</span>
-        <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-4 pb-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr>
-                <th className="h-8 px-2 text-left font-medium text-muted-foreground">Stock name</th>
-                <th className="h-8 px-2 text-left font-medium text-muted-foreground" style={{ width: columnWidth }}>{columnLabel}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {names.map((n) => (
-                <tr key={n}>
-                  <td className="px-2 py-1.5">{n}</td>
-                  <td className="px-2 py-1.5">
-                    {searchable ? (
-                      <ClassifyCombobox
-                        placeholder={placeholder}
-                        options={options}
-                        value={selections[n] ?? ''}
-                        onChange={(v) => setSelections((prev) => ({ ...prev, [n]: v }))}
-                      />
-                    ) : (
-                      <Select value={selections[n] ?? ''} onValueChange={(v) => setSelections((prev) => ({ ...prev, [n]: v }))}>
-                        <SelectTrigger size="sm" className="w-full">
-                          <SelectValue placeholder={placeholder} />
-                        </SelectTrigger>
-                        <ShadSelectContent>
-                          {options.map((o) => <ShadSelectItem key={o} value={o}>{o}</ShadSelectItem>)}
-                        </ShadSelectContent>
-                      </Select>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <ShadButton size="xs" disabled={saving || !doneCount} onClick={handleSave}>
-            Save{doneCount < names.length ? ` (${doneCount} of ${names.length})` : ' all'}
-          </ShadButton>
-          <ShadButton size="xs" variant="ghost" onClick={onDone}>
-            Dismiss
-          </ShadButton>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-}
-
-function ClassifyCombobox({
-  placeholder,
-  options,
-  value,
-  onChange,
-}: {
-  placeholder: string
-  options: string[]
-  value: string
-  onChange: (v: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <ShadButton variant="outline" size="sm" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
-          {value || placeholder}
-          <ChevronsUpDown className="size-3.5 opacity-50" />
-        </ShadButton>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="start">
-        <Command>
-          <CommandInput placeholder={placeholder} />
-          <CommandList>
-            <CommandEmpty>No match.</CommandEmpty>
-            <CommandGroup>
-              {options.map((o) => (
-                <CommandItem key={o} value={o} onSelect={() => { onChange(o); setOpen(false) }}>
-                  <Check className={cn('size-3.5', value === o ? 'opacity-100' : 'opacity-0')} />
-                  {o}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 function SectorClassifyPanel({
   level,
   unknownHoldings,
@@ -946,119 +804,16 @@ function CompositionTab() {
   )
 }
 
-const SYNCED_FUND_COLUMNS: Column<SyncedFund>[] = [
-  { key: 'name', label: 'Fund', sortable: true, render: (f) => <span className="text-xs">{f.name}</span> },
-  {
-    key: 'as_of',
-    label: 'Portfolio as of',
-    sortable: true,
-    render: (f) => <span className="text-xs">{f.as_of ? shortDate(f.as_of) : '—'}</span>,
-  },
-  {
-    key: 'rows',
-    label: 'Holdings',
-    sortable: true,
-    align: 'right',
-    render: (f) => <span className="text-xs">{f.rows}</span>,
-  },
-]
-
-function staleFunds(funds: SyncedFund[], serverLatest: string): SyncedFund[] {
-  return funds.filter((f) => !f.as_of || f.as_of < serverLatest)
-}
-
-
-function IngestResultRenderer(result: IngestDonePayload) {
-  const { amfi, ingest, nse } = result
-  return (
-    <div className="space-y-1">
-      {amfi?.error ? (
-        <p className="text-xs text-negative">AMFI: {amfi.error}</p>
-      ) : amfi ? (
-        <p className="text-xs">AMFI: {amfi.rows_loaded} stocks loaded ({amfi.large}L / {amfi.mid}M / {amfi.small}S) from {amfi.file}</p>
-      ) : null}
-      {ingest?.error ? (
-        <p className="text-xs text-negative">Ingest: {ingest.error}</p>
-      ) : ingest?.already_current ? (
-        <p className="text-xs">All schemes are up to date{ingest.as_of ? ` (as of ${ingest.as_of})` : ''}</p>
-      ) : ingest ? (
-        <p className="text-xs">
-          Ingest: {ingest.schemes_processed} scheme(s) updated, {ingest.rows_upserted} row(s)
-          {typeof ingest.schemes_skipped === 'number' && ingest.schemes_skipped > 0 ? ` · ${ingest.schemes_skipped} already current` : ''}
-        </p>
-      ) : null}
-      {ingest?.funds?.length ? (
-        <div className="mt-1.5 space-y-1">
-          <p className="text-xs font-semibold">Portfolio date per fund</p>
-          <DataTable
-            columns={SYNCED_FUND_COLUMNS}
-            rows={ingest.funds}
-            defaultSort="as_of"
-            defaultDir="desc"
-            rowKey={(f) => f.isin}
-          />
-          {ingest.server_latest_filing && staleFunds(ingest.funds, ingest.server_latest_filing).length ? (
-            <p className="text-xs text-warning">
-              {staleFunds(ingest.funds, ingest.server_latest_filing).length} fund(s) behind the
-              server's newest filing ({shortDate(ingest.server_latest_filing)}) — they haven't disclosed for it yet
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {ingest?.unmatched_equities?.length ? (
-        <p className="text-xs text-warning">{ingest.unmatched_equities.length} unmatched equities — use classify panel to fix</p>
-      ) : null}
-      {ingest?.missing_funds?.length ? (
-        <div className="mt-1 space-y-1">
-          <p className="text-xs font-semibold text-negative">Not found in OpenFin for {ingest.missing_funds.length} held fund{ingest.missing_funds.length === 1 ? '' : 's'}:</p>
-          {ingest.missing_funds.map((f) => (
-            <p key={f.isin} className="text-xs text-negative">• {f.isin} — {f.name}</p>
-          ))}
-        </div>
-      ) : null}
-      {nse?.error ? (
-        <p className="text-xs text-negative">NSE: {nse.error}</p>
-      ) : nse ? (
-        <div className="mt-1.5 space-y-1">
-          <p className="text-xs">
-            NSE: {nse.classified} classified, {nse.skipped_cached} already known
-            {typeof nse.unclassified === 'number' && nse.unclassified > 0 ? `, ${nse.unclassified} unclassified` : ''}
-            {typeof nse.errors === 'number' && nse.errors > 0 ? `, ${nse.errors} errors` : ''}
-            {typeof nse.mismatched === 'number' && nse.mismatched > 0 ? `, ${nse.mismatched} ISIN mismatches` : ''}
-          </p>
-          {nse.unresolved_isins?.length ? (
-            <details>
-              <summary className="cursor-pointer text-xs text-muted-foreground">
-                {nse.unresolved_isins.length} held ISIN{nse.unresolved_isins.length === 1 ? '' : 's'} not on the NSE main board
-              </summary>
-              <div className="mt-1 space-y-1">
-                {nse.unresolved_isins.map((u) => (
-                  <p key={u.isin} className="text-xs text-muted-foreground">• {u.name} ({u.isin})</p>
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 const CAP_CATEGORIES = ['Large Cap', 'Mid Cap', 'Small Cap', 'Equity - Foreign']
 
-interface UnmatchedEquity { name: string; scheme_isin: string }
-
 function ClassifyPanel({
-  equities,
+  names,
   onDone,
 }: {
-  equities: UnmatchedEquity[]
+  names: string[]
   onDone: () => void
 }) {
   const classifyMut = useClassifyBatchMutation()
-
-  // Deduplicate by name for display; one override covers all schemes
-  const unique = equities.filter((e, i, arr) => arr.findIndex((x) => x.name === e.name) === i)
 
   return (
     <ClassifySelectPanel
@@ -1067,14 +822,11 @@ function ClassifyPanel({
       columnWidth={160}
       placeholder="Select…"
       options={CAP_CATEGORIES}
-      names={unique.map((e) => e.name)}
+      names={names}
       saving={classifyMut.isPending}
-      onSave={async (selections) => {
-        const rows = unique
-          .filter((e) => selections[e.name])
-          .map((e) => ({ scheme_isin: e.scheme_isin, name: e.name, category: selections[e.name] }))
-        return (await classifyMut.mutateAsync(rows)).updated
-      }}
+      onSave={async (selections) =>
+        (await classifyMut.mutateAsync(Object.entries(selections).map(([name, category]) => ({ name, category })))).updated
+      }
       onDone={onDone}
     />
   )
@@ -1104,12 +856,12 @@ export function Breakdown() {
       <SsePanel
         sse={ingestSse}
         heading="Ingesting portfolios…"
-        resultRenderer={(r) => IngestResultRenderer(r as IngestDonePayload)}
+        resultRenderer={(r) => <IngestResult result={r as IngestDonePayload} />}
       />
 
       {unmatchedEquities.length > 0 && (
         <ClassifyPanel
-          equities={unmatchedEquities}
+          names={[...new Set(unmatchedEquities.map((e) => e.name))]}
           onDone={() => setDismissedResult(ingestSse.result)}
         />
       )}
