@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2026-11-11-09-51-31 — Background jobs and notification tray
-- Added server-owned background jobs with a persisted log and result, starting with the MF NAV sync (mfapi.in, FinAPI or AMFI latest) via `/api/v1/jobs`. (2026-11-11-09-51-31 · PENDING)
+- Added server-owned background jobs with a persisted log and result, starting with the MF NAV sync (mfapi.in, FinAPI or AMFI latest) via `/api/v1/jobs`. (2026-11-11-09-51-31 · 22c7859)
+- Added Kite price and disclosure jobs; Kite price sync now waits up to 10 minutes for a login instead of failing, and MF NAV history logs per-fund progress. (2026-11-11-09-56-39 · PENDING)
 
 ## 2026-11-11-08-34-07 — Merge holding name variants, classify panel dismissals
 - Look-through holdings now merge rights entitlements ("Ola Electric Mobility Ltd - Rights") and stray share-class letters ("HEG Graphite Ltd. A") into the parent company. (2026-11-11-08-34-07 · dcdce40)

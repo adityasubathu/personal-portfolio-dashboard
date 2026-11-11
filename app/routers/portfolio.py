@@ -21,7 +21,7 @@ from app.services.kite_historical import cancel_sync, fetch_ohlc_for_ticker, syn
 from app.services import kite_sync
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
-from app.services.xirr import portfolio_xirr, recompute_and_store_xirr
+from app.services.xirr import portfolio_xirr
 from app.models.trade import Trade
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["portfolio"])
@@ -149,20 +149,6 @@ async def traded_instruments(db: AsyncSession = Depends(get_db)):
 _price_sync_lock = asyncio.Lock()
 
 
-async def _refresh_ltp_and_xirr(db: AsyncSession, on_progress) -> dict | None:
-    """Tail step shared by both price-fetch streams: refresh LTPs, then XIRR."""
-    await on_progress("Updating LTPs from Kite…")
-    ltp_result = None
-    try:
-        ltp_result = await kite_sync.update_ltp(db)
-        await on_progress(f"LTP updated: {ltp_result['updated']} instruments")
-    except Exception as ltp_err:
-        await on_progress(f"LTP update skipped: {ltp_err}")
-    await on_progress("Recomputing XIRR…")
-    await recompute_and_store_xirr(db)
-    return ltp_result
-
-
 @router.get("/sync-price-history/stream")
 async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
     async def _runner(on_progress):
@@ -173,7 +159,7 @@ async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
             await on_progress(f"Indices: {index_result['instruments_synced']} synced, {index_result['rows_added']} rows")
         except Exception as idx_err:
             await on_progress(f"Index sync skipped: {idx_err}")
-        ltp_result = await _refresh_ltp_and_xirr(db, on_progress)
+        ltp_result = await kite_sync.refresh_ltp_and_xirr(db, on_progress)
         return {"result": result, "ltp": ltp_result}
 
     return sse_stream(_runner, lock=_price_sync_lock, busy_msg="A price history sync is already running.")
@@ -232,7 +218,7 @@ async def fetch_ohlc_stream(
             skip_token_check=skip_token_check,
             on_progress=on_progress,
         )
-        ltp_result = await _refresh_ltp_and_xirr(db, on_progress)
+        ltp_result = await kite_sync.refresh_ltp_and_xirr(db, on_progress)
         return {"result": result, "ltp": ltp_result}
 
     return sse_stream(_runner)

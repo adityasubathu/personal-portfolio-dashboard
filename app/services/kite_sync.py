@@ -76,6 +76,20 @@ async def update_ltp(db: AsyncSession) -> dict:
     return {"updated": updated, "timestamp": fallback_ts.isoformat(), "errors": errors}
 
 
+async def refresh_ltp_and_xirr(db: AsyncSession, on_progress) -> dict | None:
+    """Tail step shared by the Kite price job and the Fetch OHLC stream: refresh LTPs, then XIRR."""
+    await on_progress("Updating LTPs from Kite…")
+    ltp_result = None
+    try:
+        ltp_result = await update_ltp(db)
+        await on_progress(f"LTP updated: {ltp_result['updated']} instruments")
+    except Exception as ltp_err:
+        await on_progress(f"LTP update skipped: {ltp_err}")
+    await on_progress("Recomputing XIRR…")
+    await recompute_and_store_xirr(db)
+    return ltp_result
+
+
 async def sync(db: AsyncSession) -> dict:
     config = await get_config(db)
     assert_token_valid(config)
@@ -257,6 +271,14 @@ def assert_token_valid(config: KiteConfig) -> None:
             expiry = expiry.replace(tzinfo=None)
         if now_ist() >= expiry:
             raise ValueError("Access token expired. Please log in via Kite again.")
+
+
+def is_token_valid(config: KiteConfig) -> bool:
+    try:
+        assert_token_valid(config)
+    except ValueError:
+        return False
+    return True
 
 
 def next_token_expiry() -> datetime:

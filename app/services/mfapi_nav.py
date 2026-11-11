@@ -197,7 +197,7 @@ def _apply_to_holding(instrument: Instrument, holding: Holding | None, nav_date:
     holding.unrealised_pnl = round(float(holding.quantity) * nav - cost, 6)
 
 
-async def sync_nav_history(db: AsyncSession, source: str = "mfapi") -> dict:
+async def sync_nav_history(db: AsyncSession, source: str = "mfapi", on_progress=None) -> dict:
     """Main entry point. Covers every MF/ETF the user has ever traded, not just
     current holdings — so the NAV-history chart can value positions that have
     since been sold. Returns a summary for rendering in the UI."""
@@ -225,6 +225,15 @@ async def sync_nav_history(db: AsyncSession, source: str = "mfapi") -> dict:
     total_rows_added = 0
     latest_nav_date: date | None = None
 
+    total = len(rows)
+    done = 0
+
+    async def _report(msg: str) -> None:
+        nonlocal done
+        done += 1
+        if on_progress:
+            await on_progress(f"[{done}/{total}] {msg}")
+
     async with httpx.AsyncClient(follow_redirects=True, headers={"User-Agent": "portfolio-mac-arm/1.0"}) as client:
         # mfapi.in is rate-limited; cap concurrency modestly. finapi's free tier
         # is 30 req/min per endpoint, so go sequential to stay well within it.
@@ -234,11 +243,13 @@ async def sync_nav_history(db: AsyncSession, source: str = "mfapi") -> dict:
             nonlocal total_rows_added, latest_nav_date
             if not i.amfi_scheme_code:
                 failed.append(f"{i.tradingsymbol or '?'}: no AMFI scheme_code (ISIN not in AMFI feed)")
+                await _report(f"{i.tradingsymbol or i.amfi_scheme_code or '?'} — failed")
                 return
             async with sem:
                 outcome = await _sync_one(db, client, i, h, source=source)
             if outcome.get("error"):
                 failed.append(f"{i.tradingsymbol or i.amfi_scheme_code}: {outcome['error']}")
+                await _report(f"{i.tradingsymbol or i.amfi_scheme_code or '?'} — failed")
                 return
             total_rows_added += outcome["rows_added"]
             per_fund.append({
@@ -247,6 +258,7 @@ async def sync_nav_history(db: AsyncSession, source: str = "mfapi") -> dict:
                 "latest_nav_date": outcome["latest_nav_date"],
                 "held": h is not None,
             })
+            await _report(f"{i.tradingsymbol or i.amfi_scheme_code} — +{outcome['rows_added']} row(s)")
             if outcome["latest_nav_date"]:
                 d = date.fromisoformat(outcome["latest_nav_date"])
                 if latest_nav_date is None or d > latest_nav_date:
