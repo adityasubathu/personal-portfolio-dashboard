@@ -7,7 +7,7 @@
 - Clicking a notification opens a dialog with the live log and result; closing it marks the job read, and a toast with a View button appears whenever a job finishes. (2026-11-11-09-58-23 · 537098b)
 - MF NAV (with a mfapi.in / FinAPI / AMFI-latest picker) and Kite prices now start from the header on every page, and the old sync sections and endpoints on NAV History are removed. (2026-11-11-09-59-43 · d750aa6)
 - Market-cap tagging now applies to a stock in every fund at once, and the list of untagged stocks is read from the database instead of the last disclosure run. (2026-11-11-10-01-36 · 246192e)
-- Added a Disclosures header button and page that run the AMFI, OpenFin and NSE disclosure refresh in the background with a live log, result and a market-cap tagging panel; Breakdown no longer has a refresh button. (2026-11-11-10-03-13 · PENDING)
+- Added a Disclosures header button and page that run the AMFI, OpenFin and NSE disclosure refresh in the background with a live log, result and a market-cap tagging panel; Breakdown no longer has a refresh button. (2026-11-11-10-03-13 · 39631ce)
 
 ## 2026-11-11-08-34-07 — Merge holding name variants, classify panel dismissals
 - Look-through holdings now merge rights entitlements ("Ola Electric Mobility Ltd - Rights") and stray share-class letters ("HEG Graphite Ltd. A") into the parent company. (2026-11-11-08-34-07 · dcdce40)
