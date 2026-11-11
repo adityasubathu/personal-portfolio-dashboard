@@ -4,7 +4,8 @@ import { Bell, CircleCheck, CircleX, Loader2, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useClearJobsMutation, useDeleteJobMutation, useJobs } from '@/api/jobs'
+import { useClearJobsMutation, useDeleteJobMutation, useJobs, useMarkJobReadMutation } from '@/api/jobs'
+import { useJobWatcher } from '@/hooks/useJobWatcher'
 import { JOB_LABELS, isJobActive, jobHref } from '@/lib/jobs'
 import { relativeTime } from '@/lib/format'
 import type { JobSummary } from '@/types/jobs'
@@ -22,6 +23,44 @@ function jobLine(job: JobSummary): string {
   return job.summary ?? ''
 }
 
+function JobPopups({ jobs, onView }: { jobs: JobSummary[]; onView: (job: JobSummary) => void }) {
+  const markRead = useMarkJobReadMutation()
+  return (
+    <div className="absolute top-full right-0 z-50 mt-2.5 flex w-80 flex-col gap-2">
+      {jobs.map((job, i) => (
+        <div
+          key={job.id}
+          role="alert"
+          className="relative rounded-lg border bg-popover p-3 text-popover-foreground shadow-lg animate-in fade-in slide-in-from-top-2"
+        >
+          {i === 0 && (
+            <span className="absolute -top-1.5 right-3 size-3 rotate-45 border-t border-l bg-popover" aria-hidden />
+          )}
+          <div className="flex items-start gap-2">
+            <JobIcon job={job} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold">{JOB_LABELS[job.kind]}</p>
+              {job.summary && <p className="mt-0.5 line-clamp-3 text-xs text-muted-foreground">{job.summary}</p>}
+              <Button size="xs" variant="outline" className="mt-2" onClick={() => onView(job)}>
+                View
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="-mt-1 -mr-1"
+              aria-label="Close and mark as read"
+              onClick={() => markRead.mutate(job.id)}
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function NotificationTray() {
   const [open, setOpen] = useState(false)
   const { data: jobs = [] } = useJobs()
@@ -29,6 +68,7 @@ export function NotificationTray() {
   const clearJobs = useClearJobsMutation()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const popups = useJobWatcher()
 
   const anyActive = jobs.some(isJobActive)
   const count = jobs.filter((j) => isJobActive(j) || !j.read_at).length
@@ -40,53 +80,56 @@ export function NotificationTray() {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
-          {anyActive ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}
-          {count > 0 && (
-            <Badge className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{count}</Badge>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0">
-        <div className="flex h-10 items-center justify-between border-b px-3">
-          <span className="text-sm font-semibold">Notifications</span>
-          {hasFinished && (
-            <Button size="xs" variant="ghost" disabled={clearJobs.isPending} onClick={() => clearJobs.mutate()}>
-              Clear all
-            </Button>
-          )}
-        </div>
-        {jobs.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">No notifications</p>
-        ) : (
-          <ul className="max-h-96 overflow-auto">
-            {jobs.map((job) => (
-              <li key={job.id} className="flex items-start gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted/50">
-                <button type="button" className="flex min-w-0 flex-1 items-start gap-2 text-left" onClick={() => openJob(job)}>
-                  <JobIcon job={job} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-xs font-medium">
-                      {JOB_LABELS[job.kind]}
-                      {!isJobActive(job) && !job.read_at && (
-                        <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
-                      )}
+    <div className="relative">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+            {anyActive ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}
+            {count > 0 && (
+              <Badge className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{count}</Badge>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-96 p-0">
+          <div className="flex h-10 items-center justify-between border-b px-3">
+            <span className="text-sm font-semibold">Notifications</span>
+            {hasFinished && (
+              <Button size="xs" variant="ghost" disabled={clearJobs.isPending} onClick={() => clearJobs.mutate()}>
+                Clear all
+              </Button>
+            )}
+          </div>
+          {jobs.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">No notifications</p>
+          ) : (
+            <ul className="max-h-96 overflow-auto">
+              {jobs.map((job) => (
+                <li key={job.id} className="flex items-start gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted/50">
+                  <button type="button" className="flex min-w-0 flex-1 items-start gap-2 text-left" onClick={() => openJob(job)}>
+                    <JobIcon job={job} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-xs font-medium">
+                        {JOB_LABELS[job.kind]}
+                        {!isJobActive(job) && !job.read_at && (
+                          <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">{jobLine(job)}</span>
+                      <span className="block text-[10px] text-muted-foreground">{relativeTime(job.finished_at ?? job.started_at)}</span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{jobLine(job)}</span>
-                    <span className="block text-[10px] text-muted-foreground">{relativeTime(job.finished_at ?? job.started_at)}</span>
-                  </span>
-                </button>
-                {!isJobActive(job) && (
-                  <Button variant="ghost" size="icon-xs" aria-label="Delete notification" onClick={() => deleteJob.mutate(job.id)}>
-                    <X className="size-3.5" />
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </PopoverContent>
-    </Popover>
+                  </button>
+                  {!isJobActive(job) && (
+                    <Button variant="ghost" size="icon-xs" aria-label="Delete notification" onClick={() => deleteJob.mutate(job.id)}>
+                      <X className="size-3.5" />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </PopoverContent>
+      </Popover>
+      {!open && popups.length > 0 && <JobPopups jobs={popups} onView={openJob} />}
+    </div>
   )
 }

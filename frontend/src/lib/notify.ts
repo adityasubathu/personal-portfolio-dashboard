@@ -5,10 +5,4 @@ export const notify = {
   error: (message: string, title?: string) => toast.error(title ?? message, title ? { description: message } : undefined),
   info: (message: string, title?: string) => toast(title ?? message, title ? { description: message } : undefined),
   warning: (message: string, title?: string) => toast.warning(title ?? message, title ? { description: message } : undefined),
-  withAction: (
-    type: 'success' | 'error',
-    title: string,
-    description: string | undefined,
-    action: { label: string; onClick: () => void },
-  ) => toast[type](title, { description, action }),
 }

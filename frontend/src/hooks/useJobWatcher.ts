@@ -1,33 +1,35 @@
-import { useEffect, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useJobs } from '@/api/jobs'
-import { JOB_INVALIDATES, JOB_LABELS, isJobActive, jobHref } from '@/lib/jobs'
-import { notify } from '@/lib/notify'
+import { JOB_INVALIDATES, isJobActive } from '@/lib/jobs'
+import type { JobSummary } from '@/types/jobs'
 
-/** Toasts and refreshes dependent queries for every job that finishes while the app is open. */
-export function useJobWatcher() {
+/**
+ * Refreshes dependent queries for every job that finishes while the app is open,
+ * and returns those jobs while they are still unread so they can pop up under the bell.
+ */
+export function useJobWatcher(): JobSummary[] {
   const { data: jobs } = useJobs()
   const qc = useQueryClient()
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const seenFinished = useRef<Set<number> | null>(null)
+  const [finishedOnLoad, setFinishedOnLoad] = useState<Set<number> | null>(null)
+  const invalidated = useRef(new Set<number>())
+
+  if (jobs && finishedOnLoad === null) {
+    setFinishedOnLoad(new Set(jobs.filter((j) => !isJobActive(j)).map((j) => j.id)))
+  }
+
+  const freshlyFinished = useMemo(
+    () => (finishedOnLoad && jobs ? jobs.filter((j) => !isJobActive(j) && !finishedOnLoad.has(j.id)) : []),
+    [jobs, finishedOnLoad],
+  )
 
   useEffect(() => {
-    if (!jobs) return
-    const finished = jobs.filter((j) => !isJobActive(j))
-    if (seenFinished.current === null) {
-      seenFinished.current = new Set(finished.map((j) => j.id))
-      return
-    }
-    for (const job of finished) {
-      if (seenFinished.current.has(job.id)) continue
-      seenFinished.current.add(job.id)
+    for (const job of freshlyFinished) {
+      if (invalidated.current.has(job.id)) continue
+      invalidated.current.add(job.id)
       JOB_INVALIDATES[job.kind].forEach((queryKey) => qc.invalidateQueries({ queryKey }))
-      notify.withAction(job.status === 'done' ? 'success' : 'error', JOB_LABELS[job.kind], job.summary ?? undefined, {
-        label: 'View',
-        onClick: () => navigate(jobHref(job, pathname)),
-      })
     }
-  }, [jobs, qc, navigate, pathname])
+  }, [freshlyFinished, qc])
+
+  return freshlyFinished.filter((j) => !j.read_at)
 }

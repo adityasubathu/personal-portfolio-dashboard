@@ -4,7 +4,6 @@ import { AppSidebar } from './AppSidebar'
 import { NotificationTray } from './NotificationTray'
 import { HeaderJobActions } from './HeaderJobActions'
 import { JobDialog } from './JobDialog'
-import { useJobWatcher } from '../hooks/useJobWatcher'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -19,7 +18,6 @@ function getSidebarDefaultOpen(): boolean {
 export function AppLayout() {
   const { privacyMode, togglePrivacy } = usePrivacy()
   const { data: status } = useAppStatus()
-  useJobWatcher()
 
   return (
     <SidebarProvider defaultOpen={getSidebarDefaultOpen()}>

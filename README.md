@@ -195,7 +195,7 @@ portfolio-mac-arm/
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
-│       │   ├── useJobWatcher.ts # Toast with View + query invalidation when a job finishes while the app is open
+│       │   ├── useJobWatcher.ts # Query invalidation + unread jobs finished this session (shown as popups under the bell)
 │       │   ├── useStartJob.ts   # Start a job and open its dialog; Kite jobs open the login page when the token is invalid
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
 │       │   ├── useDebouncedValue.ts # Debounced mirror of a value (search boxes, cash inputs)
@@ -206,7 +206,7 @@ portfolio-mac-arm/
 │           ├── jobs.ts          # JOB_LABELS, JOB_INVALIDATES, isJobActive, jobHref
 │           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
 │           ├── utils.ts         # cn() — clsx + tailwind-merge, used by every component
-│           └── notify.ts        # notify.success/error/info/warning/withAction — thin wrapper over sonner's toast
+│           └── notify.ts        # notify.success/error/info/warning — thin wrapper over sonner's toast
 ├── alembic/
 │   ├── env.py                   # Sync psycopg2 driver, imports app models
 │   ├── script.py.mako
@@ -477,7 +477,7 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).
 - **MF NAV** (provider picker: mfapi.in, FinAPI, AMFI latest), **Kite prices** and Market Sentiment's **Refresh** open a dialog with the live log and result (both Kite jobs wait for login and can be halted, like Kite prices); **Disclosures** opens its page.
 - The **bell** lists every job: running ones with a spinner and last log line, finished ones with ✓/✗ and a summary. Clicking an entry reopens it (`?job=<id>` on any page opens the dialog); × deletes a finished entry and "Clear all" deletes every finished one.
-- Finished jobs are notifications: unread ones stay until deleted, and read ones (dialog closed, or Disclosures run viewed) are purged 24h after being read. A toast with a View button appears when a job finishes while the app is open.
+- Finished jobs are notifications: unread ones stay until deleted, and read ones (dialog closed, or Disclosures run viewed) are purged 24h after being read. When a job finishes while the app is open, a popup with a View button appears under the bell, pointing at it; its close button marks the job read.
 - Job state is polled every second only while a job is active.
 
 ### NAV History Chart

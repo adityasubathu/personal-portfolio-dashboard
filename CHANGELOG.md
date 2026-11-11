@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-11-11-23-35 — Job popups under the bell
+- The Halt button's stop icon is now filled instead of an outline. (2026-11-11-11-23-35 · PENDING1)
+- Finished-job popups now appear under the notification bell with a tip pointing at it instead of bottom-right toasts; each stays until its close button marks the job read (or the job is viewed). (2026-11-11-11-23-35 · PENDING2)
+
 ## 2026-11-11-11-16-48 — Fixed-height job dialog
 - The background job dialog keeps a constant height: the log box is always 15 lines tall, the error and failed-item list scroll inside it, the summary line is reserved, and the Kite Halt button stays (disabled) after the job ends, so the close and Halt buttons never move. (2026-11-11-11-16-48 · 9f00820)
 
