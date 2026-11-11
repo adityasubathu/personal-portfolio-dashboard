@@ -94,10 +94,10 @@ portfolio-mac-arm/
 │   │   ├── background_job.py    # BackgroundJob — one run of a header job; doubles as the notification record
 │   │   └── nav_tracked_instrument.py
 │   ├── routers/                 # All return JSON, SSE stream, file download, or redirect
-│   │   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, SSE sync
+│   │   ├── portfolio.py         # Holdings table, summary cards, NAV history, OHLC upload, Fetch OHLC SSE
 │   │   ├── trades.py            # CSV import, split-credit, import history, trade list
 │   │   ├── kite.py              # Kite OAuth, config CRUD, holdings sync
-│   │   ├── mf.py                # AMFI NAV sync, mfapi.in historical sync
+│   │   ├── mf.py                # Manually tracked NAV funds (list, remove)
 │   │   ├── mf_breakdown.py      # Ingest OpenFin disclosures, batch classify, chart data
 │   │   ├── jobs.py              # Background jobs: start, list, detail, read, cancel, delete
 │   │   ├── manual_assets.py     # FD / PPF / NPS / Cash / Foreign equity CRUD
@@ -170,6 +170,7 @@ portfolio-mac-arm/
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
 │       │   ├── SsePanel.tsx     # Spinner + scrolling log + result area; driven by useSse
+│       │   ├── HeaderJobActions.tsx # Header buttons: MF NAV (split button + provider picker mfapi.in / FinAPI / AMFI latest, stored in localStorage `navSource`) and Kite prices (hidden in demo mode)
 │       │   ├── JobPanel.tsx     # Status line + scrolling log + error box for a job; result passed as children
 │       │   ├── JobDialog.tsx    # Opens on any page when the URL has ?job=<id>; live log, Halt/Login for Kite; closing marks the job read
 │       │   ├── NotificationTray.tsx # Header bell: popover listing every background job (live status, unread dot, × delete, Clear all)
@@ -177,7 +178,7 @@ portfolio-mac-arm/
 │       │   └── MoneyText.tsx    # ₹ formatted text with colorize/compact/showSign props
 │       ├── pages/
 │       │   ├── Dashboard.tsx    # Summary cards + holdings table + manual assets CRUD
-│       │   ├── NavHistory.tsx   # Portfolio area chart, price sync SSE, OHLC fetch SSE, manual upload
+│       │   ├── NavHistory.tsx   # Portfolio value + Unit NAV charts, OHLC fetch SSE, manual OHLC upload, manually tracked NAV funds (no sync sections — those are header jobs)
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset on Refresh disclosures), sub-1% Others clubbing on Basic), Composition
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
@@ -323,8 +324,6 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf
 | `GET /summary-cards` | Total cost, value, PnL, XIRR, last sync |
 | `GET /nav-history` | Portfolio timeseries `{date, value, invested, unit_nav, nifty50, nifty500}` |
 | `GET /instruments` | All traded instruments with price row count |
-| `GET /sync-price-history/stream` | SSE: Kite OHLC sync with live progress |
-| `POST /sync-price-history/cancel` | Halt a running price sync |
 | `POST /upload-ohlc` | Manual OHLC CSV upload |
 | `GET /fetch-ohlc/stream` | SSE: fetch Kite OHLC for a specific ticker |
 
@@ -359,8 +358,6 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf
 ### Mutual Funds (`/api/v1/mf`)
 | Endpoint | Description |
 |---|---|
-| `POST /sync-nav` | Update MF prices from AMFI daily feed |
-| `POST /sync-nav-history?source=mfapi\|finapi` | Download historical NAV (mfapi.in default, finapi.upvaly.com fallback) |
 | `GET /nav-tracked` | List manually tracked funds |
 | `DELETE /nav-tracked/{instrument_id}` | Remove tracking entry |
 
@@ -443,10 +440,10 @@ Upload CSV → detect format (Kite legacy/current, generic) → normalize column
 OAuth login → exchange token (expires 06:00 IST next day) → fetch holdings + positions → find/create instruments → reconcile quantities (block on mismatch) → upsert holdings → log sync.
 
 ### MF NAV Update
-AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`. Both run as the `mf_nav_history` job (`params.source`: `mfapi`, `finapi` or `amfi`), logging `[k/N] SYMBOL — +n row(s)` per fund, then recomputing XIRR.
+AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`. Both run as the `mf_nav_history` job (`params.source`: `mfapi`, `finapi` or `amfi`), logging `[k/N] SYMBOL — +n row(s)` per fund, then recomputing XIRR. Started from the **MF NAV** button in the header, whose dropdown picks the provider (mfapi.in default, FinAPI, or AMFI latest-only).
 
 ### Kite Price Sync (background job)
-Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. The old SSE stream (`GET /portfolio/sync-price-history/stream`) still exists until the header buttons land.
+Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. It is started from the **Kite prices** button in the header (hidden in demo mode); when the cached Kite status says the token is invalid, the click also opens the Kite login page in a new tab, and the job dialog shows a "Login with Kite" link while waiting.
 
 ### MF Breakdown
 "Refresh disclosures" runs three steps in order, inside one SSE stream (`GET /ingest/stream`). The same three steps also run as the `mf_disclosures` background job (the stream stays until the Disclosures page lands):

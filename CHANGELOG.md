@@ -4,7 +4,8 @@
 - Added server-owned background jobs with a persisted log and result, starting with the MF NAV sync (mfapi.in, FinAPI or AMFI latest) via `/api/v1/jobs`. (2026-11-11-09-51-31 · 22c7859)
 - Added Kite price and disclosure jobs; Kite price sync now waits up to 10 minutes for a login instead of failing, and MF NAV history logs per-fund progress. (2026-11-11-09-56-39 · adde4a5)
 - Added a bell in the header that lists every background job with live status, unread dots, per-entry delete and Clear all. (2026-11-11-09-57-48 · e56a974)
-- Clicking a notification opens a dialog with the live log and result; closing it marks the job read, and a toast with a View button appears whenever a job finishes. (2026-11-11-09-58-23 · PENDING)
+- Clicking a notification opens a dialog with the live log and result; closing it marks the job read, and a toast with a View button appears whenever a job finishes. (2026-11-11-09-58-23 · 537098b)
+- MF NAV (with a mfapi.in / FinAPI / AMFI-latest picker) and Kite prices now start from the header on every page, and the old sync sections and endpoints on NAV History are removed. (2026-11-11-09-59-43 · PENDING)
 
 ## 2026-11-11-08-34-07 — Merge holding name variants, classify panel dismissals
 - Look-through holdings now merge rights entitlements ("Ola Electric Mobility Ltd - Rights") and stray share-class letters ("HEG Graphite Ltd. A") into the parent company. (2026-11-11-08-34-07 · dcdce40)

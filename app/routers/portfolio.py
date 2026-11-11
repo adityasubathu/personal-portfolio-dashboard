@@ -1,4 +1,3 @@
-import asyncio
 import json as jsonlib
 from datetime import date
 from typing import Literal
@@ -17,7 +16,7 @@ from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.schemas.portfolio import DirectHoldingsResponse, InstrumentListItem, SummaryCards
 from app.services.holdings_engine import get_direct_holdings
-from app.services.kite_historical import cancel_sync, fetch_ohlc_for_ticker, sync_index_history, sync_price_history
+from app.services.kite_historical import fetch_ohlc_for_ticker
 from app.services import kite_sync
 from app.services.manual_ohlc import _parse_date as parse_flexible_date, ingest_csv as ingest_ohlc_csv
 from app.services.nav_history import compute_nav_series
@@ -144,31 +143,6 @@ async def traded_instruments(db: AsyncSession = Depends(get_db)):
         )
         for i, n_prices, n_navs in result.all()
     ]
-
-
-_price_sync_lock = asyncio.Lock()
-
-
-@router.get("/sync-price-history/stream")
-async def sync_price_history_stream(db: AsyncSession = Depends(get_db)):
-    async def _runner(on_progress):
-        result = await sync_price_history(db, on_progress=on_progress)
-        await on_progress("Syncing index price history…")
-        try:
-            index_result = await sync_index_history(db, on_progress=on_progress)
-            await on_progress(f"Indices: {index_result['instruments_synced']} synced, {index_result['rows_added']} rows")
-        except Exception as idx_err:
-            await on_progress(f"Index sync skipped: {idx_err}")
-        ltp_result = await kite_sync.refresh_ltp_and_xirr(db, on_progress)
-        return {"result": result, "ltp": ltp_result}
-
-    return sse_stream(_runner, lock=_price_sync_lock, busy_msg="A price history sync is already running.")
-
-
-@router.post("/sync-price-history/cancel")
-async def cancel_price_sync():
-    cancel_sync()
-    return JSONResponse({"ok": True})
 
 
 @router.get("/nav-history")

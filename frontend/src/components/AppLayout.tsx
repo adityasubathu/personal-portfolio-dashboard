@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Eye, EyeOff, FlaskConical } from 'lucide-react'
 import { AppSidebar } from './AppSidebar'
 import { NotificationTray } from './NotificationTray'
+import { HeaderJobActions } from './HeaderJobActions'
 import { JobDialog } from './JobDialog'
 import { useJobWatcher } from '../hooks/useJobWatcher'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
@@ -27,6 +28,7 @@ export function AppLayout() {
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b bg-background px-3">
           <SidebarTrigger />
           <div className="flex items-center gap-1.5">
+            <HeaderJobActions />
             <NotificationTray />
             <Button
               variant="ghost"
