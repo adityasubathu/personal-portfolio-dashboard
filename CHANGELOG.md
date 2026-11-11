@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-11-11-11-37-34 — Header sync button tooltips
-- Hovering the MF NAV, NAV source, Kite prices and Disclosures buttons in the header now shows a tooltip saying what the sync will do; the MF NAV tooltip follows the selected source. (2026-11-11-11-37-34 · pending)
+- Hovering the MF NAV, NAV source, Kite prices and Disclosures buttons in the header now shows a tooltip saying what the sync will do; the MF NAV tooltip follows the selected source. (2026-11-11-11-37-34 · ff5eab9)
 
 ## 2026-11-11-11-27-21 — Disclosures removed from the sidebar
 - The Disclosures page is no longer in the sidebar; it opens from the header Disclosures button or from a disclosure sync notification. (2026-11-11-11-27-21 · aad8cbc)
