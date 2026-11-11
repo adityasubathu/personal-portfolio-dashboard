@@ -32,6 +32,7 @@ function KiteJobActions({ job }: { job: JobDetail }) {
   const { data: kite } = useKiteStatus()
   const cancel = useCancelJobMutation()
   const waiting = job.status === 'waiting_login'
+  const active = isJobActive(job)
   return (
     <DialogFooter>
       {waiting && kite?.login_url && (
@@ -45,7 +46,7 @@ function KiteJobActions({ job }: { job: JobDetail }) {
       <Button
         size="sm"
         variant="destructive"
-        disabled={cancel.isPending}
+        disabled={!active || cancel.isPending}
         onClick={() => cancel.mutate(job.id, { onError: (e) => notify.error(String(e)) })}
       >
         <Square className="size-3" />
@@ -76,7 +77,9 @@ export function JobDialog() {
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{job ? JOB_LABELS[job.kind] : 'Background job'}</DialogTitle>
-          {job?.summary && <DialogDescription>{job.summary}</DialogDescription>}
+          <DialogDescription className="truncate" title={job?.summary ?? undefined}>
+            {job?.summary ?? '\u00a0'}
+          </DialogDescription>
         </DialogHeader>
         {isError && <p className="text-xs text-muted-foreground">This job no longer exists.</p>}
         {job && (
@@ -84,7 +87,7 @@ export function JobDialog() {
             <JobResult job={job} />
           </JobPanel>
         )}
-        {job && KITE_JOB_KINDS.includes(job.kind) && isJobActive(job) && <KiteJobActions job={job} />}
+        {job && KITE_JOB_KINDS.includes(job.kind) && <KiteJobActions job={job} />}
       </DialogContent>
     </Dialog>
   )

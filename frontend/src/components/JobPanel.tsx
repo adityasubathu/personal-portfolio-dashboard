@@ -19,11 +19,11 @@ interface JobPanelProps {
 }
 
 export function JobPanel({ job, children, className }: JobPanelProps) {
-  const logRef = useRef<HTMLPreElement>(null)
+  const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [job.logs.length])
+  }, [job.logs.length, job.status])
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
@@ -32,21 +32,18 @@ export function JobPanel({ job, children, className }: JobPanelProps) {
         {STATUS_TEXT[job.status]} · started {shortDateTime(job.started_at)}
         {job.finished_at && ` · finished ${shortDateTime(job.finished_at)}`}
       </p>
-      {job.logs.length > 0 && (
-        <pre
-          ref={logRef}
-          className="max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap break-words text-muted-foreground"
-        >
+      <div ref={logRef} className="h-64 space-y-2 overflow-auto rounded-md bg-muted p-2">
+        <pre className="font-mono text-[11px] leading-4 whitespace-pre-wrap break-words text-muted-foreground">
           {job.logs.join('\n')}
         </pre>
-      )}
-      {job.status === 'failed' && job.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-          <p className="font-semibold">Error</p>
-          <p>{job.error}</p>
-        </div>
-      )}
-      {job.status === 'done' && children}
+        {job.status === 'failed' && job.error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+            <p className="font-semibold">Error</p>
+            <p>{job.error}</p>
+          </div>
+        )}
+        {job.status === 'done' && children}
+      </div>
     </div>
   )
 }

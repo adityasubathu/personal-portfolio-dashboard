@@ -49,10 +49,9 @@ export function Disclosures() {
       )}
 
       {job ? (
-        <Section title={jobId ? `Run #${job.id}` : 'Latest run'} description={job.summary ?? undefined}>
-          <JobPanel job={job}>
-            <IngestResult result={job.result as IngestDonePayload} />
-          </JobPanel>
+        <Section title={jobId ? `Run #${job.id}` : 'Latest run'} description={job.summary ?? undefined} bodyClassName="space-y-2">
+          <JobPanel job={job} />
+          {job.status === 'done' && <IngestResult result={job.result as IngestDonePayload} />}
         </Section>
       ) : (
         <EmptyState
