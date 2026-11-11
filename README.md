@@ -104,7 +104,7 @@ portfolio-mac-arm/
 │   │   ├── usdinr.py            # USDINR rate: Kite refresh, manual set
 │   │   ├── charts.py            # Price and NAV chart data endpoints
 │   │   ├── settings.py          # Danger-zone bulk deletes, DB info
-│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth, /sector-trends; POST /refresh-indices
+│   │   ├── market_sentiment.py  # GET /api/v1/market-sentiment/summary, /series, /breadth, /sector-trends
 │   │   ├── capital_gains.py     # GET /api/v1/capital-gains/years, /api/v1/capital-gains/{fy}
 │   │   └── demo.py              # GET /api/v1/status, POST /api/v1/demo/reset
 │   └── services/
@@ -119,7 +119,7 @@ portfolio-mac-arm/
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
 │       ├── background_jobs.py   # Server-owned asyncio job tasks (one per kind), DB persistence, read/delete/purge rules
-│       ├── job_runners.py       # Body and summary line of each job kind (MF NAV history so far)
+│       ├── job_runners.py       # Body and summary line of each job kind
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
 │       ├── composition.py       # Per-category/sector composition, per-scheme breakdown, manual taxonomy overrides (any of the four NSE levels, cascading up the hierarchy)
 │       ├── manual_assets.py     # FD FV calc, manual assets summary (incl. FOREIGN_EQ → INR conversion)
@@ -150,7 +150,7 @@ portfolio-mac-arm/
 │       │   ├── manualAssets.ts
 │       │   ├── charts.ts
 │       │   ├── settings.ts
-│   │   ├── marketSentiment.ts # useSentimentSummary(index), useSentimentSeries(days, index), useMarketBreadth(), useSectorTrends(), useRefreshIndicesMutation()
+│   │   ├── marketSentiment.ts # useSentimentSummary(index), useSentimentSeries(days, index), useMarketBreadth(), useSectorTrends()
 │       │   ├── capitalGains.ts  # useCapitalGainsYears(), useCapitalGains(fy)
 │       │   ├── status.ts        # useAppStatus(), useResetDemoMutation()
 │       │   └── jobs.ts          # useJobs()/useJob(id) (poll 1s only while a job is active), start/read/cancel/delete/clear mutations
@@ -190,12 +190,13 @@ portfolio-mac-arm/
 │       │   ├── Trades.tsx       # Debounced search + paginated trade list
 │       │   ├── Import.tsx       # CSV upload, import history, rollback, split-credit
 │       │   ├── Kite.tsx         # Config form, OAuth login, token status, one-click sync
-│   │   ├── MarketSentiment.tsx # Nifty 50 / Nifty 500 sentiment (persisted toggle): 3-horizon table, flags banner, breadth table + ratio chart, sector trends table (CAGR + vs-benchmark, clickable trend chips), candlestick + overlays, oscillator + volatility panels
+│   │   ├── MarketSentiment.tsx # Nifty 50 / Nifty 500 sentiment (persisted toggle): 3-horizon table, flags banner, breadth table + ratio chart, sector trends table (CAGR + vs-benchmark, clickable trend chips), candlestick + overlays, oscillator + volatility panels; Refresh starts the `kite_index_history` job
 │       │   ├── CapitalGains.tsx # Realized gains by FY: FIFO lots grouped by tax bucket, set-off, §112A exemption, attention items
 │       │   └── Settings.tsx     # Danger-zone deletes with confirmation modals
 │       ├── hooks/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
 │       │   ├── useJobWatcher.ts # Toast with View + query invalidation when a job finishes while the app is open
+│       │   ├── useStartJob.ts   # Start a job and open its dialog; Kite jobs open the login page when the token is invalid
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
 │       │   ├── useDebouncedValue.ts # Debounced mirror of a value (search boxes, cash inputs)
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
@@ -303,7 +304,7 @@ Marks MF/ETF instruments imported by ISIN without a corresponding trade. Ensures
 Simple key-value table (`key` TEXT PK, `value_json` TEXT) for caching configuration that needs to survive restarts. Currently used to store the USDINR exchange rate fetched from Kite's CDS USDINR futures market, including source and timestamp metadata.
 
 ### BackgroundJob
-One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `mf_disclosures`). Fields: `status` (`running`, `waiting_login`, `done`, `failed`), `params`, `logs` (JSONB array of lines), `summary`, `result`, `error`, `started_at`, `finished_at`, `read_at`. The table is also the notification store: finished jobs stay until deleted, and read jobs are purged 24h after `read_at`. Active rows are marked `failed` ("Interrupted — the server restarted") on startup.
+One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `kite_index_history`, `mf_disclosures`). Fields: `status` (`running`, `waiting_login`, `done`, `failed`), `params`, `logs` (JSONB array of lines), `summary`, `result`, `error`, `started_at`, `finished_at`, `read_at`. The table is also the notification store: finished jobs stay until deleted, and read jobs are purged 24h after `read_at`. Active rows are marked `failed` ("Interrupted — the server restarted") on startup.
 
 ---
 
@@ -473,8 +474,8 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 **Disclosures page** (`/portfolio/disclosures/:jobId?`): shows the given run, or the newest `mf_disclosures` run when no id is in the URL, with its live log and result. Viewing a finished run marks it read. Above it, a tagging panel lists every stock still `Unclassified Equity`, read from `GET /unclassified-equities` (so it appears even when the run says "All schemes up to date"); tagging a stock applies to every fund that holds it. Clicking Disclosures also clears the Sector tab's remembered dismissals.
 
 ### Background jobs & notifications
-Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).
-- **MF NAV** (provider picker: mfapi.in, FinAPI, AMFI latest) and **Kite prices** open a dialog with the live log and result; **Disclosures** opens its page.
+Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).
+- **MF NAV** (provider picker: mfapi.in, FinAPI, AMFI latest), **Kite prices** and Market Sentiment's **Refresh** open a dialog with the live log and result (both Kite jobs wait for login and can be halted, like Kite prices); **Disclosures** opens its page.
 - The **bell** lists every job: running ones with a spinner and last log line, finished ones with ✓/✗ and a summary. Clicking an entry reopens it (`?job=<id>` on any page opens the dialog); × deletes a finished entry and "Clear all" deletes every finished one.
 - Finished jobs are notifications: unread ones stay until deleted, and read ones (dialog closed, or Disclosures run viewed) are purged 24h after being read. A toast with a View button appears when a job finishes while the app is open.
 - Job state is polled every second only while a job is active.

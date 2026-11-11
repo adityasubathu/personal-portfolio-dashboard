@@ -1,4 +1,4 @@
-export type JobKind = 'mf_nav_history' | 'kite_price_history' | 'mf_disclosures'
+export type JobKind = 'mf_nav_history' | 'kite_price_history' | 'kite_index_history' | 'mf_disclosures'
 export type JobStatus = 'running' | 'waiting_login' | 'done' | 'failed'
 export type NavSource = 'mfapi' | 'finapi' | 'amfi'
 

@@ -1,14 +1,12 @@
-import { useLocation, useNavigate } from 'react-router-dom'
 import { CandlestickChart, ChevronDown, FileSearch, LineChart, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useJobs, useStartJobMutation } from '@/api/jobs'
-import { useKiteStatus } from '@/api/kite'
+import { useJobs } from '@/api/jobs'
 import { useAppStatus } from '@/api/status'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { SECTOR_DISMISSALS_KEY, isJobActive, jobHref } from '@/lib/jobs'
-import { notify } from '@/lib/notify'
+import { useStartJob } from '@/hooks/useStartJob'
+import { SECTOR_DISMISSALS_KEY, isJobActive } from '@/lib/jobs'
 import type { JobKind, NavSource } from '@/types/jobs'
 
 const NAV_SOURCE_OPTIONS: Array<{ value: NavSource; label: string; hint: string }> = [
@@ -24,28 +22,10 @@ function JobIcon({ active, icon: Icon }: { active: boolean; icon: typeof LineCha
 export function HeaderJobActions() {
   const { data: jobs = [] } = useJobs()
   const { data: appStatus } = useAppStatus()
-  const { data: kite } = useKiteStatus()
-  const startJob = useStartJobMutation()
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
+  const start = useStartJob()
   const [navSource, setNavSource] = usePersistentState<NavSource>('navSource', 'mfapi')
 
   const active = (kind: JobKind) => jobs.some((j) => j.kind === kind && isJobActive(j))
-
-  function start(kind: JobKind, params: Record<string, unknown> = {}) {
-    startJob.mutate(
-      { kind, params },
-      {
-        onSuccess: (job) => navigate(jobHref(job, pathname)),
-        onError: (e) => notify.error(String(e)),
-      },
-    )
-  }
-
-  function startKite() {
-    if (kite?.configured && !kite.token_valid && kite.login_url) window.open(kite.login_url, '_blank', 'noopener')
-    start('kite_price_history')
-  }
 
   function startDisclosures() {
     try {
@@ -81,7 +61,7 @@ export function HeaderJobActions() {
         </Popover>
       </div>
       {!appStatus?.demo_mode && (
-        <Button size="sm" variant="outline" onClick={startKite}>
+        <Button size="sm" variant="outline" onClick={() => start('kite_price_history')}>
           <JobIcon active={active('kite_price_history')} icon={CandlestickChart} />
           <span className="hidden sm:inline">Kite prices</span>
         </Button>

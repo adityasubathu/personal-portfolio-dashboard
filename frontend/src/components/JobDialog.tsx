@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { JobPanel } from './JobPanel'
 import { useCancelJobMutation, useJob, useMarkJobReadMutation } from '@/api/jobs'
 import { useKiteStatus } from '@/api/kite'
-import { JOB_LABELS, isJobActive } from '@/lib/jobs'
+import { JOB_LABELS, KITE_JOB_KINDS, isJobActive } from '@/lib/jobs'
 import { notify } from '@/lib/notify'
 import type { JobDetail, KitePriceHistoryResult, MfNavHistoryResult } from '@/types/jobs'
 
@@ -84,7 +84,7 @@ export function JobDialog() {
             <JobResult job={job} />
           </JobPanel>
         )}
-        {job?.kind === 'kite_price_history' && isJobActive(job) && <KiteJobActions job={job} />}
+        {job && KITE_JOB_KINDS.includes(job.kind) && isJobActive(job) && <KiteJobActions job={job} />}
       </DialogContent>
     </Dialog>
   )

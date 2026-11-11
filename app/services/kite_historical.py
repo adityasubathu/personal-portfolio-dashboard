@@ -70,6 +70,10 @@ def cancel_sync() -> None:
     _cancel_event.set()
 
 
+def reset_cancel() -> None:
+    _cancel_event.clear()
+
+
 
 async def _traded_equity_instruments(db: AsyncSession) -> list[Instrument]:
     """Every STOCK/BOND instrument the user has ever traded, including sold-out ones."""
@@ -364,7 +368,7 @@ async def sync_price_history(db: AsyncSession, on_progress=None) -> dict:
 
     If `on_progress` is provided, it's called with a string message after each
     instrument completes — used for SSE streaming."""
-    _cancel_event.clear()
+    reset_cancel()
     config = await get_config(db)
     assert_token_valid(config)
 

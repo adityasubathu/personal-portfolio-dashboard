@@ -7,7 +7,7 @@ from typing import Awaitable, Callable
 from app.database import AsyncSessionLocal
 from app.services import kite_sync
 from app.services.amfi_nav import sync_mf_navs
-from app.services.kite_historical import cancel_sync, sync_index_history, sync_price_history
+from app.services.kite_historical import cancel_sync, reset_cancel, sync_index_history, sync_price_history
 from app.services.mf_ingest import ingest_from_openfin, sync_amfi_market_cap
 from app.services.mfapi_nav import sync_nav_history
 from app.services.nse_industry import refresh_held_classifications
@@ -95,6 +95,19 @@ def summarize_kite_price_history(result: dict) -> str:
     return text + (f" · {failed} failed" if failed else "")
 
 
+async def run_kite_index_history(params: dict, on_progress: OnProgress, set_status: SetStatus) -> dict:
+    await _wait_for_kite_login(on_progress, set_status)
+    reset_cancel()
+    async with AsyncSessionLocal() as db:
+        return await sync_index_history(db, on_progress=on_progress)
+
+
+def summarize_kite_index_history(result: dict) -> str:
+    if not result.get("rows_added"):
+        return "No new candles — data is already current"
+    return f"{result.get('instruments_synced', 0)} indices · {result['rows_added']} rows"
+
+
 async def run_mf_disclosures(params: dict, on_progress: OnProgress, set_status: SetStatus) -> dict:
     async with AsyncSessionLocal() as db:
         amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
@@ -127,7 +140,8 @@ def summarize_mf_disclosures(result: dict) -> str:
 RUNNERS: dict[str, tuple[Runner, Summarizer]] = {
     "mf_nav_history": (run_mf_nav_history, summarize_mf_nav_history),
     "kite_price_history": (run_kite_price_history, summarize_kite_price_history),
+    "kite_index_history": (run_kite_index_history, summarize_kite_index_history),
     "mf_disclosures": (run_mf_disclosures, summarize_mf_disclosures),
 }
 
-GRACEFUL_CANCEL: dict[str, Callable[[], None]] = {"kite_price_history": cancel_sync}
+GRACEFUL_CANCEL: dict[str, Callable[[], None]] = {"kite_price_history": cancel_sync, "kite_index_history": cancel_sync}

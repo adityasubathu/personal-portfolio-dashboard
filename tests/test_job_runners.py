@@ -2,7 +2,14 @@
 from datetime import timedelta
 from types import SimpleNamespace
 
-from app.services.job_runners import summarize_kite_price_history, summarize_mf_disclosures, summarize_mf_nav_history
+from app.services.job_runners import (
+    GRACEFUL_CANCEL,
+    RUNNERS,
+    summarize_kite_index_history,
+    summarize_kite_price_history,
+    summarize_mf_disclosures,
+    summarize_mf_nav_history,
+)
 from app.services.kite_sync import is_token_valid
 from app.time_util import now_ist
 
@@ -33,6 +40,18 @@ class TestSummarizeKitePriceHistory:
     def test_failures(self):
         result = {"result": {"instruments_synced": 3, "rows_added": 0, "latest_price_date": None, "failed": ["X"]}, "index": None, "ltp": None}
         assert summarize_kite_price_history(result) == "3 instruments · 0 rows · latest — · 1 failed"
+
+
+class TestKiteIndexHistory:
+    def test_registered_as_haltable_job(self):
+        assert "kite_index_history" in RUNNERS
+        assert "kite_index_history" in GRACEFUL_CANCEL
+
+    def test_rows_added(self):
+        assert summarize_kite_index_history({"instruments_synced": 6, "rows_added": 6}) == "6 indices · 6 rows"
+
+    def test_no_new_candles(self):
+        assert summarize_kite_index_history({"instruments_synced": 6, "rows_added": 0}) == "No new candles — data is already current"
 
 
 class TestSummarizeMfDisclosures:

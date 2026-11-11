@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-JobKind = Literal["mf_nav_history", "kite_price_history", "mf_disclosures"]
+JobKind = Literal["mf_nav_history", "kite_price_history", "kite_index_history", "mf_disclosures"]
 JobStatus = Literal["running", "waiting_login", "done", "failed"]
 
 

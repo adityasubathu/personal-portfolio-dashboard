@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, Info, RefreshCw } from 'lucide-react'
-import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useRefreshIndicesMutation, useSectorTrends } from '../api/marketSentiment'
+import { AlertCircle, Info, Loader2, RefreshCw } from 'lucide-react'
+import { useSentimentSummary, useSentimentSeries, useMarketBreadth, useSectorTrends } from '../api/marketSentiment'
+import { useJobs } from '@/api/jobs'
+import { useStartJob } from '@/hooks/useStartJob'
+import { isJobActive } from '@/lib/jobs'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { LwChart } from '../components/LwChart'
 import { PageHeader } from '../components/PageHeader'
@@ -16,7 +19,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { CHIP_CLASS, chipClass } from '@/lib/colors'
-import { notify } from '@/lib/notify'
 import type { SentimentSummary, SentimentFlags, IndicatorPoint, VixShort, VixMid, VixLong, MarketBreadth, SectorTrendRow, SentimentIndex, TrendCell } from '../types/marketSentiment'
 import { pct, heatmapBg, heatmapTextColor } from '../lib/format'
 import type { NavPoint } from '../types/charts'
@@ -712,7 +714,9 @@ function SectorTrendsTable() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function MarketSentiment() {
-  const refreshMutation = useRefreshIndicesMutation()
+  const startJob = useStartJob()
+  const { data: jobs = [] } = useJobs()
+  const refreshing = jobs.some((j) => j.kind === 'kite_index_history' && isJobActive(j))
   const [index, setIndex] = usePersistentState<SentimentIndex>('market-sentiment-index', 'nifty50')
   const indexLabel = index === 'nifty50' ? 'Nifty 50' : 'Nifty 500'
   const { data: summary, isLoading: summaryLoading } = useSentimentSummary(index)
@@ -774,26 +778,8 @@ export function MarketSentiment() {
               <ToggleGroupItem value="nifty50">Nifty 50</ToggleGroupItem>
               <ToggleGroupItem value="nifty500">Nifty 500</ToggleGroupItem>
             </ToggleGroup>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={refreshMutation.isPending}
-              onClick={() => {
-                refreshMutation.mutate(undefined, {
-                  onSuccess: (data) => {
-                    if (!data.ok) {
-                      notify.error(data.error ?? 'Unknown error', 'Index refresh failed')
-                    } else if (data.rows_added === 0) {
-                      notify.info('No new candles — market may not have opened yet or data is already current.')
-                    }
-                  },
-                  onError: (err) => {
-                    notify.error(err instanceof Error ? err.message : 'Request failed', 'Index refresh failed')
-                  },
-                })
-              }}
-            >
-              <RefreshCw className="size-3.5" />
+            <Button size="sm" variant="outline" onClick={() => startJob('kite_index_history')}>
+              {refreshing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
               Refresh
             </Button>
           </div>
