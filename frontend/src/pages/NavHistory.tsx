@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Square, RefreshCw, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { useTradedInstruments, useNavHistory, uploadOhlc } from '../api/portfolio'
-import { useNavTracked, useRemoveNavTrackedMutation, useSyncNavHistoryMutation, useSyncNavMutation } from '../api/mf'
+import { useNavTracked, useRemoveNavTrackedMutation } from '../api/mf'
 import { LwChart } from '../components/LwChart'
 import { SsePanel } from '../components/SsePanel'
 import { useSse } from '../hooks/useSse'
@@ -39,47 +39,14 @@ const BENCHMARK_LINES: Array<{ key: Benchmark; label: string; color: string }> =
   { key: 'nifty500', label: 'Nifty 500', color: '#ef4444' },
 ]
 
-function HaltSyncButton() {
-  const [halting, setHalting] = useState(false)
-
-  async function halt() {
-    setHalting(true)
-    try {
-      await fetch(apiUrl('/api/v1/portfolio/sync-price-history/cancel'), { method: 'POST' })
-    } catch {
-      // best-effort — the SSE stream will surface the halt message
-    } finally {
-      setHalting(false)
-    }
-  }
-
-  return (
-    <Button size="xs" variant="destructive" disabled={halting} onClick={halt}>
-      <Square className="size-3" />
-      Halt
-    </Button>
-  )
-}
-
 export function NavHistory() {
   const { data: navSeries, isLoading: navLoading } = useNavHistory()
   const { data: instruments } = useTradedInstruments()
   const { data: tracked } = useNavTracked()
   const removeTrackedMut = useRemoveNavTrackedMutation()
-  const syncHistoryMut = useSyncNavHistoryMutation()
-  const syncNavMut = useSyncNavMutation()
-  const [navSource, setNavSource] = usePersistentState<'mfapi' | 'finapi'>('navSource', 'mfapi')
   const [benchmarks, setBenchmarks] = usePersistentState<Benchmark[]>('navBenchmarks', ['nifty50', 'nifty500'])
 
   const qc = useQueryClient()
-  const priceSyncSse = useSse(`${apiUrl('/api/v1/portfolio/sync-price-history/stream')}`)
-
-  useEffect(() => {
-    if (priceSyncSse.result) {
-      qc.invalidateQueries({ queryKey: ['market-sentiment'] })
-      qc.invalidateQueries({ queryKey: ['portfolio'] })
-    }
-  }, [priceSyncSse.result, qc])
 
   const [fetchTicker, setFetchTicker] = useState('')
   const [fetchStart, setFetchStart] = useState('')
@@ -210,77 +177,6 @@ export function NavHistory() {
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <Section title="Sync MF NAV">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="xs"
-              disabled={syncHistoryMut.isPending}
-              onClick={() =>
-                syncHistoryMut.mutate(navSource, {
-                  onError: (e) => notify.error(String(e)),
-                })
-              }
-            >
-              <RefreshCw className="size-3.5" />
-              Sync NAV History ({navSource === 'finapi' ? 'FinAPI' : 'mfapi.in'})
-            </Button>
-            <ToggleGroup type="single" variant="outline" size="sm" value={navSource} onValueChange={(v) => v && setNavSource(v as 'mfapi' | 'finapi')}>
-              <ToggleGroupItem value="mfapi">mfapi.in</ToggleGroupItem>
-              <ToggleGroupItem value="finapi">FinAPI</ToggleGroupItem>
-            </ToggleGroup>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={syncNavMut.isPending}
-              onClick={() =>
-                syncNavMut.mutate(undefined, {
-                  onError: (e) => notify.error(String(e)),
-                })
-              }
-            >
-              Latest-only (AMFI fallback)
-            </Button>
-          </div>
-          {navSource === 'finapi' && (
-            <p className="mt-1 text-xs text-muted-foreground">Free tier — 30 req/min, no API key needed</p>
-          )}
-          {syncHistoryMut.data && !syncHistoryMut.data.error && (
-            <p className="mt-1 text-xs">
-              History: {String(syncHistoryMut.data.funds_synced ?? '?')} funds synced ·{' '}
-              {String(syncHistoryMut.data.rows_added ?? '?')} rows added ·{' '}
-              latest {String(syncHistoryMut.data.latest_nav_date ?? '—')}
-              {Array.isArray(syncHistoryMut.data.failed) && (syncHistoryMut.data.failed as unknown[]).length > 0 && (
-                <span className="text-warning"> · {(syncHistoryMut.data.failed as unknown[]).length} failed</span>
-              )}
-            </p>
-          )}
-          {syncHistoryMut.data?.error && <p className="mt-1 text-xs text-negative">{syncHistoryMut.data.error}</p>}
-          {syncNavMut.data && !syncNavMut.data.error && (
-            <p className="mt-1 text-xs">
-              AMFI: {String(syncNavMut.data.updated ?? '?')} updated · latest {String(syncNavMut.data.latest_nav_date ?? '—')}
-              {Array.isArray(syncNavMut.data.missing) && (syncNavMut.data.missing as unknown[]).length > 0 && (
-                <span className="text-warning"> · {(syncNavMut.data.missing as unknown[]).length} missing</span>
-              )}
-            </p>
-          )}
-          {syncNavMut.data?.error && <p className="mt-1 text-xs text-negative">{syncNavMut.data.error}</p>}
-        </Section>
-
-        <Section
-          title="Sync Price History (Kite)"
-          action={
-            <div className="flex items-center gap-2">
-              <Button size="xs" onClick={priceSyncSse.start} disabled={priceSyncSse.status === 'running'}>
-                <RefreshCw className="size-3.5" />
-                Sync now
-              </Button>
-              {priceSyncSse.status === 'running' && <HaltSyncButton />}
-            </div>
-          }
-        >
-          <SsePanel sse={priceSyncSse} heading="Syncing price history…" doneHeading="Synced" errorHeading="Sync failed" className="max-w-xl" />
-        </Section>
-
         <Section title="Fetch OHLC from Kite">
           <div className="flex flex-wrap items-end gap-2">
             <div className="w-52 space-y-1">

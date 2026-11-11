@@ -169,7 +169,6 @@ export interface SyncedFund {
 }
 
 export interface IngestDonePayload {
-  ok: boolean
   amfi?: {
     rows_loaded?: number
     large?: number

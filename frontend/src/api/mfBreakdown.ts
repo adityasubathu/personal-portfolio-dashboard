@@ -26,6 +26,7 @@ export const breakdownKeys = {
   sectorStockBreakdown: ['mf-breakdown', 'sector-stock-breakdown'] as const,
   sectorList: ['mf-breakdown', 'sector-list'] as const,
   schemes: ['mf-breakdown', 'schemes'] as const,
+  unclassifiedEquities: ['mf-breakdown', 'unclassified-equities'] as const,
   scheme: (isin: string) => ['mf-breakdown', 'scheme', isin] as const,
 }
 
@@ -144,13 +145,19 @@ export function useSectorClassifyBatchMutation() {
   })
 }
 
+export function useUnclassifiedEquities() {
+  return useQuery({
+    queryKey: breakdownKeys.unclassifiedEquities,
+    queryFn: () => request<string[]>('/api/v1/mf-breakdown/unclassified-equities'),
+  })
+}
+
 export function useClassifyBatchMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (rows: Array<{ scheme_isin: string; name: string; category: string }>) => {
+    mutationFn: (rows: Array<{ name: string; category: string }>) => {
       const form = new URLSearchParams()
       rows.forEach((r) => {
-        form.append('scheme_isin', r.scheme_isin)
         form.append('name', r.name)
         form.append('category', r.category)
       })

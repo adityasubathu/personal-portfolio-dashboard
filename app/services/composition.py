@@ -82,6 +82,16 @@ def _summarize_sectors(rows: list[dict]) -> list[dict]:
     return summary
 
 
+async def get_unclassified_equity_names(db: AsyncSession) -> list[str]:
+    rows = await db.execute(
+        select(MfSchemeBreakdown.name)
+        .where(MfSchemeBreakdown.category == "Unclassified Equity")
+        .distinct()
+        .order_by(MfSchemeBreakdown.name)
+    )
+    return list(rows.scalars().all())
+
+
 async def get_available_schemes(db: AsyncSession) -> list[dict]:
     scheme_isins = (await db.execute(
         select(MfSchemeBreakdown.scheme_isin).distinct()

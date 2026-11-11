@@ -5,8 +5,3 @@ export interface NavTrackedInstrument {
   instrument_type: string
 }
 
-export interface MfSyncResult {
-  mode: string
-  error: string | null
-  [key: string]: unknown
-}

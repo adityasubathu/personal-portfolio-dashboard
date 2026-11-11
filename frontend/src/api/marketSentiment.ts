@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { request } from './client'
 import type { SentimentSummary, SentimentSeries, MarketBreadth, SectorTrends, SentimentIndex } from '../types/marketSentiment'
 
@@ -38,21 +38,5 @@ export function useSectorTrends() {
     queryKey: sentimentKeys.sectorTrends,
     queryFn: () => request<SectorTrends>('/api/v1/market-sentiment/sector-trends'),
     staleTime: 60 * 60 * 1000,
-  })
-}
-
-export function useRefreshIndicesMutation() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => request<{ ok: boolean; error?: string; instruments_synced?: number; rows_added?: number }>(
-      '/api/v1/market-sentiment/refresh-indices',
-      { method: 'POST' },
-    ),
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['market-sentiment', 'summary'] })
-      qc.invalidateQueries({ queryKey: ['market-sentiment', 'series'] })
-      qc.invalidateQueries({ queryKey: sentimentKeys.breadth })
-      qc.invalidateQueries({ queryKey: sentimentKeys.sectorTrends })
-    },
   })
 }
