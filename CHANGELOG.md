@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-11-08-34-07 — Merge holding name variants, classify panel dismissals
+- Look-through holdings now merge rights entitlements ("Ola Electric Mobility Ltd - Rights") and stray share-class letters ("HEG Graphite Ltd. A") into the parent company. (2026-11-11-08-34-07 · dcdce40)
+- The unknown-sector classify panel remembers dismissed stocks per name instead of hiding the whole level forever, so new unknowns reappear; Refresh disclosures resets both the sector and market-cap panel dismissals. (2026-11-11-08-34-07 · f9b5344)
+
 ## 2026-10-19-14-26-19 — Nifty 50 / Nifty 500 on the Unit NAV chart
 - NAV history points now include Nifty 50 and Nifty 500, rebased to the Unit NAV at its base date. (2026-10-19-14-26-19 · c9408cc)
 - The Unit NAV chart overlays Nifty 50 and Nifty 500 lines, with header toggles that are remembered across reloads. (2026-10-19-14-26-39 · fb435e0)
