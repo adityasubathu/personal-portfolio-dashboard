@@ -197,6 +197,7 @@ portfolio-mac-arm/
 │       │   ├── useSse.ts        # EventSource wrapper: {logs, status, result, start()}
 │       │   ├── useJobWatcher.ts # Query invalidation + unread jobs finished this session (shown as popups under the bell)
 │       │   ├── useStartJob.ts   # Start a job and open its dialog; Kite jobs open the login page when the token is invalid
+│       │   ├── useOpenKiteLogin.ts # Open Kite login in a self-closing tab; refresh Kite status when it reports back
 │       │   ├── usePersistentState.ts # localStorage-backed state (chart heights, compare mode)
 │       │   ├── useDebouncedValue.ts # Debounced mirror of a value (search boxes, cash inputs)
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
@@ -204,6 +205,7 @@ portfolio-mac-arm/
 │       └── lib/
 │           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor, relativeTime
 │           ├── jobs.ts          # JOB_LABELS, JOB_INVALIDATES, isJobActive, jobHref
+│           ├── kiteLogin.ts     # openKiteLogin/handBackKiteLogin — BroadcastChannel handoff that closes the Kite login tab
 │           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
 │           ├── utils.ts         # cn() — clsx + tailwind-merge, used by every component
 │           └── notify.ts        # notify.success/error/info/warning — thin wrapper over sonner's toast
@@ -447,7 +449,7 @@ OAuth login → exchange token (expires 06:00 IST next day) → fetch holdings +
 AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separately: mfapi.in → resolve scheme codes → fetch historical per fund → store in `nav_history`. Both run as the `mf_nav_history` job (`params.source`: `mfapi`, `finapi` or `amfi`), logging `[k/N] SYMBOL — +n row(s)` per fund, then recomputing XIRR. Started from the **MF NAV** button in the header, whose dropdown picks the provider (mfapi.in default, FinAPI, or AMFI latest-only).
 
 ### Kite Price Sync (background job)
-Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. It is started from the **Kite prices** button in the header (hidden in demo mode); when the cached Kite status says the token is invalid, the click also opens the Kite login page in a new tab, and the job dialog shows a "Login with Kite" link while waiting.
+Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. It is started from the **Kite prices** button in the header (hidden in demo mode); when the cached Kite status says the token is invalid, the click also opens the Kite login page in a new tab, and the job dialog shows a "Login with Kite" button while waiting. When that login tab lands back on `/kite?login=success`, it tells the tab that opened it over a `BroadcastChannel` (`src/lib/kiteLogin.ts`), which refreshes Kite status while the login tab closes itself; if no opener answers within 500ms, or the browser refuses to close the tab, it stays on the Kite page with a success toast.
 
 ### MF Breakdown
 The header **Disclosures** button runs three steps in order as the `mf_disclosures` background job (first run classifies ~750 ISINs, ~6 min; later runs only query ISINs new to the portfolio):

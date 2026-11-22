@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { JobPanel } from './JobPanel'
 import { useCancelJobMutation, useJob, useMarkJobReadMutation } from '@/api/jobs'
 import { useKiteStatus } from '@/api/kite'
+import { useOpenKiteLogin } from '@/hooks/useOpenKiteLogin'
 import { JOB_LABELS, KITE_JOB_KINDS, isJobActive } from '@/lib/jobs'
 import { notify } from '@/lib/notify'
 import type { JobDetail, KitePriceHistoryResult, MfNavHistoryResult } from '@/types/jobs'
@@ -31,16 +32,16 @@ function JobResult({ job }: { job: JobDetail }) {
 function KiteJobActions({ job }: { job: JobDetail }) {
   const { data: kite } = useKiteStatus()
   const cancel = useCancelJobMutation()
+  const openKiteLogin = useOpenKiteLogin()
   const waiting = job.status === 'waiting_login'
+  const loginUrl = kite?.login_url
   const active = isJobActive(job)
   return (
     <DialogFooter>
-      {waiting && kite?.login_url && (
-        <Button size="sm" asChild>
-          <a href={kite.login_url} target="_blank" rel="noreferrer">
-            <LogIn className="size-3.5" />
-            Login with Kite
-          </a>
+      {waiting && loginUrl && (
+        <Button size="sm" onClick={() => openKiteLogin(loginUrl)}>
+          <LogIn className="size-3.5" />
+          Login with Kite
         </Button>
       )}
       <Button

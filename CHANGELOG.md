@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22-14-53-55 — Kite login tab closes itself
+- The Kite login tab opened by Kite prices (or the job dialog's Login with Kite button) now closes itself after login and returns you to the tab that started it, which refreshes Kite status and shows the success toast. (2026-11-22-14-53-55 · PENDING)
+
 ## 2026-11-11-11-37-34 — Header sync button tooltips
 - Hovering the MF NAV, NAV source, Kite prices and Disclosures buttons in the header now shows a tooltip saying what the sync will do; the MF NAV tooltip follows the selected source. (2026-11-11-11-37-34 · ff5eab9)
 

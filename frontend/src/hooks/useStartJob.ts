@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStartJobMutation } from '@/api/jobs'
 import { useKiteStatus } from '@/api/kite'
+import { useOpenKiteLogin } from '@/hooks/useOpenKiteLogin'
 import { KITE_JOB_KINDS, jobHref } from '@/lib/jobs'
 import { notify } from '@/lib/notify'
 import type { JobKind } from '@/types/jobs'
@@ -9,12 +10,13 @@ import type { JobKind } from '@/types/jobs'
 export function useStartJob() {
   const startJob = useStartJobMutation()
   const { data: kite } = useKiteStatus()
+  const openKiteLogin = useOpenKiteLogin()
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
   return function start(kind: JobKind, params: Record<string, unknown> = {}) {
     if (KITE_JOB_KINDS.includes(kind) && kite?.configured && !kite.token_valid && kite.login_url) {
-      window.open(kite.login_url, '_blank', 'noopener')
+      openKiteLogin(kite.login_url)
     }
     startJob.mutate(
       { kind, params },

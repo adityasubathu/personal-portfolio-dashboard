@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { notify } from '@/lib/notify'
+import { handBackKiteLogin } from '@/lib/kiteLogin'
 import { CHIP_CLASS } from '@/lib/colors'
 
 export function Kite() {
@@ -38,9 +39,12 @@ export function Kite() {
     const login = searchParams.get('login')
     const error = searchParams.get('error')
     if (login === 'success') {
-      notify.success('Kite login successful.')
       setSearchParams({})
       refetch()
+      handBackKiteLogin().then((claimed) => {
+        if (claimed) window.close()
+        notify.success(claimed ? 'Kite login successful. You can close this tab.' : 'Kite login successful.')
+      })
     } else if (error) {
       notify.error(`Login failed: ${error}`)
       setSearchParams({})
