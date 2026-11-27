@@ -129,6 +129,17 @@ async def load_level_overrides(db: AsyncSession) -> dict[str, dict[str, str | No
     return level_override_map((await db.execute(select(EquitySectorOverride))).scalars().all())
 
 
+async def load_amfi_lookups(db: AsyncSession) -> "_AmfiLookups":
+    """The equity classification lookups exactly as an ingest builds them, for
+    re-mapping stored disclosure books with today's taxonomy."""
+    amfi_all = (await db.execute(select(AmfiMarketCap))).scalars().all()
+    overrides = {
+        o.name_normalized: o.category
+        for o in (await db.execute(select(EquityCategoryOverride))).scalars().all()
+    }
+    return _AmfiLookups(amfi_all, overrides, await load_level_overrides(db))
+
+
 def _find_amfi_xlsx() -> Path | None:
     if not BREAKDOWN_DIR.exists():
         return None
@@ -617,6 +628,7 @@ def _map_scheme_holdings(
             rows.append({
                 "name": name, "holding_type": "Arbitrage", "category": "Equity - Arbitrage",
                 "isin": isin, **lookups.resolve_levels(name, isin), "market_value": matched,
+                "quantity": None,
             })
         if residual > 1e-6:
             if long_mv > short_mv:
@@ -626,11 +638,13 @@ def _map_scheme_holdings(
                 rows.append({
                     "name": name, "holding_type": "Equity", "category": category,
                     "isin": isin, **lookups.resolve_levels(name, isin), "market_value": residual,
+                    "quantity": None,
                 })
             else:
                 rows.append({
                     "name": name, "holding_type": "Derivative", "category": "Derivatives - Leveraged",
                     "isin": isin, **lookups.resolve_levels(name, isin), "market_value": -residual,
+                    "quantity": None,
                 })
 
     for h in plain:
@@ -676,6 +690,7 @@ def _map_scheme_holdings(
         rows.append({
             "name": name, "holding_type": holding_type, "category": category,
             "isin": holding_isin, **levels, "market_value": market_value,
+            "quantity": h.get("quantity"),
         })
 
     return rows, unmatched

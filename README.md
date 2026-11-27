@@ -76,6 +76,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py
 │   │   ├── manual_assets.py
 │   │   ├── mf.py
+│   │   ├── mf_changes.py        # FundChanges response (latest vs previous disclosure)
 │   │   ├── jobs.py              # JobStartRequest, JobSummary, JobDetail
 │   │   └── settings.py
 │   ├── models/
@@ -88,7 +89,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py              # KiteConfig (singleton) + KiteSyncLog
 │   │   ├── import_log.py        # CSVImportLog — per-batch import metadata
 │   │   ├── manual_asset.py      # ManualAsset — FD / PPF / NPS / Cash / USD_CASH / FOREIGN_EQ
-│   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown + EquityCategoryOverride + EquitySectorOverride + NseIndustryClassification
+│   │   ├── mf_breakdown.py      # AmfiMarketCap + MfSchemeBreakdown + MfDisclosureBook + EquityCategoryOverride + EquitySectorOverride + NseIndustryClassification
 │   │   ├── allocation_target.py # AllocationTarget — equity cap allocation targets
 │   │   ├── app_config.py        # AppConfig — KV store for cached config (USDINR rate)
 │   │   ├── background_job.py    # BackgroundJob — one run of a header job; doubles as the notification record
@@ -118,6 +119,8 @@ portfolio-mac-arm/
 │       ├── amfi_nav.py          # AMFI daily NAV feed → MF last_price
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
+│       ├── disclosure_books.py  # Raw OpenFin book history for held active equity funds (3-month window)
+│       ├── disclosure_changes.py # Latest-vs-previous bucket changes per fund + roll-up, split into trades and prices
 │       ├── background_jobs.py   # Server-owned asyncio job tasks (one per kind), DB persistence, read/delete/purge rules
 │       ├── job_runners.py       # Body and summary line of each job kind
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
@@ -139,7 +142,7 @@ portfolio-mac-arm/
 │   ├── components.json          # shadcn CLI config (style new-york, base colour neutral)
 │   └── src/
 │       ├── main.tsx             # QueryClientProvider, PrivacyProvider, BrowserRouter, sonner Toaster
-│       ├── App.tsx              # Routes (14 pages under AppLayout)
+│       ├── App.tsx              # Routes (15 pages under AppLayout)
 │       ├── api/                 # Typed fetch client + per-domain React Query hooks
 │       │   ├── client.ts        # request<T>() wrapper; VITE_API_BASE_URL
 │       │   ├── portfolio.ts
@@ -157,7 +160,7 @@ portfolio-mac-arm/
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1 (jobs.ts: job kinds, statuses, result shapes)
 │       ├── components/
 │       │   ├── ui/              # shadcn/ui primitives — CLI-managed, never hand-edited
-│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (14 routes)
+│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (15 routes)
 │       │   ├── AppSidebar.tsx   # Nav groups/links; badge on Policy when actions pending
 │       │   ├── PageShell.tsx    # Shared wide/narrow desktop route canvas
 │       │   ├── ContentHeader.tsx # Unboxed subsection heading and actions
@@ -166,6 +169,9 @@ portfolio-mac-arm/
 │       │   ├── MetricCard.tsx   # Dashboard and summary metric surface
 │       │   ├── EmptyState.tsx   # Selector-driven route empty state
 │       │   ├── ConfirmActionButton.tsx # Confirmed action control with destructive final confirmation
+│       │   ├── ChangeBar.tsx    # Zero-centred diverging bar (solid trades, hatched prices) + ChangeLegend
+│       │   ├── ChangeTable.tsx  # Before/after/Δ/trades/prices table on DataTable, hides unchanged rows
+│       │   ├── FundChangePanels.tsx # Asset class, market cap and NSE-level (toggle) change tables
 │       │   ├── DonutChart.tsx   # recharts Pie/Cell, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
@@ -183,7 +189,8 @@ portfolio-mac-arm/
 │       │   ├── NavHistory.tsx   # Portfolio value + Unit NAV charts, OHLC fetch SSE, manual OHLC upload, manually tracked NAV funds (no sync sections — those are header jobs)
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset when the header Disclosures button runs), sub-1% Others clubbing on Basic), Composition
 │       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel; not in the sidebar — opened by the header Disclosures button or its notification
-│       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
+│       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table; Holdings | Changes tabs for active equity funds
+│       │   ├── FundChanges.tsx  # Latest-vs-previous disclosure changes: summary cards, value-weighted roll-up, per-fund accordion
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
 │       │   ├── NavChart.tsx     # Fund NAV area chart + compare mode (normalised % change)
@@ -203,7 +210,8 @@ portfolio-mac-arm/
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
 │       │   └── PrivacyProvider.tsx # Privacy-mode provider
 │       └── lib/
-│           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor, relativeTime
+│           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor, signedPp, dayMonth, relativeTime
+│           ├── constants.ts     # LEVEL_OPTIONS — the four NSE level choices
 │           ├── jobs.ts          # JOB_LABELS, JOB_INVALIDATES, isJobActive, jobHref
 │           ├── kiteLogin.ts     # openKiteLogin/handBackKiteLogin — BroadcastChannel handoff that closes the Kite login tab
 │           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
@@ -280,6 +288,9 @@ AMFI's semi-annual company → market-cap classification (Large / Mid / Small Ca
 
 ### MfSchemeBreakdown
 Per-holding breakdown of each MF/ETF scheme. Fetched from the OpenFin disclosure API. Fields: `scheme_isin`, `name`, `holding_type`, `holdings_pct`, `market_value` (INR, fund-level), `category`, `isin` (the holding's own ISIN, from OpenFin), `sector`, `macro_sector`, `industry`, `basic_industry`, `as_of` (disclosure date, shared by all rows for a scheme — compared against the catalog's `latest_as_of` to decide which schemes need refetching; a stale scheme's rows are fully deleted and reinserted, never merged).
+
+### MfDisclosureBook
+Raw OpenFin holdings books, one row per fund and disclosure date, stored exactly as the API returned them. Fields: `scheme_isin`, `amfi_code`, `amfi_category`, `as_of`, `meta` (JSONB), `holdings` (JSONB), `fetched_at`. Unique on `(scheme_isin, as_of)`. Kept only for held active equity funds (OpenFin category containing `Equity Scheme`) and only for the last 3 calendar months counted from each fund's newest disclosure.
 
 ### NseIndustryClassification
 NSE's four-level industry taxonomy (Macro-Economic Sector → Sector → Industry → Basic Industry), one row per ISIN, fetched from NSE's live quote API. **ISIN is the only identifier used to join classifications to holdings anywhere in this pipeline** — no company-name or ticker matching. Fields: `isin` (PK), `symbol`, `company_name`, `series`, `macro_sector`, `sector`, `industry`, `basic_industry`, `status` (`CLASSIFIED` / `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH`), `error_message`, `first_seen_at`, `updated_at`. Rows are never deleted — a company's classification is permanent reference data. A `CLASSIFIED` row is never re-fetched; only the other three statuses are retried on the next ingest.
@@ -384,6 +395,7 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `ki
 | `GET /sector-list` | Selectable values at a taxonomy level (`?level=` as above), unioning what's currently held with NSE's full classified taxonomy |
 | `PATCH /sector-classify-batch` | Manual taxonomy fix, `[{name, level, value}]` → `{updated, rows_updated}`; the chosen value cascades up NSE's hierarchy and merges into `equity_sector_override` |
 | `GET /schemes` | Schemes with breakdown data |
+| `GET /changes` | Per active equity fund and value-weighted roll-up: asset class, market cap and NSE-level weight changes between the two latest stored books, each split into trades and prices |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list (with each holding’s NSE macro/sector/industry/basic levels) + market-cap/asset-class and sector summaries |
 
 The per-fund sector view collapses debt, cash, commodities and arbitrage/derivative holdings into a single `Non-Equity` slice, which is why an arbitrage fund's sector donut renders as almost entirely grey.
@@ -431,7 +443,7 @@ The per-fund sector view collapses debt, cash, commodities and arbitrage/derivat
 | `DELETE /trades` | Clear trades, holdings, import logs |
 | `DELETE /price-history` | Clear Kite OHLC price history |
 | `DELETE /nav-history` | Clear MF/ETF NAV history |
-| `DELETE /mf-breakdown` | Clear breakdown + AMFI classification |
+| `DELETE /mf-breakdown` | Clear breakdown, AMFI classification and disclosure history books |
 | `DELETE /manual-assets` | Clear manual assets |
 | `GET /db-info` | DB host, port, name |
 
@@ -452,13 +464,14 @@ AMFI daily feed → match MF holdings by ISIN → update `last_price`. Separatel
 Runs as the `kite_price_history` job. If the Kite token is invalid, the job enters `waiting_login`, polls every 2s for up to 10 minutes for a valid token, then runs; on timeout it fails. Not configured → fails immediately. Then, for each stock/ETF/bond: resolve `kite_instrument_token` → fetch full OHLC in 1800-day windows from 2015-01-01 (Kite's earliest available day-candle data) → upsert → log progress. Backward gap-fill runs automatically if stored history doesn't reach the floor date. Halt (`POST /jobs/{id}/cancel`) stops mid-run and the job finishes `done`; cancelling while waiting for login fails it with "Cancelled". After equity sync, also syncs index instruments (Nifty 50, Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smlcap 250, India VIX) using segment `"INDICES"` — these are created as synthetic instruments in `price_history` without a holding. Finally refreshes LTPs and recomputes XIRR. It is started from the **Kite prices** button in the header (hidden in demo mode); when the cached Kite status says the token is invalid, the click also opens the Kite login page in a new tab, and the job dialog shows a "Login with Kite" button while waiting. When that login tab lands back on `/kite?login=success`, it tells the tab that opened it over a `BroadcastChannel` (`src/lib/kiteLogin.ts`), which refreshes Kite status while the login tab closes itself; if no opener answers within 500ms, or the browser refuses to close the tab, it stays on the Kite page with a success toast.
 
 ### MF Breakdown
-The header **Disclosures** button runs three steps in order as the `mf_disclosures` background job (first run classifies ~750 ISINs, ~6 min; later runs only query ISINs new to the portfolio):
+The header **Disclosures** button runs four steps in order as the `mf_disclosures` background job (first run classifies ~750 ISINs, ~6 min; later runs only query ISINs new to the portfolio):
 
 1. **AMFI sync.** Load the local xlsx → enrich each company's `sector`/`macro_sector`/`industry`/`basic_industry` by ISIN from `nse_industry_classification` → write `company_master.csv`.
 2. **OpenFin disclosures.** Fetch the OpenFin catalog (`GET /api/v1/catalog`) → for each held MF/ETF, compare the catalog's `latest_as_of` against the locally stored `as_of`; only funds with a newer disclosure are re-fetched (`GET /api/v1/holdings/{amfi_code}?as_of=...`). A stale scheme's local rows are deleted and reinserted from the fresh disclosure — a full per-scheme replace, never a row-level upsert. Each holding's `market_value` (unit-converted to INR via `meta.market_value_unit`) drives a two-pass re-normalization: total the fund's holdings, then set `holdings_pct = market_value / total × 100`. Each row also records the holding's own `isin`, straight from OpenFin.
-3. **NSE classification.** Collect every ISIN held directly or inside a fund → skip any already `CLASSIFIED` → resolve the rest to an NSE symbol via the equity master and fetch the four-level taxonomy → verify the response's ISIN matches the one queried (mismatches are recorded, never applied) → write results to `nse_industry_classification` → backfill the four levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. The backfill never writes a blank level over one already stored, so a `CLASSIFIED` row with gaps can't erase a manual fix. A `CLASSIFIED` row is permanent and never re-fetched; `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH` rows are retried on every subsequent refresh, since a company that NSE currently has no data for could get classified later — a handful of names can stay in this retry state indefinitely if NSE genuinely never returns taxonomy data for them. This step also runs the manual-override auto-prune: any level of `equity_sector_override` that the automatic pipeline can now resolve on its own is cleared, and a row left with nothing set is deleted.
+3. **Disclosure history.** For each held active equity fund, fetch every disclosure date in the catalog's `available_as_of` that falls within 3 calendar months of the newest one and isn't stored yet → insert the raw book into `mf_disclosure_book` (never updated afterwards) → prune older books, and all books of funds no longer held or no longer active equity. A book served with a different `as_of` than requested is not stored and is retried next run; if the catalog fetch fails, nothing is pruned.
+4. **NSE classification.** Collect every ISIN held directly or inside a fund, plus equity ISINs in the stored books → skip any already `CLASSIFIED` → resolve the rest to an NSE symbol via the equity master and fetch the four-level taxonomy → verify the response's ISIN matches the one queried (mismatches are recorded, never applied) → write results to `nse_industry_classification` → backfill the four levels onto `amfi_market_cap` and `mf_scheme_breakdown` by ISIN. The backfill never writes a blank level over one already stored, so a `CLASSIFIED` row with gaps can't erase a manual fix. A `CLASSIFIED` row is permanent and never re-fetched; `UNCLASSIFIED` / `API_ERROR` / `ISIN_MISMATCH` rows are retried on every subsequent refresh, since a company that NSE currently has no data for could get classified later — a handful of names can stay in this retry state indefinitely if NSE genuinely never returns taxonomy data for them. This step also runs the manual-override auto-prune: any level of `equity_sector_override` that the automatic pipeline can now resolve on its own is cleared, and a row left with nothing set is deleted.
 
-Steps 1 and 2 must complete before step 3, since step 3's backfill needs both a populated `amfi_market_cap` and `isin` values on `mf_scheme_breakdown`. First run classifies roughly 750 ISINs (~6 minutes); later runs only query ISINs new to the portfolio, typically seconds.
+Steps 1 and 2 must complete before step 4, since step 4's backfill needs both a populated `amfi_market_cap` and `isin` values on `mf_scheme_breakdown`. First run classifies roughly 750 ISINs (~6 minutes); later runs only query ISINs new to the portfolio, typically seconds.
 
 Classification is per-holding, driven by the API's `holding_type`/`section`, not per-fund: funds in `FOREIGN_FUND_ISINS` (e.g. MON100/Nasdaq 100) classify all their equity as `Equity - Foreign`, bypassing AMFI lookup; holdings matching names in `FOREIGN_COMPANY_SUBSTRINGS` (Alphabet, Amazon, Apple, Meta, Microsoft) are always `Equity - Foreign` regardless of fund; a non-`IN` ISIN prefix is also treated as foreign; other funds use alias → ISIN → name match → fuzzy → `EquityCategoryOverride`. Unmatched holdings shown in post-ingest form. Holdings are grouped across disclosures by `normalize_company_name`, which also folds rights entitlements ("… Ltd - Rights") and a stray share-class letter after the suffix ("… Ltd. A") into the parent company.
 
@@ -474,6 +487,17 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 `Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
 
 **Disclosures page** (`/portfolio/disclosures/:jobId?`): shows the given run, or the newest `mf_disclosures` run when no id is in the URL, with its live log and result. Viewing a finished run marks it read. Above it, a tagging panel lists every stock still `Unclassified Equity`, read from `GET /unclassified-equities` (so it appears even when the run says "All schemes up to date"); tagging a stock applies to every fund that holds it. Clicking Disclosures also clears the Sector tab's remembered dismissals.
+
+### Fund Changes
+`GET /api/v1/mf-breakdown/changes` compares, for each active equity fund, its latest stored disclosure book with the one before it. Weight changes are aggregated by asset class, market cap and the four NSE levels, all as percentage points of total fund NAV (cash included), so every dimension reconciles.
+
+- **Re-classification on read.** Books are stored raw. Both sides are mapped with today's AMFI categories, manual overrides and NSE levels, so a re-categorisation or a manual tag saved between disclosures never shows up as a change.
+- **Trades vs prices.** The do-nothing portfolio values the previous share counts at the latest prices (exits, cash and other quantity-less rows are held at their previous value). `trade = latest weight − do-nothing weight` is what the manager did; `drift = do-nothing weight − previous weight` is what prices did. Each sums to zero across a dimension, and a proportional inflow counts as no trade. A position is identified by holding type plus ISIN (normalised name when there is no ISIN).
+- **Roll-up.** Compared funds are weighted by your current holding value on both sides, so your own buys and sells never appear. `trade_value` is `trade_pp / 100 × holding value`. A fund with only one stored book has no dimensions and is left out of the roll-up.
+
+**Fund Detail Changes tab.** Selecting an active equity fund with a stored book adds **Holdings | Changes** tabs (remembered under `fund-detail-tab`). Changes shows asset class, market cap and an NSE-level table (Macro | Sector | Industry | Basic, remembered under `fund-changes-level`). Each row has a zero-centred bar — trades solid green or red, prices hatched grey — and rows where both `|trade|` and `|Δ|` are under 0.05pp are hidden behind a "Show N unchanged" footer. Other funds show the page without tabs.
+
+**Fund Changes page** (`/portfolio/fund-changes`, sidebar → Research). Four summary cards (funds compared, biggest sector add and cut by trades, equity trades with cash), the roll-up panels, then one collapsible panel per fund ordered by holding value; a fund with no previous disclosure is listed but can't be expanded. The NSE-level choice is shared by every panel and with Fund Detail. When funds don't all share the same two dates, the roll-up columns read `Before %` / `After %`. With no stored books (including demo mode) the page shows an empty state.
 
 ### Background jobs & notifications
 Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).

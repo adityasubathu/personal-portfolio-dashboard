@@ -7,6 +7,7 @@ import type {
   CategoryCompositionItem,
   ClassificationLevel,
   ClassifyResult,
+  FundChanges,
   RebalancePlan,
   SchemeBreakdown,
   SchemeListItem,
@@ -28,6 +29,14 @@ export const breakdownKeys = {
   schemes: ['mf-breakdown', 'schemes'] as const,
   unclassifiedEquities: ['mf-breakdown', 'unclassified-equities'] as const,
   scheme: (isin: string) => ['mf-breakdown', 'scheme', isin] as const,
+  changes: ['mf-breakdown', 'changes'] as const,
+}
+
+export function useFundChanges() {
+  return useQuery({
+    queryKey: breakdownKeys.changes,
+    queryFn: () => request<FundChanges>('/api/v1/mf-breakdown/changes'),
+  })
 }
 
 export function useBreakdownChart() {

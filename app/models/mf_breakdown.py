@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -108,3 +109,23 @@ class NseIndustryClassification(Base):
 
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist, onupdate=now_ist)
+
+
+class MfDisclosureBook(Base):
+    """One raw OpenFin holdings book per (fund, disclosure date), stored exactly as
+    the API returned it. Written by app/services/disclosure_books.py, which keeps
+    only the last three calendar months per active equity fund; re-classified on
+    read by app/services/disclosure_changes.py."""
+    __tablename__ = "mf_disclosure_book"
+    __table_args__ = (
+        UniqueConstraint("scheme_isin", "as_of", name="uq_mf_disclosure_book_scheme_as_of"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scheme_isin: Mapped[str] = mapped_column(String(12), index=True)
+    amfi_code: Mapped[str] = mapped_column(String(20))
+    amfi_category: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    as_of: Mapped[date] = mapped_column(Date)
+    meta: Mapped[dict] = mapped_column(JSONB)
+    holdings: Mapped[list] = mapped_column(JSONB)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_ist)

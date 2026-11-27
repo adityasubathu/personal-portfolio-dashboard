@@ -1,11 +1,11 @@
 import { Fragment, useState } from 'react'
-import { Landmark, Check, ChevronsUpDown } from 'lucide-react'
-import { useAvailableSchemes, useSchemeBreakdown } from '../api/mfBreakdown'
+import { ArrowLeftRight, Landmark, Check, ChevronsUpDown } from 'lucide-react'
+import { useAvailableSchemes, useFundChanges, useSchemeBreakdown } from '../api/mfBreakdown'
 import { DonutChart } from '../components/DonutChart'
 import { MoneyText } from '../components/MoneyText'
 import { usePersistentState } from '../hooks/usePersistentState'
-import { shortDate, shortDateTime } from '../lib/format'
-import type { SchemeHolding, SchemeListItem } from '../types/mfBreakdown'
+import { dayMonth, shortDate, shortDateTime } from '../lib/format'
+import type { ClassificationLevel, SchemeHolding, SchemeListItem } from '../types/mfBreakdown'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '@/components/PageShell'
@@ -17,6 +17,9 @@ import { cn } from '@/lib/utils'
 import { CHIP_CLASS, type ChipColor } from '@/lib/colors'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FundChangePanels } from '@/components/FundChangePanels'
+import { ChangeLegend } from '@/components/ChangeBar'
 
 const schemeLabel = (s: SchemeListItem) => `${s.name} (${s.scheme_isin})`
 
@@ -87,75 +90,13 @@ export function FundBreakdown() {
   const sectorLabels = breakdown?.sector_summary.map((s) => s.sector) ?? []
   const sectorValues = breakdown?.sector_summary.map((s) => s.value) ?? []
 
-  return (
-    <PageShell>
-      <PageHeader
-        title="Fund Detail"
-        actions={
-          <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
-                <span className="truncate">
-                  {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
-                </span>
-                <ChevronsUpDown className="size-4 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-96 p-0">
-              <Command>
-                <CommandInput placeholder="Search fund by name or ISIN…" />
-                <CommandList>
-                  <CommandEmpty>No fund found.</CommandEmpty>
-                  <CommandGroup>
-                    {(schemes ?? []).map((s) => (
-                      <CommandItem
-                        key={s.scheme_isin}
-                        value={schemeLabel(s)}
-                        onSelect={() => {
-                          setSelectedIsin(s.scheme_isin)
-                          setOpen(false)
-                        }}
-                      >
-                        <Check className={cn('size-4', selectedIsin === s.scheme_isin ? 'opacity-100' : 'opacity-0')} />
-                        {schemeLabel(s)}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        }
-      />
+  const { data: changes } = useFundChanges()
+  const fundChange = changes?.funds.find((f) => f.scheme_isin === selectedIsin)
+  const [tab, setTab] = usePersistentState<'holdings' | 'changes'>('fund-detail-tab', 'holdings')
+  const [level, setLevel] = usePersistentState<ClassificationLevel>('fund-changes-level', 'sector')
 
-      {selectedIsin == null && (
-        <EmptyState icon={<Landmark className="size-5" />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />
-      )}
-      {isLoading && (
-        <Section>
-          <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-        </Section>
-      )}
-
-      {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
-        <div>
-          <p className="text-xs text-muted-foreground">
-            {[
-              breakdown.as_of && `Portfolio as of ${shortDate(breakdown.as_of)}`,
-              breakdown.fetched_at && `fetched ${shortDateTime(breakdown.fetched_at)}`,
-              breakdown.last_checked_at && `last checked ${shortDateTime(breakdown.last_checked_at)}`,
-            ].filter(Boolean).join(' · ')}
-          </p>
-          {breakdown.server_latest_filing && breakdown.as_of && breakdown.server_latest_filing > breakdown.as_of && (
-            <p className="text-xs text-warning">
-              Server's newest filing: {shortDate(breakdown.server_latest_filing)}
-              {breakdown.server_latest_portfolio_count != null && ` (${breakdown.server_latest_portfolio_count} funds)`}
-              {' '}— this fund hasn't filed yet
-            </p>
-          )}
-        </div>
-      )}
-
+  const holdingsContent = (
+    <>
       {breakdown && (catLabels.length > 0 || sectorLabels.length > 0) && (
         <div className="grid gap-4 xl:grid-cols-2">
           {catLabels.length > 0 && (
@@ -226,6 +167,108 @@ export function FundBreakdown() {
           </div>
         </Section>
       )}
+    </>
+  )
+
+  return (
+    <PageShell>
+      <PageHeader
+        title="Fund Detail"
+        actions={
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" role="combobox" aria-expanded={open} className="w-96 justify-between font-normal">
+                <span className="truncate">
+                  {selectedScheme ? schemeLabel(selectedScheme) : 'Search fund by name or ISIN…'}
+                </span>
+                <ChevronsUpDown className="size-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-96 p-0">
+              <Command>
+                <CommandInput placeholder="Search fund by name or ISIN…" />
+                <CommandList>
+                  <CommandEmpty>No fund found.</CommandEmpty>
+                  <CommandGroup>
+                    {(schemes ?? []).map((s) => (
+                      <CommandItem
+                        key={s.scheme_isin}
+                        value={schemeLabel(s)}
+                        onSelect={() => {
+                          setSelectedIsin(s.scheme_isin)
+                          setOpen(false)
+                        }}
+                      >
+                        <Check className={cn('size-4', selectedIsin === s.scheme_isin ? 'opacity-100' : 'opacity-0')} />
+                        {schemeLabel(s)}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        }
+      />
+
+      {selectedIsin == null && (
+        <EmptyState icon={<Landmark className="size-5" />} title="Select a fund" description="Choose a fund to view its portfolio breakdown." />
+      )}
+      {isLoading && (
+        <Section>
+          <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+        </Section>
+      )}
+
+      {breakdown && (breakdown.as_of || breakdown.fetched_at || breakdown.last_checked_at) && (
+        <div>
+          <p className="text-xs text-muted-foreground">
+            {[
+              breakdown.as_of && `Portfolio as of ${shortDate(breakdown.as_of)}`,
+              breakdown.fetched_at && `fetched ${shortDateTime(breakdown.fetched_at)}`,
+              breakdown.last_checked_at && `last checked ${shortDateTime(breakdown.last_checked_at)}`,
+            ].filter(Boolean).join(' · ')}
+          </p>
+          {breakdown.server_latest_filing && breakdown.as_of && breakdown.server_latest_filing > breakdown.as_of && (
+            <p className="text-xs text-warning">
+              Server's newest filing: {shortDate(breakdown.server_latest_filing)}
+              {breakdown.server_latest_portfolio_count != null && ` (${breakdown.server_latest_portfolio_count} funds)`}
+              {' '}— this fund hasn't filed yet
+            </p>
+          )}
+        </div>
+      )}
+
+      {fundChange ? (
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'holdings' | 'changes')} className="gap-4">
+          <TabsList>
+            <TabsTrigger value="holdings">Holdings</TabsTrigger>
+            <TabsTrigger value="changes">Changes</TabsTrigger>
+          </TabsList>
+          <TabsContent value="holdings" className="space-y-4">{holdingsContent}</TabsContent>
+          <TabsContent value="changes" className="space-y-4">
+            {fundChange.dimensions && fundChange.previous_as_of ? (
+              <>
+                <ChangeLegend />
+                <FundChangePanels
+                  dimensions={fundChange.dimensions}
+                  beforeLabel={dayMonth(fundChange.previous_as_of)}
+                  afterLabel={dayMonth(fundChange.latest_as_of)}
+                  level={level}
+                  onLevelChange={setLevel}
+                  showValue
+                />
+              </>
+            ) : (
+              <EmptyState
+                icon={<ArrowLeftRight className="size-5" />}
+                title="No previous disclosure yet"
+                description="Changes appear once two monthly disclosures of this fund are stored — run Disclosures from the header."
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : holdingsContent}
     </PageShell>
   )
 }

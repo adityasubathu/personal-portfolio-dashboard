@@ -76,3 +76,12 @@ export function relativeTime(iso: string): string {
   if (hours < 24) return `${hours}h ago`
   return `${Math.floor(hours / 24)}d ago`
 }
+
+export function signedPp(value: number): string {
+  if (Math.abs(value) < 0.005) return '0.00'
+  return `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`
+}
+
+export function dayMonth(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}

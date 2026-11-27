@@ -7,6 +7,7 @@ from typing import Awaitable, Callable
 from app.database import AsyncSessionLocal
 from app.services import kite_sync
 from app.services.amfi_nav import sync_mf_navs
+from app.services.disclosure_books import sync_disclosure_books
 from app.services.kite_historical import cancel_sync, reset_cancel, sync_index_history, sync_price_history
 from app.services.mf_ingest import ingest_from_openfin, sync_amfi_market_cap
 from app.services.mfapi_nav import sync_nav_history
@@ -113,11 +114,13 @@ async def run_mf_disclosures(params: dict, on_progress: OnProgress, set_status: 
         amfi = await sync_amfi_market_cap(db, on_progress=on_progress)
         if "error" not in amfi:
             ingest = await ingest_from_openfin(db, on_progress=on_progress)
+            books = await sync_disclosure_books(db, on_progress=on_progress)
             nse = await refresh_held_classifications(db, on_progress=on_progress)
         else:
             ingest = {"error": "Skipped — AMFI classification not loaded"}
+            books = {"error": "Skipped — AMFI classification not loaded"}
             nse = {"error": "Skipped — AMFI classification not loaded"}
-    return {"amfi": amfi, "ingest": ingest, "nse": nse}
+    return {"amfi": amfi, "ingest": ingest, "books": books, "nse": nse}
 
 
 def summarize_mf_disclosures(result: dict) -> str:

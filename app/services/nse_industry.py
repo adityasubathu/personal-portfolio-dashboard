@@ -150,7 +150,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.holding import Holding
 from app.models.instrument import Instrument
-from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown, NseIndustryClassification
+from app.models.mf_breakdown import AmfiMarketCap, MfDisclosureBook, MfSchemeBreakdown, NseIndustryClassification
 from app.time_util import now_ist
 
 # Categories whose rows are a real Indian listed company. Equity - Foreign is
@@ -200,6 +200,14 @@ async def _held_isins(db: AsyncSession) -> dict[str, str]:
     for isin, name in rows.all():
         if isin.startswith("IN"):
             held.setdefault(isin, name)
+
+    # Older stored disclosure books can hold stocks a fund has since exited; they
+    # need classifying too so latest-vs-previous comparisons have both sides.
+    for (holdings,) in (await db.execute(select(MfDisclosureBook.holdings))).all():
+        for h in holdings:
+            isin = h.get("isin")
+            if h.get("holding_type") == "equity" and isin and isin.startswith("IN"):
+                held.setdefault(isin, h.get("instrument") or isin)
 
     rows = await db.execute(
         select(Instrument.isin, Instrument.name, Instrument.tradingsymbol)
