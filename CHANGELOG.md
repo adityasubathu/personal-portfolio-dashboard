@@ -4,7 +4,7 @@
 - The Disclosures job now stores the last 3 months of raw portfolios for each held active equity fund, and classifies stocks that appear only in older ones. (2026-11-27-23-15-31 · f16ec3e)
 - Added `/api/v1/mf-breakdown/changes`: how each active equity fund moved between its two latest disclosures, split into manager trades and price drift, with a value-weighted roll-up. (2026-11-27-23-16-30 · 6592b5e)
 - Fund Detail now has a Holdings | Changes tab for active equity funds, showing asset class, market cap and industry moves with trade and price bars. (2026-11-27-23-18-03 · cec5bb6)
-- Added the Fund Changes page (sidebar → Research): summary cards, a roll-up across your active equity funds weighted by holding value, and a panel per fund. (2026-11-27-23-19-47)
+- Added the Fund Changes page (sidebar → Research): summary cards, a roll-up across your active equity funds weighted by holding value, and a panel per fund. (2026-11-27-23-19-47 · 965a44d)
 
 ## 2026-11-22-14-53-55 — Kite login tab closes itself
 - The Kite login tab opened by Kite prices (or the job dialog's Login with Kite button) now closes itself after login and returns you to the tab that started it, which refreshes Kite status and shows the success toast. (2026-11-22-14-53-55 · d26eed9)
