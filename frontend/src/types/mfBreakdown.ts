@@ -211,3 +211,45 @@ export interface IngestDonePayload {
   }
   error?: string
 }
+
+export interface ChangeBucket {
+  label: string
+  before_pct: number
+  after_pct: number
+  delta_pp: number
+  trade_pp: number
+  drift_pp: number
+  trade_value: number
+}
+
+export interface ChangeDimensions {
+  asset_class: ChangeBucket[]
+  market_cap: ChangeBucket[]
+  macro_sector: ChangeBucket[]
+  sector: ChangeBucket[]
+  industry: ChangeBucket[]
+  basic_industry: ChangeBucket[]
+}
+
+export interface FundChange {
+  scheme_isin: string
+  name: string
+  fund_type: string | null
+  latest_as_of: string
+  previous_as_of: string | null
+  holding_value: number
+  dimensions: ChangeDimensions | null
+}
+
+export interface ChangeRollup {
+  fund_count: number
+  total_value: number
+  latest_as_of: string[]
+  previous_as_of: string[]
+  dimensions: ChangeDimensions
+}
+
+export interface FundChanges {
+  funds: FundChange[]
+  rollup: ChangeRollup | null
+}

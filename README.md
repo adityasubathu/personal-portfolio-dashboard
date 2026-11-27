@@ -76,6 +76,7 @@ portfolio-mac-arm/
 │   │   ├── kite.py
 │   │   ├── manual_assets.py
 │   │   ├── mf.py
+│   │   ├── mf_changes.py        # FundChanges response (latest vs previous disclosure)
 │   │   ├── jobs.py              # JobStartRequest, JobSummary, JobDetail
 │   │   └── settings.py
 │   ├── models/
@@ -119,6 +120,7 @@ portfolio-mac-arm/
 │       ├── mfapi_nav.py         # mfapi.in historical NAV per scheme → nav_history table
 │       ├── mf_ingest.py         # AMFI xlsx parse + OpenFin disclosure ingest, company-name normalisation
 │       ├── disclosure_books.py  # Raw OpenFin book history for held active equity funds (3-month window)
+│       ├── disclosure_changes.py # Latest-vs-previous bucket changes per fund + roll-up, split into trades and prices
 │       ├── background_jobs.py   # Server-owned asyncio job tasks (one per kind), DB persistence, read/delete/purge rules
 │       ├── job_runners.py       # Body and summary line of each job kind
 │       ├── allocation.py        # Category/asset-class totals, targets, comparison, rebalance plan
@@ -388,6 +390,7 @@ One run of a long operation (`kind`: `mf_nav_history`, `kite_price_history`, `ki
 | `GET /sector-list` | Selectable values at a taxonomy level (`?level=` as above), unioning what's currently held with NSE's full classified taxonomy |
 | `PATCH /sector-classify-batch` | Manual taxonomy fix, `[{name, level, value}]` → `{updated, rows_updated}`; the chosen value cascades up NSE's hierarchy and merges into `equity_sector_override` |
 | `GET /schemes` | Schemes with breakdown data |
+| `GET /changes` | Per active equity fund and value-weighted roll-up: asset class, market cap and NSE-level weight changes between the two latest stored books, each split into trades and prices |
 | `GET /scheme/{scheme_isin}` | Per-fund holding list (with each holding’s NSE macro/sector/industry/basic levels) + market-cap/asset-class and sector summaries |
 
 The per-fund sector view collapses debt, cash, commodities and arbitrage/derivative holdings into a single `Non-Equity` slice, which is why an arbitrage fund's sector donut renders as almost entirely grey.
@@ -479,6 +482,13 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 `Equity - Foreign` target is configured in the asset class targets section and stored in `AllocationTarget`.
 
 **Disclosures page** (`/portfolio/disclosures/:jobId?`): shows the given run, or the newest `mf_disclosures` run when no id is in the URL, with its live log and result. Viewing a finished run marks it read. Above it, a tagging panel lists every stock still `Unclassified Equity`, read from `GET /unclassified-equities` (so it appears even when the run says "All schemes up to date"); tagging a stock applies to every fund that holds it. Clicking Disclosures also clears the Sector tab's remembered dismissals.
+
+### Fund Changes
+`GET /api/v1/mf-breakdown/changes` compares, for each active equity fund, its latest stored disclosure book with the one before it. Weight changes are aggregated by asset class, market cap and the four NSE levels, all as percentage points of total fund NAV (cash included), so every dimension reconciles.
+
+- **Re-classification on read.** Books are stored raw. Both sides are mapped with today's AMFI categories, manual overrides and NSE levels, so a re-categorisation or a manual tag saved between disclosures never shows up as a change.
+- **Trades vs prices.** The do-nothing portfolio values the previous share counts at the latest prices (exits, cash and other quantity-less rows are held at their previous value). `trade = latest weight − do-nothing weight` is what the manager did; `drift = do-nothing weight − previous weight` is what prices did. Each sums to zero across a dimension, and a proportional inflow counts as no trade. A position is identified by holding type plus ISIN (normalised name when there is no ISIN).
+- **Roll-up.** Compared funds are weighted by your current holding value on both sides, so your own buys and sells never appear. `trade_value` is `trade_pp / 100 × holding value`. A fund with only one stored book has no dimensions and is left out of the roll-up.
 
 ### Background jobs & notifications
 Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).

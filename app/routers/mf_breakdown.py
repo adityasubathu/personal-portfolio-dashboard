@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.mf_breakdown import EquityCategoryOverride, MfSchemeBreakdown
+from app.schemas.mf_changes import FundChanges
 from app.services.allocation import (
     get_allocation_comparison,
     get_asset_class_comparison,
@@ -24,6 +25,7 @@ from app.services.composition import (
     get_unclassified_equity_names,
     save_sector_overrides,
 )
+from app.services.disclosure_changes import get_fund_changes
 from app.services.mf_ingest import normalize_company_name
 from app.time_util import now_ist
 
@@ -170,6 +172,11 @@ async def sector_stock_breakdown(level: str = "sector", db: AsyncSession = Depen
 async def schemes(db: AsyncSession = Depends(get_db)):
     data = await get_available_schemes(db)
     return JSONResponse(data)
+
+
+@router.get("/changes", response_model=FundChanges)
+async def fund_changes(db: AsyncSession = Depends(get_db)):
+    return await get_fund_changes(db)
 
 
 @router.get("/scheme/{scheme_isin}")
