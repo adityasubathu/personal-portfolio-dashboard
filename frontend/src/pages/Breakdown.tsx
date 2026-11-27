@@ -32,14 +32,8 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { categoryColor, sectorColor } from '../lib/colors'
 import { inrCompact } from '../lib/format'
+import { LEVEL_OPTIONS } from '@/lib/constants'
 import type { ClassificationLevel, RebalanceBucket } from '../types/mfBreakdown'
-
-const LEVEL_OPTIONS: Array<{ value: ClassificationLevel; label: string }> = [
-  { value: 'macro_sector', label: 'Macro' },
-  { value: 'sector', label: 'Sector' },
-  { value: 'industry', label: 'Industry' },
-  { value: 'basic_industry', label: 'Basic' },
-]
 
 const OTHERS_LABEL = 'Others'
 const OTHERS_THRESHOLD_PCT = 1

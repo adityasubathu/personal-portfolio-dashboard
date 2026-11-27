@@ -169,6 +169,9 @@ portfolio-mac-arm/
 │       │   ├── MetricCard.tsx   # Dashboard and summary metric surface
 │       │   ├── EmptyState.tsx   # Selector-driven route empty state
 │       │   ├── ConfirmActionButton.tsx # Confirmed action control with destructive final confirmation
+│       │   ├── ChangeBar.tsx    # Zero-centred diverging bar (solid trades, hatched prices) + ChangeLegend
+│       │   ├── ChangeTable.tsx  # Before/after/Δ/trades/prices table on DataTable, hides unchanged rows
+│       │   ├── FundChangePanels.tsx # Asset class, market cap and NSE-level (toggle) change tables
 │       │   ├── DonutChart.tsx   # recharts Pie/Cell, category/sector color maps, custom legend
 │       │   ├── LwChart.tsx      # lightweight-charts wrapper — area/candle/line, drag-resize, persisted height
 │       │   ├── DataTable.tsx    # Sortable table with optional section headers and heatmap cells
@@ -186,7 +189,7 @@ portfolio-mac-arm/
 │       │   ├── NavHistory.tsx   # Portfolio value + Unit NAV charts, OHLC fetch SSE, manual OHLC upload, manually tracked NAV funds (no sync sections — those are header jobs)
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset when the header Disclosures button runs), sub-1% Others clubbing on Basic), Composition
 │       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel; not in the sidebar — opened by the header Disclosures button or its notification
-│       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table
+│       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table; Holdings | Changes tabs for active equity funds
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
 │       │   ├── NavChart.tsx     # Fund NAV area chart + compare mode (normalised % change)
@@ -206,7 +209,8 @@ portfolio-mac-arm/
 │       │   ├── usePrivacy.ts    # Privacy hook/context — masks ₹ amounts across the app
 │       │   └── PrivacyProvider.tsx # Privacy-mode provider
 │       └── lib/
-│           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor, relativeTime
+│           ├── format.ts        # inrCompact, inr, pct, heatmapBg, gainColor, signedPp, dayMonth, relativeTime
+│           ├── constants.ts     # LEVEL_OPTIONS — the four NSE level choices
 │           ├── jobs.ts          # JOB_LABELS, JOB_INVALIDATES, isJobActive, jobHref
 │           ├── kiteLogin.ts     # openKiteLogin/handBackKiteLogin — BroadcastChannel handoff that closes the Kite login tab
 │           ├── colors.ts        # CATEGORY_COLORS, sectorColor(), categoryColor(), CHIP_CLASS/chipClass()
@@ -489,6 +493,8 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 - **Re-classification on read.** Books are stored raw. Both sides are mapped with today's AMFI categories, manual overrides and NSE levels, so a re-categorisation or a manual tag saved between disclosures never shows up as a change.
 - **Trades vs prices.** The do-nothing portfolio values the previous share counts at the latest prices (exits, cash and other quantity-less rows are held at their previous value). `trade = latest weight − do-nothing weight` is what the manager did; `drift = do-nothing weight − previous weight` is what prices did. Each sums to zero across a dimension, and a proportional inflow counts as no trade. A position is identified by holding type plus ISIN (normalised name when there is no ISIN).
 - **Roll-up.** Compared funds are weighted by your current holding value on both sides, so your own buys and sells never appear. `trade_value` is `trade_pp / 100 × holding value`. A fund with only one stored book has no dimensions and is left out of the roll-up.
+
+**Fund Detail Changes tab.** Selecting an active equity fund with a stored book adds **Holdings | Changes** tabs (remembered under `fund-detail-tab`). Changes shows asset class, market cap and an NSE-level table (Macro | Sector | Industry | Basic, remembered under `fund-changes-level`). Each row has a zero-centred bar — trades solid green or red, prices hatched grey — and rows where both `|trade|` and `|Δ|` are under 0.05pp are hidden behind a "Show N unchanged" footer. Other funds show the page without tabs.
 
 ### Background jobs & notifications
 Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).
