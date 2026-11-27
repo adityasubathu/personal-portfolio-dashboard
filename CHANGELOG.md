@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-27-23-15-31 — Fund disclosure changes
+- The Disclosures job now stores the last 3 months of raw portfolios for each held active equity fund, and classifies stocks that appear only in older ones. (2026-11-27-23-15-31)
+
 ## 2026-11-22-14-53-55 — Kite login tab closes itself
 - The Kite login tab opened by Kite prices (or the job dialog's Login with Kite button) now closes itself after login and returns you to the tab that started it, which refreshes Kite status and shows the success toast. (2026-11-22-14-53-55 · d26eed9)
 

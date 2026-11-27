@@ -7,7 +7,7 @@ from app.models.holding import Holding
 from app.models.import_log import CSVImportLog
 from app.models.instrument import Instrument
 from app.models.manual_asset import ManualAsset
-from app.models.mf_breakdown import AmfiMarketCap, MfSchemeBreakdown
+from app.models.mf_breakdown import AmfiMarketCap, MfDisclosureBook, MfSchemeBreakdown
 from app.models.nav_history import NavHistory
 from app.models.price_history import PriceHistory
 from app.models.trade import Trade
@@ -62,10 +62,15 @@ async def delete_nav_history(db: AsyncSession = Depends(get_db)):
 async def delete_mf_breakdown(db: AsyncSession = Depends(get_db)):
     n1 = (await db.execute(select(func.count()).select_from(MfSchemeBreakdown))).scalar_one()
     n2 = (await db.execute(select(func.count()).select_from(AmfiMarketCap))).scalar_one()
+    n3 = (await db.execute(select(func.count()).select_from(MfDisclosureBook))).scalar_one()
     await db.execute(delete(MfSchemeBreakdown))
     await db.execute(delete(AmfiMarketCap))
+    await db.execute(delete(MfDisclosureBook))
     await db.commit()
-    return DeleteResult(deleted=n1 + n2, message=f"Deleted {n1} breakdown rows and {n2} AMFI classification rows.")
+    return DeleteResult(
+        deleted=n1 + n2 + n3,
+        message=f"Deleted {n1} breakdown rows, {n2} AMFI classification rows and {n3} disclosure history books.",
+    )
 
 
 @router.delete("/manual-assets", response_model=DeleteResult)
