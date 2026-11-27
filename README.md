@@ -142,7 +142,7 @@ portfolio-mac-arm/
 │   ├── components.json          # shadcn CLI config (style new-york, base colour neutral)
 │   └── src/
 │       ├── main.tsx             # QueryClientProvider, PrivacyProvider, BrowserRouter, sonner Toaster
-│       ├── App.tsx              # Routes (14 pages under AppLayout)
+│       ├── App.tsx              # Routes (15 pages under AppLayout)
 │       ├── api/                 # Typed fetch client + per-domain React Query hooks
 │       │   ├── client.ts        # request<T>() wrapper; VITE_API_BASE_URL
 │       │   ├── portfolio.ts
@@ -160,7 +160,7 @@ portfolio-mac-arm/
 │       ├── types/               # TS interfaces mirroring app/schemas/ 1:1 (jobs.ts: job kinds, statuses, result shapes)
 │       ├── components/
 │       │   ├── ui/              # shadcn/ui primitives — CLI-managed, never hand-edited
-│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (14 routes)
+│       │   ├── AppLayout.tsx    # shadcn Sidebar shell + top bar (15 routes)
 │       │   ├── AppSidebar.tsx   # Nav groups/links; badge on Policy when actions pending
 │       │   ├── PageShell.tsx    # Shared wide/narrow desktop route canvas
 │       │   ├── ContentHeader.tsx # Unboxed subsection heading and actions
@@ -190,6 +190,7 @@ portfolio-mac-arm/
 │       │   ├── Breakdown.tsx    # MF breakdown tabs: Overview (asset class + equity allocation), Sector (Macro/Sector/Industry/Basic level selector, manual-classify panel at every level (dismissed names remembered per level, reset when the header Disclosures button runs), sub-1% Others clubbing on Basic), Composition
 │       │   ├── Disclosures.tsx  # Latest or given disclosure run (live log, result) + DB-driven market-cap tagging panel; not in the sidebar — opened by the header Disclosures button or its notification
 │       │   ├── FundBreakdown.tsx # Per-fund breakdown: autocomplete search, market-cap/asset-class + sector donuts, holdings table; Holdings | Changes tabs for active equity funds
+│       │   ├── FundChanges.tsx  # Latest-vs-previous disclosure changes: summary cards, value-weighted roll-up, per-fund accordion
 │       │   ├── PolicyTracker.tsx # Policy trigger evaluation: sections, per-trigger rows, detail tables, manual ack
 │       │   ├── PriceChart.tsx   # Candlestick chart with trade markers
 │       │   ├── NavChart.tsx     # Fund NAV area chart + compare mode (normalised % change)
@@ -495,6 +496,8 @@ Classification is per-holding, driven by the API's `holding_type`/`section`, not
 - **Roll-up.** Compared funds are weighted by your current holding value on both sides, so your own buys and sells never appear. `trade_value` is `trade_pp / 100 × holding value`. A fund with only one stored book has no dimensions and is left out of the roll-up.
 
 **Fund Detail Changes tab.** Selecting an active equity fund with a stored book adds **Holdings | Changes** tabs (remembered under `fund-detail-tab`). Changes shows asset class, market cap and an NSE-level table (Macro | Sector | Industry | Basic, remembered under `fund-changes-level`). Each row has a zero-centred bar — trades solid green or red, prices hatched grey — and rows where both `|trade|` and `|Δ|` are under 0.05pp are hidden behind a "Show N unchanged" footer. Other funds show the page without tabs.
+
+**Fund Changes page** (`/portfolio/fund-changes`, sidebar → Research). Four summary cards (funds compared, biggest sector add and cut by trades, equity trades with cash), the roll-up panels, then one collapsible panel per fund ordered by holding value; a fund with no previous disclosure is listed but can't be expanded. The NSE-level choice is shared by every panel and with Fund Detail. When funds don't all share the same two dates, the roll-up columns read `Before %` / `After %`. With no stored books (including demo mode) the page shows an empty state.
 
 ### Background jobs & notifications
 Three header buttons start long operations as server-owned jobs (`mf_nav_history`, `kite_price_history`, `mf_disclosures`), and the **Refresh** button on Market Sentiment starts `kite_index_history` (index candles only); a job keeps running if you navigate away, reload or close the tab, and only one job of each kind runs at a time (clicking again re-opens the running one).

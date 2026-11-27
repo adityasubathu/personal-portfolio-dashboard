@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
+  ArrowLeftRight,
   BarChart3,
   CandlestickChart,
   ChartPie,
@@ -43,6 +44,7 @@ const groups = [
     items: [
       ['/market/sentiment', 'Market Sentiment', Gauge],
       ['/portfolio/fund-breakdown', 'Fund Detail', Landmark],
+      ['/portfolio/fund-changes', 'Fund Changes', ArrowLeftRight],
       ['/charts/price', 'Price Chart', CandlestickChart],
       ['/charts/nav', 'Fund NAV Chart', BarChart3],
     ],
